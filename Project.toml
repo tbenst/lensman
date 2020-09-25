@@ -1,0 +1,8 @@
+name = "Lensman"
+uuid = "689de0eb-15d7-4085-9ca0-978c860488ce"
+version = "0.1.0"
+authors = ["Tyler Benster <lensman@tylerbenster.com>"]
+
+[deps]
+DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
+MAT = "23992714-dd62-5051-b70f-ba57cb901cac"
