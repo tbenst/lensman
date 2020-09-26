@@ -1,8 +1,11 @@
 name = "Lensman"
 uuid = "689de0eb-15d7-4085-9ca0-978c860488ce"
-version = "0.1.0"
 authors = ["Tyler Benster <lensman@tylerbenster.com>"]
+version = "0.1.0"
 
 [deps]
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 MAT = "23992714-dd62-5051-b70f-ba57cb901cac"
+NRRD = "9bb6cfbd-7763-5393-b1b5-1c8e09872146"
+Pluto = "c3e4b0f8-55cb-11ea-2926-15256bba5781"
+RegisterQD = "ac24ea0c-1830-11e9-18d4-81f172323054"
