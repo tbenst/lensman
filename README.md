@@ -12,3 +12,11 @@ julia>]
 pkg> registry add https://github.com/HolyLab/HolyLabRegistry.git
 pkg> activate .
 ```
+
+
+### nixos
+- enter directory to launch direnv shell (lorri)
+- `code .`
+- that's it!
+
+downside: this won't work with remote-ssh :/

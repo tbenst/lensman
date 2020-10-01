@@ -1,6 +1,6 @@
 ##
-import Pkg
-Pkg.activate("O:\\users/tyler/code/lensman/")
+# import Pkg
+# Pkg.activate("O:\\users/tyler/code/lensman/")
 using PyCall
 ##
 prairie_view = pyimport("prairie_view")
@@ -46,12 +46,14 @@ using FileIO, RegisterQD, NRRD, ImageView, HDF5, MAT, Images,
 import Base.Threads.@threads
 using Unitful: μm, s
 
-zbrain_dir = "O:\\users\\tyler\\zbrain\\"
+# zbrain_dir = "O:\\users\\tyler\\zbrain\\"
+zbrain_dir = "/mnt/deissero/users/tyler/zbrain"
 zbrain_units = (0.798μm, 0.798μm, 2μm)
 
 ## Read Zseries from file
 # tifdir = joinpath(pv.directory,"Zseries_024034.17_-000")
-tifdir = raw"E:\tyler\2020-09-29_elavl3-chrmine-kv2.1_h2-6s\Zseries_024034.17_-000"
+# tifdir = raw"E:\tyler\2020-09-29_elavl3-chrmine-kv2.1_h2-6s\Zseries_024034.17_-000"
+tifdir = "/mnt/deissero/users/tyler/b115/2020-09-29_elavl3-chrmine-kv2.1_h2-6s/Zseries_024034.17_-000"
 tiff_files = joinpath.(tifdir, filter(x->(x[end-6:end]=="ome.tif") & occursin("Ch3", x),
     readdir(tifdir)))
 tif0 = ImageMagick.load(tiff_files[1])
