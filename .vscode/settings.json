@@ -3,5 +3,6 @@
         "DISPLAY": "localhost:13.0",
         "TYLERTEST": "debug"
     },
-    "python.pythonPath": "/home/tyler/.conda/bin/python"
+    "python.pythonPath": "/home/tyler/.conda/bin/python",
+    "nixEnvSelector.nixShellConfig": "${workspaceRoot}/shell.nix"
 }
