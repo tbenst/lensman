@@ -164,3 +164,16 @@ segment_nuclei = py"segment_nuclei"
 
 ##
 segment_nuclei(img)
+
+##
+###############
+## SEGMENTATION
+###############
+##
+threshold = otsu_threshold(float.(h2b_zbrain))
+##
+imshow(h2b_zbrain.>threshold)
+##
+seg = fast_scanning(h2b_zbrain[:,:,100],threshold)
+seg
+##
