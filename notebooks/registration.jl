@@ -20,6 +20,7 @@ zbrain_dir = ""
 tifdir = ""
 if Sys.iswindows()
     tifdir = raw"E:\tyler\2020-10-05_elavl3-chrmine-kv2.1_h2b-6s\ZSeries-25X-default-exponential-zpower-64avg-034"
+    tifdir = raw"E:\tyler\2020-10-12_elavl3-chrmine-kv2.1_h2b-6s_11dpf\zstack-1.5x"
     zbrain_dir = "O:\\users\\tyler\\zbrain\\"
 else
     tifdir = "/mnt/deissero/users/tyler/b115/2020-10-05_elavl3-chrmine-kv2.1_h2b-6s/ZSeries-25X-default-exponential-zpower-64avg-034"
@@ -59,8 +60,10 @@ lookup_μm = axis -> etree -> parse(Float64,
     micronsPerPixel_xml[xpath"""IndexedValue[@index="$axis"]"""][1].attr["value"])μm
 microscope_units = funprod(map(lookup_μm, ["YAxis", "XAxis", "ZAxis"])...)(micronsPerPixel_xml)
 
-@warn "temp hack for bad units"
-microscope_units = (0.5μm, 0.5μm, 1.5μm)
+# convert to 25x units (16x is actually 14.4x, assumes Prairie View has 16x selected)
+@warn "assuming 16x units but using 25x objective"
+microscope_units = ((microscope_units[1:2] .* (14.4/25))..., microscope_units[3])
+# microscope_units = (0.5μm, 0.5μm, 1.5μm)
 
 # zseries = centered(zseries) # need centered for qd registration
 zseries = AxisArray(zseries, (:y, :x, :z), microscope_units)

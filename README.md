@@ -1,6 +1,27 @@
 # lensman
 Wielding the power of the lens in galaxies full of neurons
 
+## PROTOCOL:
+- Olympus 25x 1.05NA, 1.5x zoom, 1024x1024
+- Disable micro manipulator!!
+- zstack, ~111 slices, 820nm, 64avg, 2um steps, 1x zoom (maybe more slices for 6dpf, maybe 0.8x for better registration since more hindbrain...)
+    - 180 to 210 pockels (~20mW-30mW), Bruker default exponential correction
+    - takes ~10min
+    - 1.5x zoom fails to register to Zbrain (only tested at 11dpf)
+- register 
+  - takes ~5min
+- choose imaging planes w/ code
+- take 128avg image @ 1.5x for these planes
+- registration part II: get mask for high-res (hopefully just translate / scale?)
+- code selects cells inside desired region masks
+
+## LESSONS
+- 25x:1x is hard to segment (althoug havent tried latest pipeline...)
+- 1.5x is nice to segment when shallow. Hard when at raphe level for 11 dpf
+- 1.5x gives very bad zbrain registration
+- 1x gives reasonable however
+- maybe tray 32 frames for coarse atlas to speed things up..
+- 
 ## TO RUN
 julia --project=. .\create_slm_stim.jl
 
