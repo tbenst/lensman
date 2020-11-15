@@ -15,3 +15,10 @@ function kalmanFilter(ys;gain=0.8,useBurnIn=false)
     end
     predictions
 end
+
+tifdir = "/mnt/deissero/users/tyler/b113/2020-11-04_elavl3-chrmine-Kv2.1_h2b6s_7dpf/SingleImage-840nm-010"
+
+fishDir, _ = splitdir(tifdir)
+tiff_files = joinpath.(tifdir, filter(x->(x[end-6:end]=="ome.tif") & occursin("Ch3", x),
+    readdir(tifdir)))
+plane = ImageMagick.load(tiff_files[1])
