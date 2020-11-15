@@ -13,7 +13,7 @@ true
 import Pkg
 Pkg.activate(".")
 ##
-ENV["DISPLAY"] = "localhost:13"
+ENV["DISPLAY"] = "localhost:11"
 using FileIO, NRRD, ImageView, HDF5, MAT, Images,
     Unitful, AxisArrays, StaticArrays, CoordinateTransformations,
     ImageView, TestImages, NRRD, LinearAlgebra, ImageMagick,
@@ -116,11 +116,11 @@ size(h2b_zbrain)
 ######
 
 # ONLY AFFINE for speed...
-# moving = h2b_zbrain
-# fixed = zseries
-# moving = adj_h2b_zbrain
+# we use histogram matching in ANTs (although maybe our method is better...?)
+fixed = zseries
 moving = h2b_zbrain
-fixed = adj_zseries
+# moving = adj_h2b_zbrain
+# fixed = adj_zseries
 tmppath = ANTsRegistration.userpath()
 fixedname = joinpath(tmppath, ANTsRegistration.write_nrrd(fixed))
 movingname = joinpath(tmppath, ANTsRegistration.write_nrrd(moving))

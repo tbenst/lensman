@@ -1,19 +1,26 @@
 module Lensman
 
 using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
-    ImageDraw, ImageFiltering, PyCall, MAT, Dates, DataStructures
+    ImageDraw, ImageFiltering, PyCall, MAT, Dates, DataStructures,
+    Statistics
 import Base.Threads.@threads
-
 # https://github.com/JuliaPy/PyCall.jl#using-pycall-from-julia-modules
 peak_local_max = PyNULL()
 disk = PyNULL()
 match_template = PyNULL()
+np = PyNULL()
+autolevel_percentile = PyNULL()
+scipy = PyNULL()
 
 function __init__()
     pyimport("skimage")
     copy!(peak_local_max, pyimport("skimage.feature").peak_local_max)
     copy!(disk, pyimport("skimage.morphology").disk)
     copy!(match_template, pyimport("skimage.feature").match_template)
+    copy!(np, pyimport("numpy"))
+    copy!(scipy, pyimport("scipy"))
+    pyimport("scipy.ndimage")
+    copy!(autolevel_percentile, pyimport("skimage.filters.rank").autolevel_percentile)
 end
     
 
@@ -88,24 +95,26 @@ end
 
 TODO: perform in 3D?!
 """
-function findNeurons(plane)
-    rescaled_img = (adjust_histogram(imadjustintensity(plane), Equalization()))
+function findNeurons(plane, thresh_adjust=1.2)
     # mask out background
-    laplace_mask = opening(imadjustintensity(morpholaplace(rescaled_img)).<0.5)
-    Gray.(laplace_mask)
-    ##
-    img = rescaled_img .* laplace_mask
-    feat_img = match_template(Float64.(img), disk(4), pad_input=true, mode="constant", constant_values=0)
+    adj_plane = adjust_histogram(imadjustintensity(plane), GammaCorrection(0.5))
+    threshold = otsu_threshold(adj_plane) * thresh_adjust
+    otsu_mask = adj_plane .> threshold
+    img = adj_plane .* otsu_mask
+    feat_img = match_template(Float64.(img), disk(2), pad_input=true, mode="constant", constant_values=0)
     local_maxi = peak_local_max(feat_img, indices=false, footprint=disk(4), exclude_border=false, threshold_rel=.1)
 end
 
-"Make .mat file for Sean's multiSLM stim software."
+"""Make .mat file for Sean's multiSLM stim software.
+
+We minimize number of targetGroups for speed"""
 # ::Array{Float64,2}
-function create_targets_mat(targets, outname::String;
-    outdir = "/mnt/deissero/users/tyler/slm/masks/")
-    today_str = Dates.format(Date(now()), DateFormat("Y-mm-dd"))
-    today_dir = mkpath(joinpath(outdir, today_str))
-    matpath = joinpath(today_dir, "$outname.mat")
+function create_targets_mat(targets, outname::String)
+    # outdir = "/mnt/deissero/users/tyler/slm/masks/")
+    # today_str = Dates.format(Date(now()), DateFormat("Y-mm-dd"))
+    # today_dir = mkpath(joinpath(outdir, today_str))
+    # matpath = joinpath(today_dir, "$outname.mat")
+    matpath = "$outname.mat"
 
     stim_struct = OrderedDict{String, Any}()
     # field order: im, targets, zrange, targetsGroup
@@ -126,18 +135,28 @@ function create_targets_mat(targets, outname::String;
     # channel 1 (red) and 2 (green), used for GUI preview
 
     ntargets = size(targets,1)
-    # targetsGroup must alternate between Float32(1,3) and zeros(0,0), and end with 2 * zeros(0,0)
-    out_mat["targetsGroup"] = Array{Any}(nothing,1,ntargets*2+2)
-    for (i, v) in enumerate(eachrow(targets))
-        # SubArrays cannot be written, so we convert to Array
-        out_mat["targetsGroup"][i*2-1] = convert(Array,v')
-        out_mat["targetsGroup"][i*2] = zeros(0,0)
+    
+    # perhaps this is optional...?
+    # targetsGroup alternates between SLM1&2 (eg Float32(N,3) and zeros(0,0)) and each one is 2ms apart (4ms between first two SLM1 patterns)
+    # numGroups = 99 # not sure why this varies...
+    numGroups = 4
+    out_mat["targetsGroup"] = Array{Any}(nothing,1,numGroups)
+    out_mat["targetsGroup"][1] = copy(targets) # stim at +0ms
+
+    for i in 2:2:numGroups
+        # SLM2 is not used
+        out_mat["targetsGroup"][i] = zeros(0,0)
     end
-    out_mat["targetsGroup"][end-1] = zeros(0,0)
-    out_mat["targetsGroup"][end] = zeros(0,0)
+    for i in 3:2:numGroups
+        # future stim progressions go here
+        out_mat["targetsGroup"][i] = zeros(0,0)
+    end
+
+    # println("construct 10Hz pattern ")
+    # out_mat["targetsGroup"][50] = copy(targets) # stim at +100ms
 
     matwrite(matpath, stim_struct)
-    # strip /mnt/deissero...
+    # strip /mnt/deissero... this is needed since Matlab on windows will read the file
     return "O:\\"*replace(matpath[14:end], "/" => "\\")
 end
 
@@ -155,7 +174,7 @@ function create_trials_txt(targets_mats, outname::String;
     close(txt_io)
     return txtpath
 end
-
+"Outname is for local filesystem (build platform)"
 function create_slm_stim(target_groups, outname::String)
     targets_mats = []
     for (i, targets) in enumerate(target_groups)
@@ -166,10 +185,43 @@ function create_slm_stim(target_groups, outname::String)
     return targets_mats, trials_txt
 end
 
+
+function cartIdx2Array(x::Vector{<:CartesianIndex})
+    # make tall matrix
+    permutedims(reduce(hcat, collect.(Tuple.(x))), (2,1))
+end
+
+cartesianIndToArray = cartIdx2Array
+
+function readZseriesTiffDir(tifdir)
+    tiff_files = joinpath.(tifdir, filter(x->(x[end-6:end]=="ome.tif") & occursin("Ch3", x),
+        readdir(tifdir)))
+    tif0 = ImageMagick.load(tiff_files[1])
+    H, W = size(tif0)
+
+    zseries = zeros(Normed{UInt16,16}, H, W, size(tiff_files, 1))
+    @threads for z in 1:size(tiff_files,1)
+        zseries[:,:,z] = ImageMagick.load(tiff_files[z])
+    end
+    zseries
+end
+
+stripLeadingSpace(s) = (s[1] == ' ') ? s[2:end] : s
+
+function findTTLStarts(voltages)
+    frameStarted = diff(voltages .> std(voltages).*3)
+    frameStartIdx = findall(frameStarted .== 1) .+ 1
+end
+
+
 "Convert mask to an Array of indices, similar to argwhere in Python."
 function mask2ind(mask)
-    hcat(collect.(Tuple.(findall(mask)))...)'
+    transpose(hcat(collect.(Tuple.(findall(mask)))...))
 end
+
+# /2: account for sean's code using 512 x 512 space
+# while we image in 1024x1024
+cartIdx2SeanTarget(ind, z) = hcat(reverse(collect(Tuple(ind))/2)..., z)
 
 export read_microns_per_pixel,
     read_mask,
@@ -180,7 +232,14 @@ export read_microns_per_pixel,
     create_nuclei_mask,
     findNeurons,
     create_slm_stim,
-    mask2ind
+    mask2ind,
+    readZseriesTiffDir,
+    cartesianIndToArray,
+    arrCart2arr,
+    findNeuronsAaron,
+    cartIdx2SeanTarget,
+    cartIdx2Array,
+    stripLeadingSpace,
+    findTTLStarts
     # , segment_nuclei
-
 end

@@ -79,3 +79,25 @@ const ants = joinpath(ants_dir, "bin/ANTS")
 const antsRegistration = joinpath(ants_dir, "bin/antsRegistration")
 const antsMotionCorr = joinpath(ants_dir, "bin/antsMotionCorr")
 ```
+
+## Timings
+position fish, setup Zseries, phase offset - 8 min
+zseries - 9 min
+file conversion - 1:30 min
+file transfer, get filename into julia, read in - 2 min
+ANTs - 8 min
+segmentation / choose planes / inspect - 2:30 min
+setup z-plane & start Tseries - 2:15 min
+TOTAL: ~34 min
+
+biggest optimization: human-selected planes for first Tseries.
+Could start first Tseries ~20 min faster, but if Tseries only
+takes 10 min then only save 10 min.
+
+other optimizations:
+- save 4-6 min with faster CPU / optimize ANTs
+- fewer Zseries planes or 32 frame avg = 5 min saving
+- start/stream zseries from Julia = 3:30min saving
+- automate Zseries construction = 4-5 min saving
+  (especially if just put fluorophore at top and go)
+- 
