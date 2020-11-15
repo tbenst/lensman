@@ -30,8 +30,9 @@ julia --project=. .\create_slm_stim.jl
 - 
 ```julia
 julia>]
-pkg> registry add https://github.com/HolyLab/HolyLabRegistry.git
 pkg> activate .
+pkg> registry add https://github.com/HolyLab/HolyLabRegistry.git
+pkg> add https://github.com/timholy/ANTsRegistration.jl
 ```
 
 
