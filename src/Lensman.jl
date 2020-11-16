@@ -2,9 +2,11 @@ module Lensman
 
 using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     ImageDraw, ImageFiltering, PyCall, MAT, Dates, DataStructures,
-    Statistics
+    Statistics, SharedArrays
 import Base.Threads.@threads
+using Distributed
 # https://github.com/JuliaPy/PyCall.jl#using-pycall-from-julia-modules
+
 peak_local_max = PyNULL()
 disk = PyNULL()
 match_template = PyNULL()
@@ -206,6 +208,45 @@ function readZseriesTiffDir(tifdir; contains="Ch3")
     zseries
 end
 
+"From bruker tif path, return (frameNum, planeNum)"
+function getFramePlane(tifPath)
+    m = match(r".*Cycle(\d+)_Ch\d_(\d+).ome.tif", tifPath)
+    frameNum, planeNum = parse(Int,m[1]), parse(Int,m[2])
+end
+
+
+function readTseriesTiffDir(framePlane2tiffPath, Z, T)
+    S -> _readTseriesTiffDir(S, framePlane2tiffPath, Z, T)
+end
+
+function _readTseriesTiffDir(S::SharedArray, framePlane2tiffPath, Z, T)
+    nProcs = size(procs(S),1)
+    i = indexpids(S)
+    myT = collect(i:nProcs:T)
+    println("process $i will open $(size(myT,1)) tiffs")
+    for t in myT
+        for z in 1:Z
+            tp = framePlane2tiffPath[t,z]
+            S[:,:,z,t] .= ImageMagick.load(tp)
+        end
+    end
+end
+
+# function readTseriesTiffDir(tifdir::String; contains="Ch3")
+#     tiff_files = joinpath.(tifdir, filter(x->(x[end-6:end]=="ome.tif") &
+#         occursin(contains, x), readdir(tifdir)))
+#     framePlane2tiffPath = Dict(getFramePlane(tp) => tp for tp in tiff_files)
+#     framePlanes = hcat(collect.(keys(framePlane2tiffPath))...)
+#     T = maximum(framePlanes[1,:])
+#     Z = maximum(framePlanes[2,:])
+#     tif0 = ImageMagick.load(tiff_files[1])
+#     H, W = size(tif0)
+
+#     # tseries = zeros(Normed{UInt16,16}, H, W, Z, T)
+#     tseries = SharedArray{Normed{UInt16,16},4}((H, W, Z, T),
+#         init = S -> _readTseriesTiffDir(S, framePlane2tiffPath, Z, T))
+# end
+
 stripLeadingSpace(s) = (s[1] == ' ') ? s[2:end] : s
 
 function findTTLStarts(voltages)
@@ -240,6 +281,8 @@ export read_microns_per_pixel,
     cartIdx2SeanTarget,
     cartIdx2Array,
     stripLeadingSpace,
-    findTTLStarts
+    findTTLStarts,
+    readTseriesTiffDir,
+    getFramePlane
     # , segment_nuclei
 end
