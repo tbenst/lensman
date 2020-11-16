@@ -193,8 +193,8 @@ end
 
 cartesianIndToArray = cartIdx2Array
 
-function readZseriesTiffDir(tifdir)
-    tiff_files = joinpath.(tifdir, filter(x->(x[end-6:end]=="ome.tif") & occursin("Ch3", x),
+function readZseriesTiffDir(tifdir; contains="Ch3")
+    tiff_files = joinpath.(tifdir, filter(x->(x[end-6:end]=="ome.tif") & occursin(contains, x),
         readdir(tifdir)))
     tif0 = ImageMagick.load(tiff_files[1])
     H, W = size(tif0)
