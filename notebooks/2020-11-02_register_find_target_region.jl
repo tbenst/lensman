@@ -254,8 +254,8 @@ zseries_step_size = 2
 zEtlZero = (numZplanes - (planeHab - (planeHab - planeRaphe)*.4) + 1)*zseries_step_size
 zHab = (numZplanes - planeHab + 1)*zseries_step_size
 zRaphe = (numZplanes - planeRaphe + 1) * zseries_step_size
-etlHab = zHab - zEtlZero
-etlRaphe = zRaphe - zEtlZero
+etlHab = zHab - zEtlZero # negative is up (for sean's code)
+etlRaphe = zRaphe - zEtlZero # positive is down 
 
 @info "assuming each plane is 2μm apart"
 step = (etlRaphe - etlHab)/4 # five planes

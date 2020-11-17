@@ -254,6 +254,11 @@ function findTTLStarts(voltages)
     frameStartIdx = findall(frameStarted .== 1) .+ 1
 end
 
+function findTTLEnds(voltages)
+    frameStarted = diff(voltages .< std(voltages).*3)
+    frameStartIdx = findall(frameStarted .== 1) .+ 1
+end
+
 
 "Convert mask to an Array of indices, similar to argwhere in Python."
 function mask2ind(mask)
@@ -282,6 +287,7 @@ export read_microns_per_pixel,
     cartIdx2Array,
     stripLeadingSpace,
     findTTLStarts,
+    findTTLEnds,
     readTseriesTiffDir,
     getFramePlane
     # , segment_nuclei

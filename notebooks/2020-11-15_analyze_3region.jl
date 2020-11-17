@@ -1,5 +1,5 @@
-# ENV["DISPLAY"] = "localhost:12"
-ENV["DISPLAY"] = ":0"
+ENV["DISPLAY"] = "localhost:11"
+# ENV["DISPLAY"] = ":0"
 using FileIO, NRRD, ImageView, HDF5, MAT, Images,
     Unitful, AxisArrays, StaticArrays, CoordinateTransformations,
     ImageView, TestImages, NRRD, LinearAlgebra, ImageMagick,
@@ -7,10 +7,13 @@ using FileIO, NRRD, ImageView, HDF5, MAT, Images,
     NIfTI, ImageContrastAdjustment, ImageView, Images, ImageView,
     ImageSegmentation, ImageMagick, Random, StatsBase,
     ImageDraw, Lensman, ImageFiltering, Glob, Plots, HDF5,
-    Dates, Distributed, SharedArrays
+    Dates, Distributed, SharedArrays, CSV, DataFrames, Statistics
 using Base.Iterators: peel
 
 dataDir = "/scratch/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
+
+# where stim targets are defined
+targetDir = "/mnt/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2"
 
 addprocs(18)
 @everywhere using SharedArrays
@@ -42,57 +45,38 @@ tif0 = ImageMagick.load(tiff_files[1])
 H, W = size(tif0)
 
 # tseries = zeros(Normed{UInt16,16}, H, W, Z, T)
+# warning: this may exhaust shared memory, causing a bus error
+# to fix, run `mount -o remount,size=90G /dev/shm`
 tseries = SharedArray{Normed{UInt16,16},4}((H, W, Z, T),
     init = S -> _readTseriesTiffDir(S, framePlane2tiffPath, Z, T))
-# init = readTseriesTiffDir(framePlane2tiffPath, Z, T))
+##
+voltageFile = glob("*VoltageRecording*.csv", dataDir)[1]
+voltages = CSV.File(open(read, voltageFile)) |> DataFrame
+rename!(voltages, [c => stripLeadingSpace(c) for c in names(voltages)])
 
 ##
-imshow(imadjustintensity(tseries))
-# rawVolumes = r
-##
-tifPath = joinpath(dataDir, "TSeries-lrhab_raphe_40trial-045_Cycle03635_Ch3_000001.ome.tif")
-tifPath = joinpath(dataDir, "TSeries-lrhab_raphe_40trial-045_Cycle03635_Ch3_000005.ome.tif")
-tif = imadjustintensity(ImageMagick.load(tifPath))
-
+plot(voltages["Time(ms)"][1:10000], voltages["frame starts"][1:10000])
+frameStarted = diff(voltages["frame starts"] .> std(voltages["frame starts"]).*2)
+frameStartIdx = findall(frameStarted .== 1) .+ 1
 
 ##
-tifdir = dataDir
-contains = "Ch3"
-tiff_files = joinpath.(tifdir, filter(x->(x[end-6:end]=="ome.tif") & occursin(contains, x),
-    readdir(tifdir)))
-
+@warn "hardcodes 10vol stim (2s @ 5Hz)"
+stimStartIdx = findTTLStarts(voltages["respir"])[1:10:end-9]
+stimEndIdx = findTTLEnds(voltages["respir"])[10:10:end]
 ##
-function getFramePlane(tifPath)
-    m = match(r".*Cycle(\d+)_Ch\d_(\d+).ome.tif", tifPath)
-    parse(Int,m[1]), parse(Int,m[2])
-end
-frameNum, planeNum =getFramePlane(tifPath)
-##
-tif0 = ImageMagick.load(tiff_files[1])
-H, W = size(tif0)
-
-zseries = zeros(Normed{UInt16,16}, H, W, size(tiff_files, 1))
-@threads for z in 1:size(tiff_files,1)
-    zseries[:,:,z] = ImageMagick.load(tiff_files[z])
-end
-zseries
+stimStartFrameIdx = [Int.(floor.(searchsortedfirst(frameStartIdx, s)/Z)) for s in stimStartIdx]
+stimEndFrameIdx = [Int.(ceil(searchsortedfirst(frameStartIdx, s)/Z)) for s in stimEndIdx]
+imshow(imadjustintensity(tseries[:,:,:,stimStartFrameIdx[1]-1:stimEndFrameIdx[1]+1]))
+## avg stim effect
+imshow()
 
 
-##
-using Distributed
-nprocs = 12
-addprocs(nprocs)
-@everywhere using SharedArrays
-@everywhere import ImageMagick
-##
-H = 4; W = 4; Z = 2; T = 50
-S = SharedArray{Normed{UInt16,16},4}(H, W, Z, T)
-##
-@distributed for t in 1:nprocs
-    nProcs = size(procs(S),1)
-    i = indexpids(S)
-    myIdxs = collect(i:nProcs:T)
-    println(myIdxs)
-end
-##
-r
+
+# plot(voltages["Time(ms)"][1:110000], voltages["frame starts"][1:110000])
+# plot(voltages["Time(ms)"][1:110000], voltages["secondary"][1:110000])
+# plot(voltages["Time(ms)"][1:110000], voltages["winfluo"][1:110000])
+# plot(voltages["Time(ms)"][1:110000], voltages["Blue"][1:110000])
+# plot(voltages["Time(ms)"][1:110000], voltages["VR timestamps"][1:110000])
+# plot(voltages["Time(ms)"][1:110000], voltages["green"][1:110000])
+# plot(voltages["Time(ms)"][1:110000], voltages["LED"][1:110000])
+# plot(voltages["Time(ms)"][1:120000], voltages["respir"][1:120000])
