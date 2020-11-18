@@ -215,8 +215,31 @@ function getFramePlane(tifPath)
 end
 
 
-function readTseriesTiffDir(framePlane2tiffPath, Z, T)
-    S -> _readTseriesTiffDir(S, framePlane2tiffPath, Z, T)
+"""Prepare to read data in parallel.
+
+Usage:
+H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(".")
+addprocs(18)
+@everywhere using Lensman
+tseries = SharedArray{Normed{UInt16,16},4}((H, W, Z, T),
+    init = S -> _readTseriesTiffDir(S, framePlane2tiffPath, Z, T))
+
+    """
+function tseriesTiffDirMetadata(tifdir, containsStr = "Ch3")
+    tiff_files = joinpath.(tifdir, filter(x->(x[end-6:end]=="ome.tif") &
+        occursin(containsStr, x), readdir(tifdir)))
+    framePlane2tiffPath = Dict(getFramePlane(tp) => tp for tp in tiff_files)
+    framePlanes = hcat(collect.(keys(framePlane2tiffPath))...)
+    T = maximum(framePlanes[1,:])
+    Z = maximum(framePlanes[2,:])
+    if T==1
+        # single plane imaging, so T is last int in filename...
+        framePlane2tiffPath = Dict((k[2],k[1]) => v for (k,v) in framePlane2tiffPath)
+        T, Z = Z, T
+    end
+    tif0 = ImageMagick.load(tiff_files[1])
+    H, W = size(tif0)
+    H, W, Z, T, framePlane2tiffPath
 end
 
 function _readTseriesTiffDir(S::SharedArray, framePlane2tiffPath, Z, T)
@@ -259,6 +282,22 @@ function findTTLEnds(voltages)
     frameStartIdx = findall(frameStarted .== 1) .+ 1
 end
 
+"""Pass image (HxW) and targetLocs (Nx2), and return image HxW"
+
+targetSize=4.41 comes from 7um spiral on 25x objective @ 1x (0.63 μm/px)
+"""
+function addTargetsToImage(image::Array{<:Real,2}, targetLocs::Array{<:Real,2};
+    targetSize::Real=11.11, alpha=0.4)
+    im = RGB.(image)
+    stim = zeros(Gray,size(image))
+    for (x,y) in eachrow(targetLocs)
+        draw!(stim, Ellipse(CirclePointRadius(y,x,targetSize)))
+    end
+    channelview(im)[[1,3],:,:,:] .= 0
+    channelview(im)[1,:,:,:] .= stim*alpha
+    im
+end
+
 
 "Convert mask to an Array of indices, similar to argwhere in Python."
 function mask2ind(mask)
@@ -289,6 +328,8 @@ export read_microns_per_pixel,
     findTTLStarts,
     findTTLEnds,
     readTseriesTiffDir,
-    getFramePlane
+    getFramePlane,
+    tseriesTiffDirMetadata,
+    addTargetsToImage
     # , segment_nuclei
 end
