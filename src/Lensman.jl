@@ -130,6 +130,7 @@ function create_targets_mat(targets, outname::String)
     H, W = 512, 512
     out_mat["im"][1] = zeros(H,W)
     out_mat["im"][2] = zeros(H,W)
+    @assert all(targets .<512)
 
     out_mat["targets"] = Array{Any}(nothing,1,1)
     out_mat["targets"][1] = copy(targets) # ensure not an Adjoint type

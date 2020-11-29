@@ -43,6 +43,12 @@ pkg> add https://github.com/timholy/ANTsRegistration.jl
 
 downside: this won't work with remote-ssh :/
 
+### remote-ssh
+- need to open separate ssh tunnel with X11 forwarding
+- `echo $DISPLAY`
+- in julia, `ENV["DISPLAY"] = "localhost:11.0"`
+
+
 # registration
 - https://github.com/timholy/ANTsRegistration.jl
 
@@ -79,6 +85,9 @@ const ants = joinpath(ants_dir, "bin/ANTS")
 const antsRegistration = joinpath(ants_dir, "bin/antsRegistration")
 const antsMotionCorr = joinpath(ants_dir, "bin/antsMotionCorr")
 ```
+
+### GLFW
+GLFW is fixed by specifying "julia.executablePath": "/home/tyler/.nix-profile/bin/julia" !!! (but only locally I think, otherwise need virtualgl)
 
 ## Timings
 position fish, setup Zseries, phase offset - 8 min
