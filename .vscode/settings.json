@@ -1,5 +1,5 @@
 {
     "python.pythonPath": "/home/tyler/.conda/bin/python",
-    "nixEnvSelector.nixShellConfig": "${workspaceRoot}/shell.nix",
-    "julia.executablePath": "/home/tyler/.nix-profile/bin/julia"
+    "nixEnvSelector.nixShellConfig": "NOT_MODIFIED_ENV",
+    "julia.executablePath": "julia"
 }

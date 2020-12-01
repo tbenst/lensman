@@ -1,10 +1,10 @@
 ##
-true
+ENV["DISPLAY"] = "localhost:12.0"
 ##
 using GLFW; window = GLFW.CreateWindow(640, 480, "GLFW.jl")
 ##
 
-using AbstractPlotting
+using GLMakie, AbstractPlotting
 
 ## simple scatter
 x = 1:10

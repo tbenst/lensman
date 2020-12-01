@@ -33,6 +33,7 @@ julia>]
 pkg> activate .
 pkg> registry add https://github.com/HolyLab/HolyLabRegistry.git
 pkg> add https://github.com/timholy/ANTsRegistration.jl
+pkg> add https://github.com/JuliaFolds/GeneratorsX.jl
 ```
 
 
