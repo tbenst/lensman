@@ -2,7 +2,7 @@ module Lensman
 
 using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     ImageDraw, ImageFiltering, PyCall, MAT, Dates, DataStructures,
-    Statistics, SharedArrays
+    Statistics, SharedArrays, CSV, DataFrames
 import Base.Threads.@threads
 using Distributed
 # https://github.com/JuliaPy/PyCall.jl#using-pycall-from-julia-modules
@@ -97,14 +97,14 @@ end
 
 TODO: perform in 3D?!
 """
-function findNeurons(plane, thresh_adjust=1.2)
+function findNeurons(plane, thresh_adjust=1.2, featSize=2, maxiSize=4)
     # mask out background
     adj_plane = adjust_histogram(imadjustintensity(plane), GammaCorrection(0.5))
     threshold = otsu_threshold(adj_plane) * thresh_adjust
     otsu_mask = adj_plane .> threshold
     img = adj_plane .* otsu_mask
-    feat_img = match_template(Float64.(img), disk(2), pad_input=true, mode="constant", constant_values=0)
-    local_maxi = peak_local_max(feat_img, indices=false, footprint=disk(4), exclude_border=false, threshold_rel=.1)
+    feat_img = match_template(Float64.(img), disk(featSize), pad_input=true, mode="constant", constant_values=0)
+    local_maxi = peak_local_max(feat_img, indices=false, footprint=disk(maxiSize), exclude_border=false, threshold_rel=.1)
 end
 
 """Make .mat file for Sean's multiSLM stim software.
@@ -309,6 +309,24 @@ end
 # while we image in 1024x1024
 cartIdx2SeanTarget(ind, z) = hcat(reverse(collect(Tuple(ind))/2)..., z)
 
+""
+function getStimTimesFromVoltages(voltageFile, Z::Int)
+    voltages = CSV.File(open(read, voltageFile)) |> DataFrame
+    rename!(voltages, [c => stripLeadingSpace(c) for c in names(voltages)])
+
+    # plot(voltages["Time(ms)"][1:10000], voltages["frame starts"][1:10000])
+    frameStarted = diff(voltages[!,"frame starts"] .> std(voltages[!,"frame starts"]).*3)
+    frameStartIdx = findall(frameStarted .== 1) .+ 1
+
+    @warn "hardcodes 5vol stim (1s @ 5Hz)"
+    stimDur = 5
+    stimStartIdx = findTTLStarts(voltages[!,"respir"])[stimDur:stimDur:end]
+    stimEndIdx = findTTLEnds(voltages[!,"respir"])[stimDur:stimDur:end]
+    stimStartFrameIdx = [Int.(floor.(searchsortedfirst(frameStartIdx, s)/Z)) for s in stimStartIdx]
+    stimEndFrameIdx = [Int.(ceil(searchsortedfirst(frameStartIdx, s)/Z)) for s in stimEndIdx]
+    stimStartFrameIdx, stimEndFrameIdx
+end
+
 export read_microns_per_pixel,
     read_mask,
     zbrain_units,
@@ -331,6 +349,7 @@ export read_microns_per_pixel,
     readTseriesTiffDir,
     getFramePlane,
     tseriesTiffDirMetadata,
-    addTargetsToImage
+    addTargetsToImage,
+    getStimTimesFromVoltages
     # , segment_nuclei
 end

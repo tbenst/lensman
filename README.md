@@ -110,4 +110,7 @@ other optimizations:
 - start/stream zseries from Julia = 3:30min saving
 - automate Zseries construction = 4-5 min saving
   (especially if just put fluorophore at top and go)
-- 
+
+
+### shared drive
+sudo mount -t cifs -o username=mslm_cnc115 //171.65.101.227/CNC_B115_mSLM /mnt/b115_mSLM/
