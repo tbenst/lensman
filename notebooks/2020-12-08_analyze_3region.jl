@@ -1,5 +1,6 @@
-ENV["DISPLAY"] = "localhost:11"
-# ENV["DISPLAY"] = ":0"
+# need X11 forwarding for ssh, `ssh -X osprey`, then `echo $DISPLAY`, and fill below
+# ENV["DISPLAY"] = "localhost:11"
+ENV["DISPLAY"] = ":0"
 using FileIO, NRRD, ImageView, HDF5, MAT, Images,
     Unitful, AxisArrays, StaticArrays, CoordinateTransformations,
     ImageView, TestImages, NRRD, LinearAlgebra, ImageMagick,
@@ -12,22 +13,19 @@ using FileIO, NRRD, ImageView, HDF5, MAT, Images,
 using Base.Iterators: peel
 import Unitful: μm
 ##
-restingPreDir = "/mnt/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-resting-pre-043"
-expName = splitpath(restingPreDir)[end]
-fishDir = joinpath(splitpath(restingPreDir)[1:end-1]...)
-@time tseriesPre = loadTseries(restingPreDir)
-(H, W, Z, T) = size(tseriesPre)
-Threads.nthreads()
+# can set in Julia extension settings for vscode, search "num threads"
+@assert Threads.nthreads() == 16
 
-##
-dataDir = "/scratch/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
+# can switch to this local NVME drive once rsync finishes... 
+# dataDir = "/scratch/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
+# for now use network drive (tyler has to auth once per day...)
+dataDir = "/mnt/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
 
-# where stim targets are defined
-targetDir = "/mnt/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2"
+
+# TODO: copy slmExpDir (see below) to, say,  `/scratch/SLM_files/`, so no dependency on network
 slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"
 
-H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir)
-
+# painfully slow to load 90GB over 1Gb connection, so switch to /scratch once rsync finishes
 tseries = loadTseries(dataDir)
 (H, W, Z, T) = size(tseries);
 ##
@@ -42,7 +40,7 @@ dataFolders = splitpath(dataDir)
 xmlPath = joinpath(dataFolders..., dataFolders[end] * ".xml")
 expDate, frameRate, etlVals = getExpData(xmlPath)
 
-# if fail, may need to read another xml file since didn't get all planes...?
+# if imaging many planes, may need to read another xml file since didn't get all planes in first file
 @assert length(etlVals) == Z
 @info "assume imaging from top-down"
 
@@ -75,7 +73,7 @@ post = Int(ceil(1*frameRate))
     pre=pre, post=post);
 
 ## STA
-h5write(joinpath(fishDir,expName, "_avgStim.h5"), "/block1", avgStim)
+# h5write(joinpath(fishDir,expName, "_avgStim.h5"), "/block1", avgStim)
 imshow(avgStim[:,:,:,1,:]) # trial type 1 (left hab)
 imshow(avgStim[:,:,:,2,:]) # right hab
 imshow(avgStim[:,:,:,3,:]) # raphe
