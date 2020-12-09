@@ -11,7 +11,15 @@ using FileIO, NRRD, ImageView, HDF5, MAT, Images,
     Zarr
 using Base.Iterators: peel
 import Unitful: μm
+##
+restingPreDir = "/mnt/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-resting-pre-043"
+expName = splitpath(restingPreDir)[end]
+fishDir = joinpath(splitpath(restingPreDir)[1:end-1]...)
+tseriesPre = loadTseries(restingPreDir)
+(H, W, Z, T) = size(tseriesPre)
 
+
+##
 dataDir = "/scratch/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
 
 # where stim targets are defined
@@ -19,6 +27,7 @@ targetDir = "/mnt/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6
 slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"
 
 H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir)
+
 
 
 init_workers()

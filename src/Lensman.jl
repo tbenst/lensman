@@ -215,10 +215,10 @@ function extractTrace(tseries, mask::Array{Bool,T}) where T
     extractTrace(tseries, findall(mask))
 end
 
-function extractTrace(tseries, cartIdxs::Array{CartesianIndex{T},1}) where T
-    T = size(tseries, ndims(tseries))
-    trace = zeros(Float64,T) 
-    for t in 1:T
+function extractTrace(tseries, cartIdxs::Array{T,1}) where T<:CartesianIndex
+    nT = size(tseries, ndims(tseries))
+    trace = zeros(Float64,nT) 
+    for t in 1:nT
         trace[t] = mean(reinterpret(UInt16,view(tseries, cartIdxs,t)))
     end
     trace
@@ -609,9 +609,10 @@ idxWithTime(CI, t) = CartesianIndex(CI.I[1], CI.I[2], t)
 function imageCorrWithMask(images::Array{T,4}, mask) where T<:Real
     corImage = zeros(size(images)[1:3]...)
     trace = extractTrace(images, mask)
-    for i in CartesianIndices(corImage)
-
-        # corImage = cor(trace, view(images,i,:))
+    p = Progress(prod(size(corImage)), 1)
+    Threads.@threads for i in CartesianIndices(corImage)
+        corImage[i] = cor(trace, view(images,i,:))
+        next!(p)
     end
     corImage
 end
