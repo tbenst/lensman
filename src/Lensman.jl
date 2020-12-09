@@ -2,10 +2,14 @@ module Lensman
 
 using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     ImageDraw, ImageFiltering, PyCall, MAT, Dates, DataStructures,
-    Statistics, SharedArrays, CSV, DataFrames
+    Statistics, SharedArrays, CSV, DataFrames, Suppressor, Plots,
+    LinearAlgebra
 import Base.Threads.@threads
 using Distributed
+import Unitful: μm
 # https://github.com/JuliaPy/PyCall.jl#using-pycall-from-julia-modules
+
+include("algorithms.jl")
 
 peak_local_max = PyNULL()
 disk = PyNULL()
@@ -194,7 +198,47 @@ function cartIdx2Array(x::Vector{<:CartesianIndex})
     permutedims(reduce(hcat, collect.(Tuple.(x))), (2,1))
 end
 
+"ImageJ 'kalman filter'"
+function imageJkalmanFilter(ys;gain=0.8,useBurnIn=true)
+    predictions = zeros(size(ys))
+    predictions[1] = ys[1]
+    for t in 1:size(ys,1)-1
+        K = useBurnIn ? 1 / (t+1) : 0.
+        pred = predictions[t]
+        obs = ys[t+1]
+        predictions[t+1] = pred*gain + obs*(1-gain) + K*(obs-pred)
+    end
+    predictions
+end
+
+function extractTrace(tseries, mask::Array{Bool,T}) where T
+    extractTrace(tseries, findall(mask))
+end
+
+function extractTrace(tseries, cartIdxs::Array{CartesianIndex{T},1}) where T
+    T = size(tseries, ndims(tseries))
+    trace = zeros(Float64,T) 
+    for t in 1:T
+        trace[t] = mean(reinterpret(UInt16,view(tseries, cartIdxs,t)))
+    end
+    trace
+end
+
 cartesianIndToArray = cartIdx2Array
+
+"Given (2d) image and list of CartesianIndices, return RGB image."
+function colorImage(image, cartesianIdxs; nDilate=0, imAlpa=0.5)
+    im = RGB.(image)
+    stim_points = zeros(Bool,size(im))
+    stim_points[cartesianIdxs] .= true
+    for _ in 1:nDilate
+        stim_points = dilate(stim_points)
+    end
+    channelview(im)[[1,3],:,:,:] .= 0
+    channelview(im)[1,:,:,:] .= imAlpa .* float(stim_points)
+    im
+end
+
 
 function readZseriesTiffDir(tifdir; contains="Ch3")
     tiff_files = joinpath.(tifdir, filter(x->(x[end-6:end]=="ome.tif") & occursin(contains, x),
@@ -287,16 +331,25 @@ end
 
 targetSize=4.41 comes from 7um spiral on 25x objective @ 1x (0.63 μm/px)
 """
-function addTargetsToImage(image::Array{<:Real,2}, targetLocs::Array{<:Real,2};
-    targetSize::Real=11.11, alpha=0.4)
-    im = RGB.(image)
+function addTargetsToImage(image::Array{RGB{T},2}, targetLocs::Array{<:Real,2};
+  channel="red", targetSize::Real=11.11, alpha=0.4) where T<:Real
     stim = zeros(Gray,size(image))
     for (x,y) in eachrow(targetLocs)
-        draw!(stim, Ellipse(CirclePointRadius(y,x,targetSize)))
+        # draw!(stim, Ellipse(CirclePointRadius(y,x,targetSize)))
+        draw!(stim, CirclePointRadius(y,x,targetSize))
     end
-    channelview(im)[[1,3],:,:,:] .= 0
-    channelview(im)[1,:,:,:] .= stim*alpha
-    im
+    
+    if channel=="red"
+        c = 1
+    elseif channel=="blue"
+        c = 3
+    elseif channel=="red"
+        c = 2
+    else
+        throw(ArgumentError("Bad channel $channel"))
+    end
+    channelview(image)[c,:,:,:] .= stim*alpha
+    image
 end
 
 
@@ -318,13 +371,249 @@ function getStimTimesFromVoltages(voltageFile, Z::Int)
     frameStarted = diff(voltages[!,"frame starts"] .> std(voltages[!,"frame starts"]).*3)
     frameStartIdx = findall(frameStarted .== 1) .+ 1
 
-    @warn "hardcodes 5vol stim (1s @ 5Hz)"
-    stimDur = 5
-    stimStartIdx = findTTLStarts(voltages[!,"respir"])[stimDur:stimDur:end]
+    ttlStarts = findTTLStarts(voltages[!,"respir"])
+    stimDur = countPulsesMaxGap(ttlStarts)
+    stimStartIdx = ttlStarts[1:stimDur:end]
     stimEndIdx = findTTLEnds(voltages[!,"respir"])[stimDur:stimDur:end]
     stimStartFrameIdx = [Int.(floor.(searchsortedfirst(frameStartIdx, s)/Z)) for s in stimStartIdx]
     stimEndFrameIdx = [Int.(ceil(searchsortedfirst(frameStartIdx, s)/Z)) for s in stimEndIdx]
     stimStartFrameIdx, stimEndFrameIdx
+end
+
+"Count TTLs. TODO maxGap should be read from .xml..."
+function countPulsesMaxGap(stimStartIdx, maxGap=1000)
+    count = 1
+    for i in 2:size(stimStartIdx,1)
+        if stimStartIdx[i] - stimStartIdx[i-1] < maxGap
+            count += 1
+        else
+            break
+        end
+    end
+    count
+end
+
+"""Parse Sean's filename to time
+trialOrder_2020_11_02___21h03m29sr.txt -> Time(21,3,29)"""
+function getTimeFromFilename(fn)
+    re = r".*_(?<year>\d+)_(?<month>\d+)_(?<day>\d+)___(?<hour>\d+)h(?<min>\d+)m(?<sec>\d+)sr?.txt$"
+    gs = match(re, fn)
+    dt = parse.(Int,(gs["year"], gs["month"], gs["day"],
+                     gs["hour"], gs["min"], gs["sec"]))
+    DateTime(dt...)
+end
+
+function getStimFrameIdx(voltageFile, Z; colname="respir", nTTLperStim=10)
+    @warn "deprecated"
+    voltages = CSV.File(open(read, voltageFile)) |> DataFrame
+    rename!(voltages, [c => stripLeadingSpace(c) for c in names(voltages)]);
+
+    # ! means get reference for df, not copy
+    frameStarted = diff(voltages[!,"frame starts"] .> std(voltages[!,"frame starts"]).*2)
+    frameStartIdx = findall(frameStarted .== 1) .+ 1;
+
+    # eg for 10vol stim (2s @ 5Hz), nTTLperStim=10
+    stimStartIdx = findTTLStarts(voltages[!,"respir"])[1:nTTLperStim:end-nTTLperStim+1]
+    stimEndIdx = findTTLEnds(voltages[!,"respir"])[nTTLperStim:nTTLperStim:end];
+    ##
+    stimStartFrameIdx = [Int.(floor.(searchsortedfirst(frameStartIdx, s)/Z)) for s in stimStartIdx]
+    stimEndFrameIdx = [Int.(ceil(searchsortedfirst(frameStartIdx, s)/Z)) for s in stimEndIdx]
+    stimStartFrameIdx, stimEndFrameIdx
+end
+
+function getExpData(xmlPath)
+    local tseries_xml
+    open(xmlPath, "r") do io
+        tseries_xml = read(io, String)
+        tseries_xml = xp_parse(tseries_xml)
+    end;
+    # warning: find has different syntax from xpath!!!
+    expDate = LibExpat.find(tseries_xml, "/PVScan[1]{date}")
+    expDate = DateTime(expDate, "m/d/y I:M:S p")
+    # much faster by prepending /PVScan/PVStateShard[1] to search first frame only
+    framePeriod = parse(Float64,tseries_xml[xpath"/PVScan/PVStateShard[1]/PVStateValue[@key='framePeriod']/@value"][1])
+    frameRate = 1/framePeriod
+    etlVals = getPlaneETLvals(tseries_xml)
+    expDate, frameRate, etlVals
+end
+
+"""
+only times that are within subfolders were used by a "Run"
+EXAMPLE: slmExpDir=/mnt/deissero/users/tyler/b115/SLM_files/02-Nov-2020
+e.g. after generating holograms, on first run (21h09m31s),
+a subfolder is created like 2020_11_2_21_6_50_, and Sean's code 
+copies trialOrder_2020_11_02___21h09m31s.txt to it.
+
+If we "Stop" and "Run" again without regenerating (but possibly
+changing trial order), no new folder is made BUT the new files for
+the RUN are copied to the same subfolder
+(trialOrder_2020_11_02___22h04m47s.txt)
+"""
+function getTrialOrder(slmExpDir, expDate)    
+    slmRunDirs = joinpath.(slmExpDir,
+        filter(x -> isdir(joinpath(slmExpDir, x)), readdir(slmExpDir)))
+
+    trialOrderTxts = vcat(glob.("trialOrder_*s.txt", slmRunDirs)...)
+    tempDts = getTimeFromFilename.(trialOrderTxts)
+
+    # sort by datetime
+    trialOrderTxts = trialOrderTxts[sortperm(tempDts)]
+    availableDateTimes = getTimeFromFilename.(trialOrderTxts)
+
+    # slmDate should always be younger than expDate
+    dtIdx = searchsortedfirst(availableDateTimes, expDate)-1
+    slmDateTime = availableDateTimes[dtIdx]
+    timeDiff = Dates.Second(expDate - slmDateTime)
+    println("started SLM $(timeDiff) seconds before imaging")
+    if (timeDiff > Second(120)) | (timeDiff < Second(0))
+        @warn "timeDiff looks funky...verify we have correct trial"
+    end
+    trialOrderTxt = trialOrderTxts[dtIdx]
+
+    trialOrder = CSV.File(trialOrderTxt,delim="\t",header=true) |> Tables.matrix
+    @assert size(trialOrder,1)==1
+    trialOrder[1,:], joinpath(splitpath(trialOrderTxt)[1:end-1]...)
+end
+
+"""warning: this may exhaust shared memory, causing a bus error
+# to fix, run `mount -o remount,size=100G /dev/shm`"""
+function loadTseries(tifdir)
+    H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir)
+
+    # tseries = zeros(Normed{UInt16,16}, H, W, Z, T)
+    # warning: this may exhaust shared memory, causing a bus error
+    # to fix, run `mount -o remount,size=100G /dev/shm`
+    SharedArray{Normed{UInt16,16},4}((H, W, Z, T),
+        init = S -> Lensman._readTseriesTiffDir(S, framePlane2tiffPath, Z, T));
+end
+
+function trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder; pre=16, post=16)
+    nStimuli = maximum(trialOrder)
+    nTrials = size(trialOrder,1)
+    nTrialsPerStimulus = Int(size(trialOrder,1) / nStimuli)
+    @assert nTrials == size(stimStartIdx,1) # check TTL start-times match 
+
+    ## avg stim effec
+    trialTime = minimum(stimEndIdx.-stimStartIdx) + pre + post + 1
+    # HWZCT
+    avgStim = zeros(size(tseries)[1:3]..., nStimuli, trialTime);
+    ## sloooow
+    for (i,start) in enumerate(stimStartIdx)
+        stop = start -pre + trialTime - 1
+        trialType = trialOrder[i]
+        avgStim[:,:,:,trialType,:] .+= tseries[:,:,:,start-pre:stop]
+    end
+    avgStim ./= nTrialsPerStimulus;
+end
+
+function constructGroupMasks(groupLocs, H, W, Z;
+  targetSizePx=(7μm * 14.4/25) / 0.6299544139175637μm)
+    groupMasks = Gray.(zeros(Bool, H,W,Z, size(groupLocs,1)))
+    for (g,group) in enumerate(groupLocs)
+        for (x,y,z) = eachrow(group)
+            draw!(view(groupMasks,:,:,z,g), Ellipse(CirclePointRadius(x,y,targetSizePx)))
+        end
+    end
+    reinterpret(Bool, groupMasks)
+end
+
+
+function init_workers(nprocs=36) 
+    addprocs(nprocs)
+    exp = quote
+        @everywhere begin
+            import Pkg
+            Pkg.activate(".")
+            using Lensman
+        end
+    end
+    @suppress_err eval(macroexpand(Distributed, exp))
+end
+
+function allWithin(array, fraction)
+    theMean = mean(array)
+    @assert all(abs.(array .- theMean) .< fraction*theMean)
+end
+
+function findMatGroups(outdir;
+        group_re=Regex("param_BHV004_(\\d+)\\.mat\$"))
+    mats = glob("*.mat", outdir)
+    # ensure we match the name/regex
+    matMatches = filter(m->m!=nothing,match.(group_re, mats))
+    mats = joinpath.(outdir,getfield.(matMatches,:match))
+    group_nums = parse.(Int,getindex.(matMatches,1))
+    mats = mats[sortperm(group_nums)]
+end
+
+function rpadArray(array, n)
+    toPad = n - size(array,1)
+    parent(padarray(array, Fill(0, (0,), (toPad,) ) ))
+end
+
+function makeCellsDF(target_groups, stimStartIdx, stimEndIdx, trialOrder)
+    cells = DataFrame(x=Int64[], y=Int64[], z=Int64[],
+    stimStart=Int64[], stimStop=Int64[])
+    for (i,g) in enumerate(trialOrder)
+        group = target_groups[g]
+        start = stimStartIdx[i]
+        endT = stimEndIdx[i]
+        for (x,y,z) in eachrow(group)
+            push!(cells, (x, y, z, start, endT))
+        end
+    end
+    cells
+end
+
+rectangle(w, h, x, y) = Shape(x .+ [0,w,w,0], y .+ [0,0,h,h])
+
+aa2a(array) = copy(hcat(array...)')
+
+function findIdxOfClosestElem(elem, array)
+    dist = @. (array - elem)^2
+    return sortperm(dist)[1]
+end
+
+function getPlaneETLvals(tseries_xml)
+    etlVals = sort(unique(round.(
+    parse.(Float64,
+        tseries_xml[xpath"//PVStateValue//SubindexedValue[@description='ETL']/@value"]
+    ), digits=2)))    
+end
+
+"Convert target_groups z from meters to the plane Int from Imaging."
+function mapTargetGroupsToPlane(target_groups, etlVals, is1024=true)
+    groupStimZμm = unique(vcat(unique.(getindex.(target_groups,:,3))...))*1e6
+    # planes = map(e->findIdxOfClosestElem(e, etlVals), groupStimZμm)
+    # roundedStimZμm = round.(groupStimZμm,digits=2)
+    # gMap = Dict(r=>p for (r,p) in zip(roundedStimZμm, planes))
+    newTargetGroups = deepcopy(target_groups)
+    for g in 1:size(target_groups,1)
+        for i in 1:size(target_groups[g],1)
+            # in sean's code, units in meters
+            idx = findIdxOfClosestElem(newTargetGroups[g][i,3]*1e6, etlVals)
+            newTargetGroups[g][i,3] = idx
+        end
+        if is1024
+            newTargetGroups[g][:,1:2] *= 2
+        end
+    end
+    map(g->Int64.(g), newTargetGroups)
+end
+
+function getROItrace()
+    idx(CI, t) = CartesianIndex(CI.I[1], CI.I[2], t)
+end
+
+idxWithTime(CI, t) = CartesianIndex(CI.I[1], CI.I[2], t)
+
+function imageCorrWithMask(images::Array{T,4}, mask) where T<:Real
+    corImage = zeros(size(images)[1:3]...)
+    trace = extractTrace(images, mask)
+    for i in CartesianIndices(corImage)
+
+        # corImage = cor(trace, view(images,i,:))
+    end
+    corImage
 end
 
 export read_microns_per_pixel,
@@ -350,6 +639,36 @@ export read_microns_per_pixel,
     getFramePlane,
     tseriesTiffDirMetadata,
     addTargetsToImage,
-    getStimTimesFromVoltages
+    getStimTimesFromVoltages,
+    getTimeFromFilename,
+    getStimFrameIdx,
+    getExpData,
+    getTrialOrder,
+    loadTseries,
+    init_workers,
+    trialAverage,
+    colorImage,
+    countPulsesMaxGap,
+    findMatGroups,
+    allWithin,
+    rectangle,
+    extractTrace,
+    imageJkalmanFilter,
+    stonerStimGroups,
+    rpadArray,
+    calc_concurrency_score,
+    randomSwaps,
+    minMaxIntersection,
+    count_concurrency,
+    noDups,
+    printGroups,
+    aa2a,
+    calcGroupsPerCell,
+    stonerPerm,
+    makeCellsDF,
+    findIdxOfClosestElem,
+    mapTargetGroupsToPlane,
+    constructGroupMasks,
+    imageCorrWithMask
     # , segment_nuclei
 end

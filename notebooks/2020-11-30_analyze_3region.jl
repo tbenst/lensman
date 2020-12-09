@@ -77,15 +77,6 @@ frameRate = 1/framePeriod
 ##
 slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
 
-"""Parse Sean's filename to time
-trialOrder_2020_11_02___21h03m29sr.txt -> Time(21,3,29)"""
-function getTimeFromFilename(fn)
-    re = r".*_(?<year>\d+)_(?<month>\d+)_(?<day>\d+)___(?<hour>\d+)h(?<min>\d+)m(?<sec>\d+)sr?.txt$"
-    gs = match(re, fn)
-    dt = parse.(Int,(gs["year"], gs["month"], gs["day"],
-                     gs["hour"], gs["min"], gs["sec"]))
-    DateTime(dt...)
-end
 
 # only times that are within subfolders were used by a "Run"
 # EXAMPLE (/mnt/deissero/users/tyler/b115/SLM_files/02-Nov-2020])
