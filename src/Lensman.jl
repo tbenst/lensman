@@ -287,18 +287,6 @@ function tseriesTiffDirMetadata(tifdir, containsStr = "Ch3")
     H, W, Z, T, framePlane2tiffPath
 end
 
-function _readTseriesTiffDir(S::SharedArray, framePlane2tiffPath, Z, T)
-    nProcs = size(procs(S),1)
-    i = indexpids(S)
-    myT = collect(i:nProcs:T)
-    println("process $i will open $(size(myT,1)) tiffs")
-    for t in myT
-        for z in 1:Z
-            tp = framePlane2tiffPath[t,z]
-            S[:,:,z,t] .= ImageMagick.load(tp)
-        end
-    end
-end
 
 # function readTseriesTiffDir(tifdir::String; contains="Ch3")
 #     tiff_files = joinpath.(tifdir, filter(x->(x[end-6:end]=="ome.tif") &
@@ -475,16 +463,16 @@ function getTrialOrder(slmExpDir, expDate)
     trialOrder[1,:], joinpath(splitpath(trialOrderTxt)[1:end-1]...)
 end
 
-"""warning: this may exhaust shared memory, causing a bus error
-# to fix, run `mount -o remount,size=100G /dev/shm`"""
 function loadTseries(tifdir)
     H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir)
-
-    # tseries = zeros(Normed{UInt16,16}, H, W, Z, T)
-    # warning: this may exhaust shared memory, causing a bus error
-    # to fix, run `mount -o remount,size=100G /dev/shm`
-    SharedArray{Normed{UInt16,16},4}((H, W, Z, T),
-        init = S -> Lensman._readTseriesTiffDir(S, framePlane2tiffPath, Z, T));
+    tseries = Array{Normed{UInt16,16}}(undef, H, W, Z, T)
+    @threads for t in 1:T
+        for z in 1:Z
+            tp = framePlane2tiffPath[t,z]
+            tseries[:,:,z,t] .= ImageMagick.load(tp)
+        end
+    end
+    tseries
 end
 
 function trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder; pre=16, post=16)
@@ -608,10 +596,10 @@ idxWithTime(CI, t) = CartesianIndex(CI.I[1], CI.I[2], t)
 
 function imageCorrWithMask(images::Array{T,4}, mask) where T<:Real
     corImage = zeros(size(images)[1:3]...)
-    trace = extractTrace(images, mask)
+    trace = extractTrace(images, mask)[1:end-30]
     p = Progress(prod(size(corImage)), 1)
-    Threads.@threads for i in CartesianIndices(corImage)
-        corImage[i] = cor(trace, view(images,i,:))
+    @threads for i in CartesianIndices(corImage)
+        corImage[i] = cor(trace, imageJkalmanFilter(view(images,i,:))[31:end])
         next!(p)
     end
     corImage

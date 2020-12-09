@@ -15,9 +15,9 @@ import Unitful: μm
 restingPreDir = "/mnt/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-resting-pre-043"
 expName = splitpath(restingPreDir)[end]
 fishDir = joinpath(splitpath(restingPreDir)[1:end-1]...)
-tseriesPre = loadTseries(restingPreDir)
+@time tseriesPre = loadTseries(restingPreDir)
 (H, W, Z, T) = size(tseriesPre)
-
+Threads.nthreads()
 
 ##
 dataDir = "/scratch/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
@@ -28,9 +28,6 @@ slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"
 
 H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir)
 
-
-
-init_workers()
 tseries = loadTseries(dataDir)
 (H, W, Z, T) = size(tseries);
 ##
@@ -78,6 +75,7 @@ post = Int(ceil(1*frameRate))
     pre=pre, post=post);
 
 ## STA
+h5write(joinpath(fishDir,expName, "_avgStim.h5"), "/block1", avgStim)
 imshow(avgStim[:,:,:,1,:]) # trial type 1 (left hab)
 imshow(avgStim[:,:,:,2,:]) # right hab
 imshow(avgStim[:,:,:,3,:]) # raphe
@@ -92,13 +90,11 @@ regionMasks = constructGroupMasks(groupLocs, H, W, Z, targetSizePx=targetSizePx)
 
 ## clear stim tseries...
 tseries = nothing
-tseriesPre = nothing
-tseriesResting = nothing
-@everywhere GC.gc()
+GC.gc()
 sleep(3)
-@everywhere GC.gc() #look at memory and verify freed...
+GC.gc() #look at memory and verify freed...
 sleep(3)
-@everywhere GC.gc() #look at memory and verify freed...
+GC.gc() #look at memory and verify freed...
 sleep(3)
 @everywhere GC.gc() #look at memory and verify freed...
 ##
@@ -112,8 +108,8 @@ tseriesPre = loadTseries(restingPreDir)
 ## noise correlation
 #warmup 
 #TODO: set JULIA_NUM_THREADS=`nproc`
+# lagged is better? of like 15?
 imageCorr = imageCorrWithMask(tseriesPre[:,:,:,:], regionMasks[:,:,:,1]);
-h5write(joinpath(fishDir,expName, "_imageCorr.h5"), "/imageCorr", imageCorr)
-fishDir
+# h5write(joinpath(fishDir,expName, "_imageCorr.h5"), "/imageCorr", imageCorr)
 
 imshow(imageCorr)
