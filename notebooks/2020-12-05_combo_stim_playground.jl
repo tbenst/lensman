@@ -14,6 +14,7 @@ optGroups, optGpc = randomSwaps(stimGroupsArray, groupsPerCellArray, calc_concur
 
 
 count_concurrency(optGroups)
+count_concurrency(stimGroups)
 ## benchmark
 nCells = 8
 base = 2

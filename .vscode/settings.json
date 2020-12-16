@@ -2,5 +2,5 @@
     "python.pythonPath": "/home/tyler/.conda/bin/python",
     "nixEnvSelector.nixShellConfig": "NOT_MODIFIED_ENV",
     "julia.executablePath": "julia",
-    "julia.NumThreads": 16
+    "julia.NumThreads": 36
 }

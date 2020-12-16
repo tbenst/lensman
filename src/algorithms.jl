@@ -122,18 +122,15 @@ end
 
 function count_concurrency(stimGroups)
     nCells = maximum(vcat(stimGroups...))
-    counts = []
+    counts = zeros(Int,nCells, nCells)
     for c in 1:nCells
-        concurrencyCount = zeros(nCells)
         for group in stimGroups
             if c in group
                 for d in group
-                    concurrencyCount[d] += 1
+                    counts[c,d] += 1
                 end
             end
         end
-        # concurrencyCount[c] = -1
-        push!(counts, concurrencyCount)
     end
     counts
 end

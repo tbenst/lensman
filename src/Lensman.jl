@@ -465,12 +465,15 @@ end
 
 function loadTseries(tifdir)
     H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir)
-    tseries = Array{Normed{UInt16,16}}(undef, H, W, Z, T)
+    tseries = Array{UInt16}(undef, H, W, Z, T)
+    p = Progress(T, 1, "Load Tseries: ")
+    
     @threads for t in 1:T
         for z in 1:Z
             tp = framePlane2tiffPath[t,z]
-            tseries[:,:,z,t] .= ImageMagick.load(tp)
+            tseries[:,:,z,t] .= reinterpret(UInt16,ImageMagick.load(tp))
         end
+        next!(p)
     end
     tseries
 end
@@ -493,6 +496,8 @@ function trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder; pre=16, pos
     end
     avgStim ./= nTrialsPerStimulus;
 end
+
+sym_adjust_gamma(image, gamma) = sign.(image) .* adjust_gamma(abs.(image),gamma)
 
 function constructGroupMasks(groupLocs, H, W, Z;
   targetSizePx=(7μm * 14.4/25) / 0.6299544139175637μm)
@@ -565,7 +570,7 @@ function getPlaneETLvals(tseries_xml)
     etlVals = sort(unique(round.(
     parse.(Float64,
         tseries_xml[xpath"//PVStateValue//SubindexedValue[@description='ETL']/@value"]
-    ), digits=2)))    
+    ), digits=1)))    
 end
 
 "Convert target_groups z from meters to the plane Int from Imaging."
@@ -594,15 +599,21 @@ end
 
 idxWithTime(CI, t) = CartesianIndex(CI.I[1], CI.I[2], t)
 
-function imageCorrWithMask(images::Array{T,4}, mask) where T<:Real
+function imageCorrWithMask(images::Array{T,4}, mask; lag=0) where T<:Real
     corImage = zeros(size(images)[1:3]...)
-    trace = extractTrace(images, mask)[1:end-30]
-    p = Progress(prod(size(corImage)), 1)
+    trace = extractTrace(images, mask)[1:end-lag]
+    p = Progress(prod(size(corImage)), 1, "Calc image corr: ")
     @threads for i in CartesianIndices(corImage)
-        corImage[i] = cor(trace, imageJkalmanFilter(view(images,i,:))[31:end])
+        # corImage[i] = cor(trace, imageJkalmanFilter(view(images,i,:))[31:end])
+        corImage[i] = cor(trace, view(images,i,:)[lag+1:end])
         next!(p)
     end
     corImage
+end
+
+function Green(x)
+    im = RGB(x)
+    RGB(zero(x),im.g,zero(x))
 end
 
 export read_microns_per_pixel,
@@ -658,6 +669,8 @@ export read_microns_per_pixel,
     findIdxOfClosestElem,
     mapTargetGroupsToPlane,
     constructGroupMasks,
-    imageCorrWithMask
+    imageCorrWithMask,
+    Green,
+    sym_adjust_gamma
     # , segment_nuclei
 end

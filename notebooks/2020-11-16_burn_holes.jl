@@ -1,8 +1,8 @@
 using Lensman
 using Unitful: μm, m, s, uconvert
 
-## to burn at etl=0 if using calibration circa 2020-11-16, need +30 offset
-offset = float(uconvert(m, 30μm)) / m
+## to burn at etl=0 if using calibration circa 2020-12-15, need +50 offset
+offset = float(uconvert(m, 50μm)) / m
 targets1 = [128. 128. offset; 384. 384. offset; 128. 384. offset; 384. 128. offset;]
 
 create_slm_stim([targets1],
