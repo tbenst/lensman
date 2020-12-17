@@ -315,6 +315,9 @@ function findTTLEnds(voltages)
     frameStartIdx = findall(frameStarted .== 1) .+ 1
 end
 
+
+perm(permutation, array) = map(x->permutation[x],array)
+
 """Pass image (HxW) and targetLocs (Nx2), and return image HxW"
 
 targetSize=4.41 comes from 7um spiral on 25x objective @ 1x (0.63 μm/px)
@@ -349,6 +352,8 @@ end
 # /2: account for sean's code using 512 x 512 space
 # while we image in 1024x1024
 cartIdx2SeanTarget(ind, z) = hcat(reverse(collect(Tuple(ind))/2)..., z)
+
+cartIdx2SeanTarget512(ind, z) = hcat(reverse(collect(Tuple(ind)))..., z)
 
 ""
 function getStimTimesFromVoltages(voltageFile, Z::Int)
@@ -525,7 +530,8 @@ end
 
 function allWithin(array, fraction)
     theMean = mean(array)
-    @assert all(abs.(array .- theMean) .< fraction*theMean)
+    threshold = ceil(fraction*theMean)
+    @assert all(abs.(array .- theMean) .< threshold)
 end
 
 function findMatGroups(outdir;
@@ -551,7 +557,8 @@ function makeCellsDF(target_groups, stimStartIdx, stimEndIdx, trialOrder)
         start = stimStartIdx[i]
         endT = stimEndIdx[i]
         for (x,y,z) in eachrow(group)
-            push!(cells, (x, y, z, start, endT))
+            xR, yR = Int(round(x, digits=0)), Int(round(y, digits=0))
+            push!(cells, (xR, yR, z, start, endT))
         end
     end
     cells
@@ -573,21 +580,25 @@ function getPlaneETLvals(tseries_xml)
     ), digits=1)))    
 end
 
-"Convert target_groups z from meters to the plane Int from Imaging."
-function mapTargetGroupsToPlane(target_groups, etlVals, is1024=true)
-    groupStimZμm = unique(vcat(unique.(getindex.(target_groups,:,3))...))*1e6
-    # planes = map(e->findIdxOfClosestElem(e, etlVals), groupStimZμm)
-    # roundedStimZμm = round.(groupStimZμm,digits=2)
-    # gMap = Dict(r=>p for (r,p) in zip(roundedStimZμm, planes))
+"""Convert target_groups z from meters to the plane Int from Imaging.
+
+zOffset is subtracted off. eg holes burn 45um above, so +45*1e-6 zOffset in .mat
+and pass 45 to this function.
+"""
+function mapTargetGroupsToPlane(target_groups, etlVals; is1024=true, zOffset=0.)
     newTargetGroups = deepcopy(target_groups)
     for g in 1:size(target_groups,1)
         for i in 1:size(target_groups[g],1)
-            # in sean's code, units in meters
-            idx = findIdxOfClosestElem(newTargetGroups[g][i,3]*1e6, etlVals)
+            # in sean's code, units in meters, so *1e6
+            adjustedZ = newTargetGroups[g][i,3]*1e6-zOffset
+            idx = findIdxOfClosestElem(adjustedZ, etlVals)
             newTargetGroups[g][i,3] = idx
         end
         if is1024
             newTargetGroups[g][:,1:2] *= 2
+        else
+            @info "will alias fractional target center to nearest Int"
+            newTargetGroups[g] .= round.(newTargetGroups[g], digits=0)
         end
     end
     map(g->Int64.(g), newTargetGroups)
@@ -595,6 +606,17 @@ end
 
 function getROItrace()
     idx(CI, t) = CartesianIndex(CI.I[1], CI.I[2], t)
+end
+
+function zeroAdjust(image::Array{T,4}) where T<:Real
+    # PMT offset
+    # @assert sum(image.==0) == 0
+    im = image .- 8192
+    im[im.<0] .= 0
+    # every other line, reverse column for roundtrip correction
+    # for B115, need to start with odd line else fliplr
+    im[:,1:2:end,:,:] .= im[:,1:2:end,end:-1:1,:]
+    im
 end
 
 idxWithTime(CI, t) = CartesianIndex(CI.I[1], CI.I[2], t)
@@ -671,6 +693,9 @@ export read_microns_per_pixel,
     constructGroupMasks,
     imageCorrWithMask,
     Green,
-    sym_adjust_gamma
+    sym_adjust_gamma,
+    zeroAdjust,
+    perm, 
+    cartIdx2SeanTarget512
     # , segment_nuclei
 end
