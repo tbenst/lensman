@@ -8,13 +8,16 @@ import Gadfly
 using Unitful: μm, m, s
 ##
 # tif840path = "/mnt/deissero/users/tyler/b115/2020-12-15_h2b6s_chrmine_kv2.1_5dpf/fish2/SingleImage-840nm-512-016/SingleImage-840nm-512-016_Cycle00001_Ch3_000001.ome.tif"
-tif840path = "/mnt/deissero/users/tyler/b115/2020-12-16_h2b6s-chrmine-kv2.1_6dpf/fish2/SingleImage-840nm-1024-017/SingleImage-840nm-1024-017_Cycle00001_Ch3_000001.ome.tif"
+# tif840path = "/mnt/deissero/users/tyler/b115/2020-12-16_h2b6s-chrmine-kv2.1_6dpf/fish2/SingleImage-840nm-1024-017/SingleImage-840nm-1024-017_Cycle00001_Ch3_000001.ome.tif"
+# tif840path = "/mnt/deissero/users/tyler/b115/2020-12-17_h2b6s_chrmine-kv2.1_7dpf/fish1/SingleImage-840nm-1024-018/SingleImage-840nm-1024-018_Cycle00001_Ch3_000001.ome.tif"
+tif840path = "/mnt/deissero/users/tyler/b115/2020-12-17_h2b6s_chrmine-kv2.1_7dpf/fish2/SingleImage-840nm-1024-019/SingleImage-840nm-1024-019_Cycle00001_Ch3_000001.ome.tif"
 ## to burn at etl=0 if using calibration circa 2020-12-15, need +45 offset
 offset = float(uconvert(m, 45μm)) / m
 fishDir = joinpath(splitpath(tif840path)[1:end-2]...)
 expName = splitpath(tif840path)[end-1]
 avgImage = ImageMagick.load(tif840path)
 size(avgImage)
+avgImage[1:60,:] .= 0
 ##
 # compile
 ##
@@ -39,14 +42,14 @@ nNeurons = 1024
 neuron_locs = sample(candidateTargetLocs, nNeurons, replace=false)     
 
 # Visualize stim targets
-im = RGB.(imadjustintensity(avgImage))
-stim_points = zeros(Bool,size(im))
+img = RGB.(imadjustintensity(avgImage))
+stim_points = zeros(Bool,size(img))
 stim_points[neuron_locs] .= true
 stim_points = dilate(dilate(stim_points))
-channelview(im)[[1,3],:,:,:] .= 0
-channelview(im)[1,:,:,:] .= 0.5*float(stim_points)
-# imshow(im)
-im;
+channelview(img)[[1,3],:,:,:] .= 0
+channelview(img)[1,:,:,:] .= 0.5*float(stim_points)
+imshow(img)
+img;
 
 ##
 # targets1 = [ 606. 636. offset;
@@ -69,7 +72,6 @@ target_groups = [vcat(cartIdx2SeanTarget.(locs, fill(offset, k))...)
 ## Save files for SLM stim
 name = "1024cell-32concurrent-zoffset_fix"
 outname = joinpath(fishDir, name)
-save("$(outname).tif", im)
 
 create_slm_stim(target_groups,
     joinpath(fishDir, name))
@@ -83,8 +85,9 @@ create_slm_stim(target_groups,
 ############# Analysis ##################
 ## load in results
 # only triggered the first 120 trials, oops!!
-fishDir = "/media/tyler/tyler_benster/2020-12-16_h2b6s-chrmine-kv2.1_6dpf/fish2"
-tseriesDir = joinpath(fishDir, "TSeries-1024cell-32concurrent-zoffset_fix-043")
+# fishDir = "/media/tyler/tyler_benster/2020-12-16_h2b6s-chrmine-kv2.1_6dpf/fish2"
+# tseriesDir = joinpath(fishDir, "TSeries-1024cell-32concurrent-043")
+tseriesDir = joinpath(fishDir, "TSeries_1024cell_32concurrernt-045")
 slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 
 tseries = loadTseries(tseriesDir);
@@ -125,9 +128,18 @@ cells = makeCellsDF(targetsWithPlaneIndex, stimStartIdx, stimEndIdx, trialOrder)
 
 stimLocs = map(CartesianIndex ∘ Tuple, eachrow(cells[:,[2,1]]))
 first(cells)
+## emergency selection of period without motion...
+lateImage = dropdims(mean(tseries[:,:,stimPlane,end-500:end], dims=3), dims=3)
+start = 1000
+earlyImage = dropdims(mean(tseries[:,:,stimPlane,start:start+500], dims=3), dims=3)
+imshow(cat(reshape(lateImage,size(lateImage)..., 1),
+     reshape(earlyImage,size(earlyImage)..., 1), dims=3))
+
 ##
 stimPlane = Int(mean(map(x->mean(x[:,3]), targetsWithPlaneIndex)))
-avgImage = dropdims(mean(tseries[:,:,stimPlane,1:1000], dims=3), dims=3)
+# avgImage = dropdims(mean(tseries[:,:,stimPlane,1:1000], dims=3), dims=3)
+# avgImage = dropdims(mean(tseries[:,:,stimPlane,end-1000:end], dims=3), dims=3)
+avgImage = dropdims(mean(tseries[:,:,stimPlane,end-1300:end], dims=3), dims=3)
 avgImageAdj = adjust_gamma(imadjustintensity(avgImage), 0.5)
 avgImageAdj = RGB.(avgImageAdj)
 channelview(avgImageAdj)[[1,3],:,:,:] .= 0
@@ -180,7 +192,7 @@ worst = rankings[1]
 
 idx = rankings[end-10]
 
-sum(cellDf_f.>0.4)
+sum(cellDf_f.>0.4), sum(cellDf_f.>1.)
 # imshow(addTargetsToImage(avgImage, stimLocs[[best],:]))
 # imshow(tseries[:,:,1,stimStartIdx[idx]-winSize:stimEndIdx[idx]+winSize])
 ##
@@ -192,6 +204,7 @@ p_df_map = Gadfly.with_theme(:dark) do
 end
 
 img = PNG(joinpath(plotDir, "$(expName)_df_f_map.png"), 6inch, 4inch)
+Gadfly.draw(img, p_df_map)
 p_df_map
 ## viz top 64 (blue) vs worst 64 (red)
 img = RGB.(avgImageAdj)
@@ -244,17 +257,24 @@ Gadfly.plot(cells, x=:df_f, Gadfly.Geom.histogram)
 
 
 ### GENERATE COMBO Experiment
+selectedStimLocs = stimLocs[rankings[end:-1:end-64+1]]
+cells[rankings[end:-1:end-64+1],:]
 
+## select cells with df/f >= 1.0
+# min_df_F = 1.0
+# maxIdx = searchsortedfirst(sort(cells, :df_f, rev=true).df_f, min_df_F, rev=true)
+# selectedStimLocs = sample(stimLocs[rankings[end:-1:end-maxIdx+2]], 64, replace=false)
 
-# select cells with df/f >= 1.0
-min_df_F = 1.0
-maxIdx = searchsortedfirst(sort(cells, :df_f, rev=true).df_f, min_df_F, rev=true)
-selectedStimLocs = sample(stimLocs[rankings[end:-1:end-maxIdx+2]], 64, replace=false)
+## horrible rescue for motion (please just don't)
+validCellIdxs = cells.stimStart .>=1000
+lateCells = cells[validCellIdxs,:]
+cellsWeWantToStim = lateCells[sortperm(lateCells.df_f, rev=true),:][1:64,:]
+selectedStimLocs = [CartesianIndex(row.y,row.x) for row in eachrow(cellsWeWantToStim)]
 
 ##
 nCells = 64
 base = 2
-nReps = 8
+nReps = 2
 stimGroups, groupsPerCell = stonerStimGroups(nCells, base)
 stimGroups, groupsPerCell = aa2a.([stimGroups, groupsPerCell])
 sameGroups = stimGroups
@@ -280,6 +300,7 @@ stonerGroupsPerCell = calcGroupsPerCell(stonerGroups, nCells, base)
 
 
 stonerGroups
+count_concurrency(stonerGroups)
 ##
 k = Int(nCells / base)
 target_groups = []
@@ -292,7 +313,7 @@ end
 ## Save files for SLM stim
 slmMaskOutputDir = joinpath(splitpath(tif840path)[1:end-2]...)
 
-name = "cstoner_n64_b2_r8"
+name = "cstoner_n64_b2_r2"
 outname = joinpath(slmMaskOutputDir, name)
 # save("$(outname).tif", im)
 
