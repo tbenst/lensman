@@ -36,7 +36,7 @@ function stonerStimGroups(nCells, base=2)
             end
         end
     end
-    stimGroups, groupsPerCell
+    aa2a(stimGroups), aa2a(groupsPerCell)
 end
 
 function stonerPerm(nCells, base=2)

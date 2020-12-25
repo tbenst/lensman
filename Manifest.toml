@@ -1,5 +1,11 @@
 # This file is machine-generated - editing it directly is not advised
 
+[[AMD]]
+deps = ["Libdl", "LinearAlgebra", "SparseArrays", "Test"]
+git-tree-sha1 = "fc66ffc5cff568936649445f58a55b81eaf9592c"
+uuid = "14f7f29c-3bd6-536c-9a0b-7339e30b5a3e"
+version = "0.4.0"
+
 [[ANTsRegistration]]
 deps = ["BinaryProvider", "FileIO", "Glob", "Images", "Libdl", "NRRD", "Random", "Suppressor", "Unitful"]
 git-tree-sha1 = "b75021bf988c85571dd7da3d45355d5f1ffbb0ad"
@@ -158,6 +164,12 @@ version = "1.0.6+5"
 git-tree-sha1 = "215a9aa4a1f23fbd05b92769fdd62559488d70e9"
 uuid = "fa961155-64e5-5f13-b03f-caf6b980ea82"
 version = "0.4.1"
+
+[[COSMO]]
+deps = ["AMD", "DataStructures", "IterTools", "LinearAlgebra", "MathOptInterface", "Pkg", "Printf", "QDLDL", "Random", "Requires", "SparseArrays", "Statistics", "SuiteSparse", "Test", "UnsafeArrays"]
+git-tree-sha1 = "4864a3574b27e17335650d1d7e99266c5f7147ad"
+uuid = "1e616198-aa4e-51ec-90a2-23f7fbd31d8d"
+version = "0.7.8"
 
 [[CSV]]
 deps = ["Dates", "Mmap", "Parsers", "PooledArrays", "SentinelArrays", "Tables", "Unicode"]
@@ -467,6 +479,18 @@ deps = ["Random", "Trajectories"]
 git-tree-sha1 = "bd85c81da3e1f1588db38f7b8b216803e98c6a25"
 uuid = "6c76993d-992e-5bf1-9e63-34920a5a5a38"
 version = "0.4.1"
+
+[[ECOS]]
+deps = ["BinaryProvider", "ECOS_jll", "Libdl", "LinearAlgebra", "MathOptInterface", "MathProgBase", "SparseArrays"]
+git-tree-sha1 = "60b955ec92dd2989a532d0c7822db8f080e63582"
+uuid = "e2685f51-7e38-5353-a97d-a921fd2c8199"
+version = "0.12.1"
+
+[[ECOS_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "c11ea452ae3fb7e69dadb6a3be6ec8d9403997fe"
+uuid = "c2c64177-6a8e-5dca-99a7-64895ad7445f"
+version = "2.0.5+1"
 
 [[EarCut_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1204,6 +1228,12 @@ git-tree-sha1 = "7e36f6a52274ddb8515ec1f559306be3f412d6a6"
 uuid = "23992714-dd62-5051-b70f-ba57cb901cac"
 version = "0.8.1"
 
+[[MKL]]
+deps = ["Libdl", "MKL_jll", "PackageCompiler"]
+git-tree-sha1 = "e01175ff53c062c52b6cbe441a4382e132f7c82e"
+uuid = "33e6dc65-8f57-5167-99aa-e5a354878fb2"
+version = "0.3.0"
+
 [[MKL_jll]]
 deps = ["IntelOpenMP_jll", "Libdl", "Pkg"]
 git-tree-sha1 = "eb540ede3aabb8284cb482aa41d00d6ca850b1f8"
@@ -1420,6 +1450,12 @@ git-tree-sha1 = "e5cefb581115ab216c4a76819747bbeb6eb2948e"
 uuid = "f57f5aa1-a3ce-4bc8-8ab9-96f992907883"
 version = "0.3.2"
 
+[[PackageCompiler]]
+deps = ["Libdl", "Pkg", "UUIDs"]
+git-tree-sha1 = "3eee77c94646163f15bd8626acf494360897f890"
+uuid = "9b87118b-4619-50d2-8e1e-99f35a4d4d9d"
+version = "1.2.3"
+
 [[Packing]]
 deps = ["GeometryBasics"]
 git-tree-sha1 = "f4049d379326c2c7aa875c702ad19346ecb2b004"
@@ -1520,6 +1556,12 @@ deps = ["Colors", "LaTeXStrings", "PyCall", "Sockets", "Test", "VersionParsing"]
 git-tree-sha1 = "67dde2482fe1a72ef62ed93f8c239f947638e5a2"
 uuid = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 version = "2.9.0"
+
+[[QDLDL]]
+deps = ["AMD", "LinearAlgebra", "SparseArrays"]
+git-tree-sha1 = "417caffa5e8d8de61af9a6bb0ae2a5dcbbdccac3"
+uuid = "bfc457fd-c171-5ab7-bd9e-d5dbfc242d63"
+version = "0.1.4"
 
 [[Qhull_jll]]
 deps = ["Libdl", "Pkg"]
@@ -1965,6 +2007,11 @@ deps = ["ConstructionBase", "LinearAlgebra", "Random"]
 git-tree-sha1 = "2b643523d52fc9fb4fe0729e6561d066055d58d8"
 uuid = "1986cc42-f94f-5a68-af5c-568840ba703d"
 version = "1.5.0"
+
+[[UnsafeArrays]]
+git-tree-sha1 = "9740b414f85ec2fa9135066f81b1fb14212befd6"
+uuid = "c4a57d5a-5b31-53a6-b365-19f8c011fbd6"
+version = "1.0.1"
 
 [[VectorizationBase]]
 deps = ["CpuId", "Libdl", "LinearAlgebra"]
