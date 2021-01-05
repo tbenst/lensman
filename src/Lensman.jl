@@ -224,6 +224,14 @@ function extractTrace(tseries, cartIdxs::Array{T,1}) where T<:CartesianIndex
     trace
 end
 
+"Calculate df/f, assuming last dimension is time."
+function df_f(f_timeseries, f0_timeseries)
+    d = ndims(f_timeseries)
+    f = selectdim(mean(f_timeseries, dims=d), d, 1)
+    f0 = selectdim(mean(f0_timeseries, dims=d), d, 1)
+    @. (f-f0)/f
+end
+
 cartesianIndToArray = cartIdx2Array
 
 "Given (2d) image and list of CartesianIndices, return RGB image."
@@ -549,6 +557,7 @@ function rpadArray(array, n)
     parent(padarray(array, Fill(0, (0,), (toPad,) ) ))
 end
 
+"Create DataFrame with row per individual cell stimulated."
 function makeCellsDF(target_groups, stimStartIdx, stimEndIdx, trialOrder)
     cells = DataFrame(x=Int64[], y=Int64[], z=Int64[],
     stimStart=Int64[], stimStop=Int64[])
@@ -562,6 +571,17 @@ function makeCellsDF(target_groups, stimStartIdx, stimEndIdx, trialOrder)
         end
     end
     cells
+end
+
+f_lookup_cellidx(xyzToIdx) = (x,y,z) -> map((a,b,c)->xyzToIdx[(a,b,c)], x, y, z)
+
+"Add a column with index per unique (x,y,z)."
+function addCellIdx(cells::DataFrame, xyzToIdx)
+    # number each unique (x,y,z) as 1, 2, ... in order observed
+    newCells = transform(cells, [:x,:y,:z] => f_lookup_cellidx(xyzToIdx) => :cellIdx)
+    # not guranteed to match binary strings used for construction...
+    # transform(newCells, :cellIdx => (idx -> num2String(idx)) => :cellStr)
+    newCells
 end
 
 rectangle(w, h, x, y) = Shape(x .+ [0,w,w,0], y .+ [0,0,h,h])
@@ -696,6 +716,11 @@ export read_microns_per_pixel,
     sym_adjust_gamma,
     zeroAdjust,
     perm, 
-    cartIdx2SeanTarget512
+    cartIdx2SeanTarget512,
+    reconstructA,
+    addCellIdx,
+    f_lookup_cellidx,
+    entangledInfluenceMaps,
+    df_f
     # , segment_nuclei
 end
