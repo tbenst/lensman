@@ -1,14 +1,29 @@
 using Lensman
 using Unitful: μm, m, s, uconvert
 
+## SLM 2
+offset2Microns = 47μm
+slmNum = 2
+offset = float(uconvert(m, offset2Microns)) / m
+targets1 = [128. 128. offset; 384. 384. offset; 128. 384. offset; 384. 128. offset;]
+
+offsetStr = replace(string(offset2Microns), " μm"=>"_um")
+create_slm_stim([targets1],
+    "/mnt/deissero/users/tyler/slm/masks/2021-01-11_4square_SLM$(slmNum)_offset_$(offsetStr)",
+    slmNum=slmNum)
+
+
 ## to burn at etl=0 if using calibration circa 2020-12-15, need +50 offset
-offsetMicrons = 45μm
+# changed to 48mu on 2020-01-11
+slmNum = 1
+offsetMicrons = 48μm
 offset = float(uconvert(m, offsetMicrons)) / m
 targets1 = [128. 128. offset; 384. 384. offset; 128. 384. offset; 384. 128. offset;]
 
 offsetStr = replace(string(offsetMicrons), " μm"=>"_um")
 create_slm_stim([targets1],
-    "/mnt/deissero/users/tyler/slm/masks/2020-12-15_registration_4square_$offsetStr")
+    "/mnt/deissero/users/tyler/slm/masks/2021-01-11_4square_SLM$(slmNum)_offset_$(offsetStr)",
+    slmNum=slmNum)
 
 
 ##

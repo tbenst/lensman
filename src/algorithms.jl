@@ -1,12 +1,13 @@
-using LinearAlgebra, StatsBase, ProgressMeter, JuMP, Gurobi
+using LinearAlgebra, StatsBase, ProgressMeter, JuMP
 
 """Sparse (min L1) solution to Y=AX for unknown A.
     
-By default, use Gurobi, which is 50x faster than SCS.
+Pass ie `optimizer=Gurobi.Optimizer`
+Recommend to use Gurobi, which is 50x faster than SCS.
 Gurobi has a free academic license.
 https://github.com/jump-dev/Gurobi.jl#installation
 """
-function reconstructA(X,Y; optimizer=Gurobi.Optimizer)
+function reconstructA(X,Y, optimizer)
     m,n = size(Y,1), size(X,1)
     model = Model(optimizer)
     @variable(model, Â[1:m,1:n])

@@ -101,7 +101,7 @@ end
 
 TODO: perform in 3D?!
 """
-function findNeurons(plane, thresh_adjust=1.2, featSize=2, maxiSize=4)
+function findNeurons(plane; thresh_adjust=1.2, featSize=2, maxiSize=4)
     # mask out background
     adj_plane = adjust_histogram(imadjustintensity(plane), GammaCorrection(0.5))
     threshold = otsu_threshold(adj_plane) * thresh_adjust
@@ -115,7 +115,7 @@ end
 
 We minimize number of targetGroups for speed"""
 # ::Array{Float64,2}
-function create_targets_mat(targets, outname::String)
+function create_targets_mat(targets, outname::String; slmNum=1)
     # outdir = "/mnt/deissero/users/tyler/slm/masks/")
     # today_str = Dates.format(Date(now()), DateFormat("Y-mm-dd"))
     # today_dir = mkpath(joinpath(outdir, today_str))
@@ -143,20 +143,27 @@ function create_targets_mat(targets, outname::String)
 
     ntargets = size(targets,1)
     
-    # perhaps this is optional...?
     # targetsGroup alternates between SLM1&2 (eg Float32(N,3) and zeros(0,0)) and each one is 2ms apart (4ms between first two SLM1 patterns)
-    # numGroups = 99 # not sure why this varies...
+    # maximum (200ms of time effectively)
+    # @assert numGroups <= 99
     numGroups = 4
     out_mat["targetsGroup"] = Array{Any}(nothing,1,numGroups)
-    out_mat["targetsGroup"][1] = copy(targets) # stim at +0ms
-
+    
     for i in 2:2:numGroups
         # SLM2 is not used
         out_mat["targetsGroup"][i] = zeros(0,0)
     end
-    for i in 3:2:numGroups
+    for i in 1:2:numGroups
         # future stim progressions go here
         out_mat["targetsGroup"][i] = zeros(0,0)
+    end
+    
+    if slmNum==1
+        out_mat["targetsGroup"][1] = copy(targets) # stim at +0ms
+    elseif slmNum==2
+        out_mat["targetsGroup"][2] = copy(targets) # stim at +2ms
+    else
+        @error("bad slm num: $slmNum")
     end
 
     # println("construct 10Hz pattern ")
@@ -182,11 +189,11 @@ function create_trials_txt(targets_mats, outname::String;
     return txtpath
 end
 "Outname is for local filesystem (build platform)"
-function create_slm_stim(target_groups, outname::String)
+function create_slm_stim(target_groups, outname::String; slmNum=1)
     targets_mats = []
     for (i, targets) in enumerate(target_groups)
         name = "$(outname)_group_$i"
-        push!(targets_mats,create_targets_mat(targets, name))
+        push!(targets_mats,create_targets_mat(targets, name, slmNum=slmNum))
     end
     trials_txt = create_trials_txt(targets_mats, outname)
     return targets_mats, trials_txt

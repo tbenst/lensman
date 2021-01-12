@@ -1,5 +1,5 @@
 ##
-ENV["DISPLAY"] = "localhost:10.0"
+ENV["DISPLAY"] = "localhost:13.0"
 using Sockets, Observables, Statistics, Images, ImageView, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
@@ -11,17 +11,20 @@ using Unitful: μm, m, s
 tif840path = "/mnt/deissero/users/tyler/b115/2020-12-16_h2b6s-chrmine-kv2.1_6dpf/fish2/SingleImage-840nm-1024-017/SingleImage-840nm-1024-017_Cycle00001_Ch3_000001.ome.tif" # best 
 # tif840path = "/mnt/deissero/users/tyler/b115/2020-12-17_h2b6s_chrmine-kv2.1_7dpf/fish1/SingleImage-840nm-1024-018/SingleImage-840nm-1024-018_Cycle00001_Ch3_000001.ome.tif"
 # tif840path = "/mnt/deissero/users/tyler/b115/2020-12-17_h2b6s_chrmine-kv2.1_7dpf/fish2/SingleImage-840nm-1024-019/SingleImage-840nm-1024-019_Cycle00001_Ch3_000001.ome.tif"
+tif840path = "/mnt/deissero/users/tyler/b115/2021-01-11_chrmine-kv2.1_h2b6s_6dpf/fish1_nochrmine/SingleImage-840nm-1024-018/SingleImage-840nm-1024-018_Cycle00001_Ch3_000001.ome.tif"
+tif840path = "/mnt/deissero/users/tyler/b115/2021-01-11_chrmine-kv2.1_h2b6s_7dpf/fish1_gcamp_control/SingleImage-840nm-1024-019/SingleImage-840nm-1024-019_Cycle00001_Ch3_000001.ome.tif"
 # to burn at etl=0 if using calibration circa 2020-12-15, need +45 offset
-offset = float(uconvert(m, 45μm)) / m
+# offset = float(uconvert(m, 45μm)) / m # prior to 2021 / starting on ...12/15...? should check...
+offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
+zOffset = offset * 1e6
 fishDir = joinpath(splitpath(tif840path)[1:end-2]...)
 expName = splitpath(tif840path)[end-1]
 avgImage = ImageMagick.load(tif840path)
 size(avgImage)
-avgImage[1:60,:] .= 0
-##
+## may want to now skip to Analysis section if not analyzing live
 # compile
 ##
-candNeuronCenterMask = findNeurons(avgImage,1.5,2,10);
+candNeuronCenterMask = findNeurons(avgImage,thresh_adjust=1.5, featSize=4,maxiSize=8);
 candidateTargetLocs = findall(candNeuronCenterMask)
 # candidateTargets = copy(mask2ind(candNeuronCenterMask))
 
@@ -35,7 +38,7 @@ stim_points = dilate(dilate(stim_points))
 channelview(img)[[1,3],:,:,:] .= 0
 channelview(img)[1,:,:,:] .= 0.25 * float(stim_points)
 imshow(img)
-
+println("found $(size(candidateTargetLocs,1)) potential targets")
 ## Sample 128 neurons
 nNeurons = 1024
 # nNeurons = 1
@@ -70,7 +73,7 @@ target_groups = [vcat(cartIdx2SeanTarget.(locs, fill(offset, k))...)
 
 
 ## Save files for SLM stim
-name = "1024cell-32concurrent-zoffset_fix"
+name = "1024cell-32concurrent-zoffset_$zOffset"
 outname = joinpath(fishDir, name)
 
 create_slm_stim(target_groups,
@@ -86,15 +89,21 @@ create_slm_stim(target_groups,
 ## load in results
 # only triggered the first 120 trials, oops!!
 # fishDir = "/media/tyler/tyler_benster/2020-12-16_h2b6s-chrmine-kv2.1_6dpf/fish2"
-fishDir = "/data/dlab/b115/2020-12-16_h2b6s-chrmine-kv2.1_6dpf/fish2"
+# fishDir = "/data/dlab/b115/2020-12-16_h2b6s-chrmine-kv2.1_6dpf/fish2"
 tseriesName = "TSeries-1024cell-32concurrent-038"
 # tseriesName = "TSeries-1024cell-32concurrent-043"
 # tseriesName = "TSeries-cstoner_n64_b2_r8-043"
 # tseriesName = "TSeries_1024cell_32concurrernt-045"
-tseriesName = "TSeries-1024cell-32concurrent-zoffset_fix-043"
+
+# 2021-01-11
+tseriesName = "TSeries-1024cell-32concurrent-043"
 
 tseriesDir = joinpath(fishDir, tseriesName)
 slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
+plotDir = joinpath(fishDir, "plots")
+if ~isdir(plotDir)
+    mkdir(plotDir)
+end
 
 tseries = loadTseries(tseriesDir);
 (H, W, Z, T) = size(tseries)
@@ -110,6 +119,7 @@ volRate = frameRate / Z
 slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
 trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
 
+# TODO: is stimStop wrong...? Seems too long....
 stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFile, Z)
 allWithin(diff(stimStartIdx),0.05)
 # adjust for expected number of stimuli....
@@ -134,9 +144,9 @@ nTrialsPerStimulus = Int(size(trialOrder,1) / nStimuli)
 ##
 @assert nTrialsPerStimulus == 1
 # cells = Array{Array{Float64,1}}
-
+is1024 = size(tseries,1)==1024
 targetsWithPlaneIndex = mapTargetGroupsToPlane(target_groups, etlVals,
-    is1024=false, zOffset=45)
+    is1024=is1024, zOffset=zOffset)
 
 cells = makeCellsDF(targetsWithPlaneIndex, stimStartIdx, stimEndIdx, trialOrder)
 
@@ -171,7 +181,7 @@ save(joinpath(plotDir,"$(tseriesName)_avgImgWithTargets.png"), avgImgWithTargets
 ##
 cellDf_f = []
 # @assert size(stimStartIdx,1)==size(stimLocs,1) # only did 120 by accident
-winSize = 15
+winSize = Int(ceil(3*volRate))
 # TODO: don't hardcode frameRate (15)
 # delay=Int(ceil(15*2))
 delay=0
@@ -210,18 +220,18 @@ worst = rankings[1]
 
 idx = rankings[end-10]
 
-sum(cellDf_f.>0.4), sum(cellDf_f.>1.)
+sum(cellDf_f.>0.1), sum(cellDf_f.>0.4), sum(cellDf_f.>1.)
 # imshow(addTargetsToImage(avgImage, stimLocs[[best],:]))
 # imshow(tseries[:,:,1,stimStartIdx[idx]-winSize:stimEndIdx[idx]+winSize])
 ##
 cmax = maximum(abs.(cellDf_f))
 p_df_map = Gadfly.with_theme(:dark) do
-    Gadfly.plot(cells, x=:x, y=:y, Gadfly.Geom.point, size=[targetSizePx], color=:df_f,
+    Gadfly.plot(cells[cells.df_f.<0.1,:], x=:x, y=:y, Gadfly.Geom.point, size=[targetSizePx], color=:df_f,
         Gadfly.Scale.color_continuous(minvalue=-1, maxvalue=1),
         Gadfly.Coord.cartesian(yflip=true, fixed=true))
 end
 
-img = PNG(joinpath(plotDir, "$(expName)_df_f_map.png"), 6inch, 5inch)
+img = PNG(joinpath(plotDir, "$(expName)_df_f_map_below10.png"), 6inch, 5inch)
 Gadfly.draw(img, p_df_map)
 p_df_map
 ## viz top 64 (blue) vs worst 64 (red)
@@ -235,29 +245,30 @@ img
 
 
 ##
-function plotStim(tseries,roiMask,cells, idx, volRate)
+function plotStim(tseries,roiMask,cells, idx, volRate; before=30, after=60)
     roiM = roiMask[idx]
     x, y, z, stimStart, stimStop = cells[idx,:]
-    plotRange = stimStart-30:stimStop+60
+    plotRange = stimStart-before:stimStop+after
     fluorescentTrace = extractTrace(tseries[:,:,:,plotRange], roiM)
     fluorescentTrace = imageJkalmanFilter(fluorescentTrace)
-    p = plot(plotRange/volRate, fluorescentTrace, left_margin=50px, ticks=4)
+    p = plot(plotRange/volRate, fluorescentTrace, left_margin=50px)
         # xlabel="time (s)", ylabel="fluorescence")
     plot!(Lensman.rectangle((stimStop-stimStart)/volRate,maximum(fluorescentTrace),
         stimStart/volRate,0), opacity=.5, label="stim")
     p
 end
+before = Int(ceil(volRate*10))
+after = Int(ceil(volRate*20))
 # best
 plots = []
 nplots = 64
+
+# nplots = 8
 for idx in rankings[end:-1:end-nplots+1]
-    push!(plots, plotStim(tseries,roiMask,cells,idx, volRate))
+    push!(plots, plotStim(tseries,roiMask,cells,idx, volRate, before=before, after=after))
 end
 p = plot(plots..., layout=(16, 4), legend=false, size=(1024,1024*2))
-plotDir = joinpath(fishDir, "plots")
-if ~isdir(plotDir)
-    mkdir(plotDir)
-end
+# p = plot(plots..., layout=(2, 4), legend=false, size=(1024,1024/4))
 
 savefig(p, joinpath(plotDir, "$(expName)_best64traces.png"))
 p
