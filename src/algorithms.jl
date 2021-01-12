@@ -1,4 +1,22 @@
-using LinearAlgebra, StatsBase, ProgressMeter
+using LinearAlgebra, StatsBase, ProgressMeter, JuMP, Gurobi
+
+"""Sparse (min L1) solution to Y=AX for unknown A.
+    
+By default, use Gurobi, which is 50x faster than SCS.
+Gurobi has a free academic license.
+https://github.com/jump-dev/Gurobi.jl#installation
+"""
+function reconstructA(X,Y; optimizer=Gurobi.Optimizer)
+    m,n = size(Y,1), size(X,1)
+    model = Model(optimizer)
+    @variable(model, Â[1:m,1:n])
+    @variable(model, l1)
+    @constraint(model, [l1; vec(Â)] in MOI.NormOneCone(m*n))
+    @constraint(model, con, Â*X .== Y)
+    @objective(model, Min, l1)
+    optimize!(model)
+    value.(Â)
+end
 
 num2String(n,base,nDigits) = join(reverse(digits(n-1, base=base, pad=nDigits)),"")
 
@@ -331,4 +349,32 @@ function randomSwaps(stimGroups::Array{T,2}, groupsPerCell::Array{T,2}, metric, 
     @info "final score: $score"
     groupsPerCell = calcGroupsPerCell(stimGroups, nGroupsPerCell, nCells, base)
     stimGroups, groupsPerCell
+end
+
+"""
+Add influence maps together for each stim that includes a particular neuron.
+Return an entangled influence map for each neuron.
+
+winSize: 3*volRate is reasonable for H2B-GCaMP6s
+"""
+function entangledInfluenceMaps(cells::DataFrame, tseries;
+        winSize=10)
+    roiMask = []
+    (H, W, Z, T) = size(tseries)
+    nCells = maximum(cells.cellIdx)
+    entangledImaps = zeros(H, W, Z, nCells)
+
+    @threads for c in 1:nCells
+        stims = cells[cells.cellIdx .== c, [:stimStart, :stimStop]]
+        iMap = zeros(H,W,Z)
+        for (stimStart, stimStop) in eachrow(stims)
+            f = mean(tseries[:,:,:,stimStop+1:stimStop+winSize], dims=4)[:,:,:,1]
+            f0 = mean(tseries[:,:,:,stimStart-winSize:stimStart-1], dims=4)[:,:,:,1]
+            df_f = @. (f - f0)/f0
+            iMap .+= df_f
+        end
+        entangledImaps[:,:,:,c] .= iMap
+    end
+    
+    entangledImaps
 end

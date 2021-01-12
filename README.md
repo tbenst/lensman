@@ -8,6 +8,7 @@ Wielding the power of the lens in galaxies full of neurons
 $ git clone git@github.com:tbenst/lensman.git`
 $ cd lensman
 $ julia
+julia>ENV["GUROBI_HOME"] = "/opt/gurobi911" # optional
 julia>]
 pkg>activate .
 pkg>instantiate

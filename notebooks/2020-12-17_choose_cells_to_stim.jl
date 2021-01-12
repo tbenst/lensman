@@ -1,5 +1,5 @@
 ##
-ENV["DISPLAY"] = "localhost:11.0"
+ENV["DISPLAY"] = "localhost:10.0"
 using Sockets, Observables, Statistics, Images, ImageView, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
@@ -7,11 +7,11 @@ using Sockets, Observables, Statistics, Images, ImageView, Lensman,
 import Gadfly
 using Unitful: μm, m, s
 ##
-# tif840path = "/mnt/deissero/users/tyler/b115/2020-12-15_h2b6s_chrmine_kv2.1_5dpf/fish2/SingleImage-840nm-512-016/SingleImage-840nm-512-016_Cycle00001_Ch3_000001.ome.tif"
-# tif840path = "/mnt/deissero/users/tyler/b115/2020-12-16_h2b6s-chrmine-kv2.1_6dpf/fish2/SingleImage-840nm-1024-017/SingleImage-840nm-1024-017_Cycle00001_Ch3_000001.ome.tif"
+# tif840path = "/mnt/deissero/users/tyler/b115/2020-12-15_h2b6s_chrmine_kv2.1_5dpf/fish2/SingleImage-840nm-512-017/SingleImage-840nm-512-017_Cycle00001_Ch3_000001.ome.tif"
+tif840path = "/mnt/deissero/users/tyler/b115/2020-12-16_h2b6s-chrmine-kv2.1_6dpf/fish2/SingleImage-840nm-1024-017/SingleImage-840nm-1024-017_Cycle00001_Ch3_000001.ome.tif" # best 
 # tif840path = "/mnt/deissero/users/tyler/b115/2020-12-17_h2b6s_chrmine-kv2.1_7dpf/fish1/SingleImage-840nm-1024-018/SingleImage-840nm-1024-018_Cycle00001_Ch3_000001.ome.tif"
-tif840path = "/mnt/deissero/users/tyler/b115/2020-12-17_h2b6s_chrmine-kv2.1_7dpf/fish2/SingleImage-840nm-1024-019/SingleImage-840nm-1024-019_Cycle00001_Ch3_000001.ome.tif"
-## to burn at etl=0 if using calibration circa 2020-12-15, need +45 offset
+# tif840path = "/mnt/deissero/users/tyler/b115/2020-12-17_h2b6s_chrmine-kv2.1_7dpf/fish2/SingleImage-840nm-1024-019/SingleImage-840nm-1024-019_Cycle00001_Ch3_000001.ome.tif"
+# to burn at etl=0 if using calibration circa 2020-12-15, need +45 offset
 offset = float(uconvert(m, 45μm)) / m
 fishDir = joinpath(splitpath(tif840path)[1:end-2]...)
 expName = splitpath(tif840path)[end-1]
@@ -86,14 +86,30 @@ create_slm_stim(target_groups,
 ## load in results
 # only triggered the first 120 trials, oops!!
 # fishDir = "/media/tyler/tyler_benster/2020-12-16_h2b6s-chrmine-kv2.1_6dpf/fish2"
-# tseriesDir = joinpath(fishDir, "TSeries-1024cell-32concurrent-043")
-tseriesDir = joinpath(fishDir, "TSeries_1024cell_32concurrernt-045")
+fishDir = "/data/dlab/b115/2020-12-16_h2b6s-chrmine-kv2.1_6dpf/fish2"
+tseriesName = "TSeries-1024cell-32concurrent-038"
+# tseriesName = "TSeries-1024cell-32concurrent-043"
+# tseriesName = "TSeries-cstoner_n64_b2_r8-043"
+# tseriesName = "TSeries_1024cell_32concurrernt-045"
+tseriesName = "TSeries-1024cell-32concurrent-zoffset_fix-043"
+
+tseriesDir = joinpath(fishDir, tseriesName)
 slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 
 tseries = loadTseries(tseriesDir);
 (H, W, Z, T) = size(tseries)
 ##
 voltageFile = glob("*VoltageRecording*.csv", tseriesDir)[1]
+
+# read slm stim files
+dataFolders = splitpath(tseriesDir)
+xmlPath = joinpath(dataFolders..., dataFolders[end] * ".xml")
+expDate, frameRate, etlVals = getExpData(xmlPath)
+Z = size(etlVals,1)
+volRate = frameRate / Z
+slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
+trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
+
 stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFile, Z)
 allWithin(diff(stimStartIdx),0.05)
 # adjust for expected number of stimuli....
@@ -102,17 +118,15 @@ allWithin(stimEndIdx .- stimStartIdx,0.05)
 avgStimDuration = mean(stimEndIdx .- stimStartIdx)
 # adjust for volume rate / stim duration...
 @assert 30 > avgStimDuration > 3
-# read slm stim files
-dataFolders = splitpath(tseriesDir)
-xmlPath = joinpath(dataFolders..., dataFolders[end] * ".xml")
-expDate, frameRate, etlVals = getExpData(xmlPath)
-slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
-trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
 
-@warn "may not be needed if in same session / will clobber..."
+
 # Assumes no sequence of stim
-target_groups = [mat["cfg"]["maskS"]["targets"][1]
-    for mat in matread.(findMatGroups(slmExpDir))]
+# not be needed if in same session / avoid clobber
+if ~(@isdefined target_groups)
+    target_groups = [mat["cfg"]["maskS"]["targets"][1]
+        for mat in matread.(findMatGroups(slmExpDir))]
+end
+    
 
 nStimuli = maximum(trialOrder)
 nTrials = size(trialOrder,1)
@@ -128,7 +142,9 @@ cells = makeCellsDF(targetsWithPlaneIndex, stimStartIdx, stimEndIdx, trialOrder)
 
 stimLocs = map(CartesianIndex ∘ Tuple, eachrow(cells[:,[2,1]]))
 first(cells)
+
 ## emergency selection of period without motion...
+@assert tif840path == "/mnt/deissero/users/tyler/b115/2020-12-17_h2b6s_chrmine-kv2.1_7dpf/fish2/SingleImage-840nm-1024-019/SingleImage-840nm-1024-019_Cycle00001_Ch3_000001.ome.tif"
 lateImage = dropdims(mean(tseries[:,:,stimPlane,end-500:end], dims=3), dims=3)
 start = 1000
 earlyImage = dropdims(mean(tseries[:,:,stimPlane,start:start+500], dims=3), dims=3)
@@ -137,9 +153,10 @@ imshow(cat(reshape(lateImage,size(lateImage)..., 1),
 
 ##
 stimPlane = Int(mean(map(x->mean(x[:,3]), targetsWithPlaneIndex)))
+avgImage = dropdims(mean(tseries[:,:,stimPlane,:], dims=3), dims=3)
 # avgImage = dropdims(mean(tseries[:,:,stimPlane,1:1000], dims=3), dims=3)
 # avgImage = dropdims(mean(tseries[:,:,stimPlane,end-1000:end], dims=3), dims=3)
-avgImage = dropdims(mean(tseries[:,:,stimPlane,end-1300:end], dims=3), dims=3)
+# avgImage = dropdims(mean(tseries[:,:,stimPlane,end-1300:end], dims=3), dims=3)
 avgImageAdj = adjust_gamma(imadjustintensity(avgImage), 0.5)
 avgImageAdj = RGB.(avgImageAdj)
 channelview(avgImageAdj)[[1,3],:,:,:] .= 0
@@ -148,8 +165,9 @@ microscope_units = (2* 0.6299544139175637μm, 2* 0.6299544139175637μm, 2.0μm)
 # assume that "7um" spiral galvo signal is calibrated for 16x, not 25x
 # "16x" is actually 14.4x
 targetSizePx = 7μm * (14.4/25) / microscope_units[1]
-addTargetsToImage(copy(avgImageAdj), cartIdx2Array(stimLocs),
+avgImgWithTargets = addTargetsToImage(copy(avgImageAdj), cartIdx2Array(stimLocs),
     targetSize=targetSizePx)
+save(joinpath(plotDir,"$(tseriesName)_avgImgWithTargets.png"), avgImgWithTargets)
 ##
 cellDf_f = []
 # @assert size(stimStartIdx,1)==size(stimLocs,1) # only did 120 by accident
@@ -198,12 +216,12 @@ sum(cellDf_f.>0.4), sum(cellDf_f.>1.)
 ##
 cmax = maximum(abs.(cellDf_f))
 p_df_map = Gadfly.with_theme(:dark) do
-    Gadfly.plot(cells, x=:x, y=:y, Gadfly.Geom.point, color=:df_f,
+    Gadfly.plot(cells, x=:x, y=:y, Gadfly.Geom.point, size=[targetSizePx], color=:df_f,
         Gadfly.Scale.color_continuous(minvalue=-1, maxvalue=1),
-        Gadfly.Coord.cartesian(yflip=true))
+        Gadfly.Coord.cartesian(yflip=true, fixed=true))
 end
 
-img = PNG(joinpath(plotDir, "$(expName)_df_f_map.png"), 6inch, 4inch)
+img = PNG(joinpath(plotDir, "$(expName)_df_f_map.png"), 6inch, 5inch)
 Gadfly.draw(img, p_df_map)
 p_df_map
 ## viz top 64 (blue) vs worst 64 (red)
@@ -217,25 +235,25 @@ img
 
 
 ##
-function plotStim(tseries,roiMask,cells, idx)
+function plotStim(tseries,roiMask,cells, idx, volRate)
     roiM = roiMask[idx]
     x, y, z, stimStart, stimStop = cells[idx,:]
-    plotRange = stimStart-30:stimStop+30
+    plotRange = stimStart-30:stimStop+60
     fluorescentTrace = extractTrace(tseries[:,:,:,plotRange], roiM)
     fluorescentTrace = imageJkalmanFilter(fluorescentTrace)
-    p = plot(plotRange/frameRate, fluorescentTrace,
-        xlabel="time (s)", ylabel="raw fluorescence")
-    plot!(Lensman.rectangle((stimStop-stimStart)/frameRate,maximum(fluorescentTrace),
-        stimStart/frameRate,0), opacity=.5, label="stim")
+    p = plot(plotRange/volRate, fluorescentTrace, left_margin=50px, ticks=4)
+        # xlabel="time (s)", ylabel="fluorescence")
+    plot!(Lensman.rectangle((stimStop-stimStart)/volRate,maximum(fluorescentTrace),
+        stimStart/volRate,0), opacity=.5, label="stim")
     p
 end
 # best
 plots = []
 nplots = 64
 for idx in rankings[end:-1:end-nplots+1]
-    push!(plots, plotStim(tseries,roiMask,cells,idx))
+    push!(plots, plotStim(tseries,roiMask,cells,idx, volRate))
 end
-p = plot(plots..., layout=(16, 4), legend=false, size=(870,1024*2))
+p = plot(plots..., layout=(16, 4), legend=false, size=(1024,1024*2))
 plotDir = joinpath(fishDir, "plots")
 if ~isdir(plotDir)
     mkdir(plotDir)
