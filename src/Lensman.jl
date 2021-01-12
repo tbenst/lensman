@@ -17,6 +17,8 @@ match_template = PyNULL()
 np = PyNULL()
 autolevel_percentile = PyNULL()
 scipy = PyNULL()
+machinery = PyNULL()
+# py_utils = PyNULL()
 
 function __init__()
     pyimport("skimage")
@@ -27,6 +29,10 @@ function __init__()
     copy!(scipy, pyimport("scipy"))
     pyimport("scipy.ndimage")
     copy!(autolevel_percentile, pyimport("skimage.filters.rank").autolevel_percentile)
+
+    # Nifty way to load local Python source code. This loads "src/py_utils" into a global `py_utils`
+    copy!(machinery, pyimport("importlib.machinery"))
+    # copy!(py_utils, pyimport("importlib.machinery").SourceFileLoader("py_utils", "src/py_utils.py").load_module("py_utils"))
 end
     
 
@@ -40,7 +46,7 @@ tmppath = ANTsRegistration.userpath()
 function read_mask(masks, idx; W=621, H=1406, Z=138, units=zbrain_units)
     example_mask = reshape(Array(masks["MaskDatabase"][:,idx]), (H, W, Z))
     # reshape as [621, 1406, 138]
-    example_mask = permutedims(example_mask, (2,1,3))
+    example_mask = permutedims(example_mask, (2, 1, 3))
     AxisArray(example_mask, (:y, :x, :z), units)
 end
 
@@ -48,8 +54,8 @@ end
 function getMaskNameIncludes(masks, maskNameIncludes, units=zbrain_units)
     masks_raphe_idxs = findall(occursin.(maskNameIncludes, masks["MaskDatabaseNames"])) |>
         x -> map(ci -> ci[2], x)
-    mask = foldl((a,n)->a .| read_mask(masks, n), masks_raphe_idxs;
-        init=read_mask(masks,masks_raphe_idxs[1]))
+    mask = foldl((a, n) -> a .| read_mask(masks, n), masks_raphe_idxs;
+        init=read_mask(masks, masks_raphe_idxs[1]))
     mask = AxisArray(Float32.(mask), (:y, :x, :z), zbrain_units)
 end
 
@@ -59,7 +65,7 @@ function antsApplyTransforms(fixedPath::String, moving::AxisArray, transformPath
 end
 
 function antsApplyTransforms(fixedPath::String, movingPath::String, transformPath::String)
-    maskoutname = joinpath(tmppath, ANTsRegistration.randstring(10)*".nii.gz")
+    maskoutname = joinpath(tmppath, ANTsRegistration.randstring(10) * ".nii.gz")
     antsApplyTransforms(fixedPath, movingPath, transformPath, maskoutname)
 end
 
@@ -72,26 +78,26 @@ function read_zseries(tiff_files)
     tif0 = ImageMagick.load(tiff_files[1])
     H, W = size(tif0)
     zseries = zeros(Normed{UInt16,16}, H, W, size(tiff_files, 1))
-    @threads for z in 1:size(tiff_files,1)
+    @threads for z in 1:size(tiff_files, 1)
         zseries[:,:,z] = ImageMagick.load(tiff_files[z])
     end
     return zseries
 end
 
 function create_nuclei_mask(microscope_units)
-    nucleus_r = (2.75μm/microscope_units[1])μm
+    nucleus_r = (2.75μm / microscope_units[1])μm
     space = 0.3μm # WARN: need to adjust CirclePointRadius, too
     cell_r = nucleus_r + space
-    template_size = Int32(ceil(2*(cell_r)/microscope_units[1]))
+    template_size = Int32(ceil(2 * (cell_r) / microscope_units[1]))
     # ensure odd size
     template_size += abs((template_size) % 2 - 1)
     # we make large and later resize for anti-aliasing
-    nucleus_template = Gray.(zeros(513,513))
-    draw!(nucleus_template, Ellipse(CirclePointRadius(256,256,192)))
+    nucleus_template = Gray.(zeros(513, 513))
+    draw!(nucleus_template, Ellipse(CirclePointRadius(256, 256, 192)))
     nucleus_template = Float64.(nucleus_template)
     # nucleus_template[nucleus_template.==0.] .= -1.
     sz = (template_size, template_size)
-    σ = map((o,n)->0.75*o/n, size(nucleus_template), sz)
+    σ = map((o, n) -> 0.75 * o / n, size(nucleus_template), sz)
     kern = KernelFactors.gaussian(σ)
 
     nucleus_template = imresize(imfilter(nucleus_template, kern, NA()), sz)
@@ -122,41 +128,41 @@ function create_targets_mat(targets, outname::String)
     # matpath = joinpath(today_dir, "$outname.mat")
     matpath = "$outname.mat"
 
-    stim_struct = OrderedDict{String, Any}()
+    stim_struct = OrderedDict{String,Any}()
     # field order: im, targets, zrange, targetsGroup
     exp_key = "experimentS"
     # exp_key = "etb"
-    stim_struct[exp_key] = Dict{String, Any}()
+    stim_struct[exp_key] = Dict{String,Any}()
     out_mat = stim_struct[exp_key]
 
-    out_mat["im"] = Array{Any}(nothing,1,2)
+    out_mat["im"] = Array{Any}(nothing, 1, 2)
     # H, W = 1024, 1024
     H, W = 512, 512
-    out_mat["im"][1] = zeros(H,W)
-    out_mat["im"][2] = zeros(H,W)
-    @assert all(targets .<512)
+    out_mat["im"][1] = zeros(H, W)
+    out_mat["im"][2] = zeros(H, W)
+    @assert all(targets .< 512)
 
-    out_mat["targets"] = Array{Any}(nothing,1,1)
+    out_mat["targets"] = Array{Any}(nothing, 1, 1)
     out_mat["targets"][1] = copy(targets) # ensure not an Adjoint type
     out_mat["zrange"] = [minimum(targets[:,3]) maximum(targets[:,3])]
     # channel 1 (red) and 2 (green), used for GUI preview
 
-    ntargets = size(targets,1)
+    ntargets = size(targets, 1)
     
     # perhaps this is optional...?
     # targetsGroup alternates between SLM1&2 (eg Float32(N,3) and zeros(0,0)) and each one is 2ms apart (4ms between first two SLM1 patterns)
     # numGroups = 99 # not sure why this varies...
     numGroups = 4
-    out_mat["targetsGroup"] = Array{Any}(nothing,1,numGroups)
+    out_mat["targetsGroup"] = Array{Any}(nothing, 1, numGroups)
     out_mat["targetsGroup"][1] = copy(targets) # stim at +0ms
 
     for i in 2:2:numGroups
         # SLM2 is not used
-        out_mat["targetsGroup"][i] = zeros(0,0)
+        out_mat["targetsGroup"][i] = zeros(0, 0)
     end
     for i in 3:2:numGroups
         # future stim progressions go here
-        out_mat["targetsGroup"][i] = zeros(0,0)
+        out_mat["targetsGroup"][i] = zeros(0, 0)
     end
 
     # println("construct 10Hz pattern ")
@@ -164,19 +170,19 @@ function create_targets_mat(targets, outname::String)
 
     matwrite(matpath, stim_struct)
     # strip /mnt/deissero... this is needed since Matlab on windows will read the file
-    return "O:\\"*replace(matpath[14:end], "/" => "\\")
+    return "O:\\" * replace(matpath[14:end], "/" => "\\")
 end
 
 # ::Array{String,1}
 function create_trials_txt(targets_mats, outname::String;
-        outdir = "/mnt/deissero/users/tyler/slm/masks/")
+        outdir="/mnt/deissero/users/tyler/slm/masks/")
     today_str = Dates.format(Date(now()), DateFormat("Y-mm-dd"))
     today_dir = mkpath(joinpath(outdir, today_str))
     txtpath = joinpath(today_dir, "$outname.txt")
     
     txt_io = open(txtpath, "w")
     for matpath in targets_mats
-        println(txt_io, matpath*"\t1")
+        println(txt_io, matpath * "\t1")
     end
     close(txt_io)
     return txtpath
@@ -186,7 +192,7 @@ function create_slm_stim(target_groups, outname::String)
     targets_mats = []
     for (i, targets) in enumerate(target_groups)
         name = "$(outname)_group_$i"
-        push!(targets_mats,create_targets_mat(targets, name))
+        push!(targets_mats, create_targets_mat(targets, name))
     end
     trials_txt = create_trials_txt(targets_mats, outname)
     return targets_mats, trials_txt
@@ -195,18 +201,18 @@ end
 
 function cartIdx2Array(x::Vector{<:CartesianIndex})
     # make tall matrix
-    permutedims(reduce(hcat, collect.(Tuple.(x))), (2,1))
+    permutedims(reduce(hcat, collect.(Tuple.(x))), (2, 1))
 end
 
 "ImageJ 'kalman filter'"
 function imageJkalmanFilter(ys;gain=0.8,useBurnIn=true)
     predictions = zeros(size(ys))
     predictions[1] = ys[1]
-    for t in 1:size(ys,1)-1
-        K = useBurnIn ? 1 / (t+1) : 0.
+    for t in 1:size(ys, 1) - 1
+        K = useBurnIn ? 1 / (t + 1) : 0.
         pred = predictions[t]
-        obs = ys[t+1]
-        predictions[t+1] = pred*gain + obs*(1-gain) + K*(obs-pred)
+        obs = ys[t + 1]
+        predictions[t + 1] = pred * gain + obs * (1 - gain) + K * (obs - pred)
     end
     predictions
 end
@@ -215,11 +221,11 @@ function extractTrace(tseries, mask::Array{Bool,T}) where T
     extractTrace(tseries, findall(mask))
 end
 
-function extractTrace(tseries, cartIdxs::Array{T,1}) where T<:CartesianIndex
+function extractTrace(tseries, cartIdxs::Array{T,1}) where T <: CartesianIndex
     nT = size(tseries, ndims(tseries))
-    trace = zeros(Float64,nT) 
+    trace = zeros(Float64, nT) 
     for t in 1:nT
-        trace[t] = mean(reinterpret(UInt16,view(tseries, cartIdxs,t)))
+        trace[t] = mean(reinterpret(UInt16, view(tseries, cartIdxs, t)))
     end
     trace
 end
@@ -229,7 +235,7 @@ cartesianIndToArray = cartIdx2Array
 "Given (2d) image and list of CartesianIndices, return RGB image."
 function colorImage(image, cartesianIdxs; nDilate=0, imAlpa=0.5)
     im = RGB.(image)
-    stim_points = zeros(Bool,size(im))
+    stim_points = zeros(Bool, size(im))
     stim_points[cartesianIdxs] .= true
     for _ in 1:nDilate
         stim_points = dilate(stim_points)
@@ -241,13 +247,13 @@ end
 
 
 function readZseriesTiffDir(tifdir; contains="Ch3")
-    tiff_files = joinpath.(tifdir, filter(x->(x[end-6:end]=="ome.tif") & occursin(contains, x),
+    tiff_files = joinpath.(tifdir, filter(x -> (x[end - 6:end] == "ome.tif") & occursin(contains, x),
         readdir(tifdir)))
     tif0 = ImageMagick.load(tiff_files[1])
     H, W = size(tif0)
 
     zseries = zeros(Normed{UInt16,16}, H, W, size(tiff_files, 1))
-    @threads for z in 1:size(tiff_files,1)
+    @threads for z in 1:size(tiff_files, 1)
         zseries[:,:,z] = ImageMagick.load(tiff_files[z])
     end
     zseries
@@ -256,7 +262,7 @@ end
 "From bruker tif path, return (frameNum, planeNum)"
 function getFramePlane(tifPath)
     m = match(r".*Cycle(\d+)_Ch\d_(\d+).ome.tif", tifPath)
-    frameNum, planeNum = parse(Int,m[1]), parse(Int,m[2])
+    frameNum, planeNum = parse(Int, m[1]), parse(Int, m[2])
 end
 
 
@@ -270,22 +276,22 @@ tseries = SharedArray{Normed{UInt16,16},4}((H, W, Z, T),
     init = S -> _readTseriesTiffDir(S, framePlane2tiffPath, Z, T))
 
     """
-function tseriesTiffDirMetadata(tifdir, containsStr = "Ch3")
-    tiff_files = joinpath.(tifdir, filter(x->(x[end-6:end]=="ome.tif") &
+function tseriesTiffDirMetadata(tifdir, containsStr="Ch3")
+    tiff_files = joinpath.(tifdir, filter(x -> (x[end - 6:end] == "ome.tif") &
         occursin(containsStr, x), readdir(tifdir)))
     framePlane2tiffPath = Dict(getFramePlane(tp) => tp for tp in tiff_files)
     framePlanes = hcat(collect.(keys(framePlane2tiffPath))...)
     T = maximum(framePlanes[1,:])
     Z = maximum(framePlanes[2,:])
-    if T==1
+    if T == 1
         # single plane imaging, so T is last int in filename...
-        framePlane2tiffPath = Dict((k[2],k[1]) => v for (k,v) in framePlane2tiffPath)
+        framePlane2tiffPath = Dict((k[2], k[1]) => v for (k, v) in framePlane2tiffPath)
         T, Z = Z, T
     end
     tif0 = ImageMagick.load(tiff_files[1])
     H, W = size(tif0)
     H, W, Z, T, framePlane2tiffPath
-end
+    end
 
 
 # function readTseriesTiffDir(tifdir::String; contains="Ch3")
@@ -306,40 +312,40 @@ end
 stripLeadingSpace(s) = (s[1] == ' ') ? s[2:end] : s
 
 function findTTLStarts(voltages)
-    frameStarted = diff(voltages .> std(voltages).*3)
+    frameStarted = diff(voltages .> std(voltages) .* 3)
     frameStartIdx = findall(frameStarted .== 1) .+ 1
 end
 
 function findTTLEnds(voltages)
-    frameStarted = diff(voltages .< std(voltages).*3)
+    frameStarted = diff(voltages .< std(voltages) .* 3)
     frameStartIdx = findall(frameStarted .== 1) .+ 1
 end
 
 
-perm(permutation, array) = map(x->permutation[x],array)
+perm(permutation, array) = map(x -> permutation[x], array)
 
 """Pass image (HxW) and targetLocs (Nx2), and return image HxW"
 
 targetSize=4.41 comes from 7um spiral on 25x objective @ 1x (0.63 μm/px)
 """
 function addTargetsToImage(image::Array{RGB{T},2}, targetLocs::Array{<:Real,2};
-  channel="red", targetSize::Real=11.11, alpha=0.4) where T<:Real
-    stim = zeros(Gray,size(image))
-    for (x,y) in eachrow(targetLocs)
+  channel="red", targetSize::Real=11.11, alpha=0.4) where T <: Real
+    stim = zeros(Gray, size(image))
+    for (x, y) in eachrow(targetLocs)
         # draw!(stim, Ellipse(CirclePointRadius(y,x,targetSize)))
-        draw!(stim, CirclePointRadius(y,x,targetSize))
+        draw!(stim, CirclePointRadius(y, x, targetSize))
     end
     
-    if channel=="red"
+    if channel == "red"
         c = 1
-    elseif channel=="blue"
+    elseif channel == "blue"
         c = 3
-    elseif channel=="red"
-        c = 2
+    elseif channel == "red"
+    c = 2
     else
         throw(ArgumentError("Bad channel $channel"))
     end
-    channelview(image)[c,:,:,:] .= stim*alpha
+    channelview(image)[c,:,:,:] .= stim * alpha
     image
 end
 
@@ -351,7 +357,7 @@ end
 
 # /2: account for sean's code using 512 x 512 space
 # while we image in 1024x1024
-cartIdx2SeanTarget(ind, z) = hcat(reverse(collect(Tuple(ind))/2)..., z)
+cartIdx2SeanTarget(ind, z) = hcat(reverse(collect(Tuple(ind)) / 2)..., z)
 
 cartIdx2SeanTarget512(ind, z) = hcat(reverse(collect(Tuple(ind)))..., z)
 
@@ -361,29 +367,29 @@ function getStimTimesFromVoltages(voltageFile, Z::Int)
     rename!(voltages, [c => stripLeadingSpace(c) for c in names(voltages)])
 
     # plot(voltages["Time(ms)"][1:10000], voltages["frame starts"][1:10000])
-    frameStarted = diff(voltages[!,"frame starts"] .> std(voltages[!,"frame starts"]).*3)
+    frameStarted = diff(voltages[!,"frame starts"] .> std(voltages[!,"frame starts"]) .* 3)
     frameStartIdx = findall(frameStarted .== 1) .+ 1
 
     ttlStarts = findTTLStarts(voltages[!,"respir"])
     stimDur = countPulsesMaxGap(ttlStarts)
     stimStartIdx = ttlStarts[1:stimDur:end]
     stimEndIdx = findTTLEnds(voltages[!,"respir"])[stimDur:stimDur:end]
-    stimStartFrameIdx = [Int.(floor.(searchsortedfirst(frameStartIdx, s)/Z)) for s in stimStartIdx]
-    stimEndFrameIdx = [Int.(ceil(searchsortedfirst(frameStartIdx, s)/Z)) for s in stimEndIdx]
+    stimStartFrameIdx = [Int.(floor.(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimStartIdx]
+    stimEndFrameIdx = [Int.(ceil(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimEndIdx]
     stimStartFrameIdx, stimEndFrameIdx
 end
 
 "Count TTLs. TODO maxGap should be read from .xml..."
 function countPulsesMaxGap(stimStartIdx, maxGap=1000)
     count = 1
-    for i in 2:size(stimStartIdx,1)
-        if stimStartIdx[i] - stimStartIdx[i-1] < maxGap
+    for i in 2:size(stimStartIdx, 1)
+        if stimStartIdx[i] - stimStartIdx[i - 1] < maxGap
             count += 1
         else
             break
         end
     end
-    count
+        count
 end
 
 """Parse Sean's filename to time
@@ -391,7 +397,7 @@ trialOrder_2020_11_02___21h03m29sr.txt -> Time(21,3,29)"""
 function getTimeFromFilename(fn)
     re = r".*_(?<year>\d+)_(?<month>\d+)_(?<day>\d+)___(?<hour>\d+)h(?<min>\d+)m(?<sec>\d+)sr?.txt$"
     gs = match(re, fn)
-    dt = parse.(Int,(gs["year"], gs["month"], gs["day"],
+    dt = parse.(Int, (gs["year"], gs["month"], gs["day"],
                      gs["hour"], gs["min"], gs["sec"]))
     DateTime(dt...)
 end
@@ -402,15 +408,15 @@ function getStimFrameIdx(voltageFile, Z; colname="respir", nTTLperStim=10)
     rename!(voltages, [c => stripLeadingSpace(c) for c in names(voltages)]);
 
     # ! means get reference for df, not copy
-    frameStarted = diff(voltages[!,"frame starts"] .> std(voltages[!,"frame starts"]).*2)
+    frameStarted = diff(voltages[!,"frame starts"] .> std(voltages[!,"frame starts"]) .* 2)
     frameStartIdx = findall(frameStarted .== 1) .+ 1;
 
     # eg for 10vol stim (2s @ 5Hz), nTTLperStim=10
-    stimStartIdx = findTTLStarts(voltages[!,"respir"])[1:nTTLperStim:end-nTTLperStim+1]
+    stimStartIdx = findTTLStarts(voltages[!,"respir"])[1:nTTLperStim:end - nTTLperStim + 1]
     stimEndIdx = findTTLEnds(voltages[!,"respir"])[nTTLperStim:nTTLperStim:end];
     ##
-    stimStartFrameIdx = [Int.(floor.(searchsortedfirst(frameStartIdx, s)/Z)) for s in stimStartIdx]
-    stimEndFrameIdx = [Int.(ceil(searchsortedfirst(frameStartIdx, s)/Z)) for s in stimEndIdx]
+    stimStartFrameIdx = [Int.(floor.(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimStartIdx]
+    stimEndFrameIdx = [Int.(ceil(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimEndIdx]
     stimStartFrameIdx, stimEndFrameIdx
 end
 
@@ -424,8 +430,8 @@ function getExpData(xmlPath)
     expDate = LibExpat.find(tseries_xml, "/PVScan[1]{date}")
     expDate = DateTime(expDate, "m/d/y I:M:S p")
     # much faster by prepending /PVScan/PVStateShard[1] to search first frame only
-    framePeriod = parse(Float64,tseries_xml[xpath"/PVScan/PVStateShard[1]/PVStateValue[@key='framePeriod']/@value"][1])
-    frameRate = 1/framePeriod
+    framePeriod = parse(Float64, tseries_xml[xpath"/PVScan/PVStateShard[1]/PVStateValue[@key='framePeriod']/@value"][1])
+    frameRate = 1 / framePeriod
     etlVals = getPlaneETLvals(tseries_xml)
     expDate, frameRate, etlVals
 end
@@ -454,7 +460,7 @@ function getTrialOrder(slmExpDir, expDate)
     availableDateTimes = getTimeFromFilename.(trialOrderTxts)
 
     # slmDate should always be younger than expDate
-    dtIdx = searchsortedfirst(availableDateTimes, expDate)-1
+    dtIdx = searchsortedfirst(availableDateTimes, expDate) - 1
     slmDateTime = availableDateTimes[dtIdx]
     timeDiff = Dates.Second(expDate - slmDateTime)
     println("started SLM $(timeDiff) seconds before imaging")
@@ -463,9 +469,9 @@ function getTrialOrder(slmExpDir, expDate)
     end
     trialOrderTxt = trialOrderTxts[dtIdx]
 
-    trialOrder = CSV.File(trialOrderTxt,delim="\t",header=true) |> Tables.matrix
-    @assert size(trialOrder,1)==1
-    trialOrder[1,:], joinpath(splitpath(trialOrderTxt)[1:end-1]...)
+    trialOrder = CSV.File(trialOrderTxt, delim="\t", header=true) |> Tables.matrix
+    @assert size(trialOrder, 1) == 1
+    trialOrder[1,:], joinpath(splitpath(trialOrderTxt)[1:end - 1]...)
 end
 
 function loadTseries(tifdir)
@@ -476,40 +482,58 @@ function loadTseries(tifdir)
     @threads for t in 1:T
         for z in 1:Z
             tp = framePlane2tiffPath[t,z]
-            tseries[:,:,z,t] .= reinterpret(UInt16,ImageMagick.load(tp))
+            tseries[:,:,z,t] .= reinterpret(UInt16, ImageMagick.load(tp))
         end
         next!(p)
     end
     tseries
 end
 
+function write_experiment_to_tyh5(fish_dir, exp_name, output_path)
+    # Convention on output path?
+    tif_dir = joinpath(fish_dir, exp_name);
+    tseries = loadTseries(tif_dir);
+
+    loader = machinery.SourceFileLoader("py_utils", "src/py_utils.py")
+    py_utils = loader.load_module("py_utils")
+    py_utils.write_tseries_to_tyh5(tseries, output_path)
+    size(tseries)
+    
+    # TODO: write out stim pattern if it's available
+    #   - tricky with the zOffset and such
+
+    # TODO: Is this seriously not enough?
+    tseries = nothing
+    GC.gc()
+end
+
 function trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder; pre=16, post=16)
     nStimuli = maximum(trialOrder)
-    nTrials = size(trialOrder,1)
-    nTrialsPerStimulus = Int(size(trialOrder,1) / nStimuli)
-    @assert nTrials == size(stimStartIdx,1) # check TTL start-times match 
+    nTrials = size(trialOrder, 1)
+    nTrialsPerStimulus = Int(size(trialOrder, 1) / nStimuli)
+    @assert nTrials == size(stimStartIdx, 1) # check TTL start-times match 
 
     ## avg stim effec
-    trialTime = minimum(stimEndIdx.-stimStartIdx) + pre + post + 1
+    trialTime = minimum(stimEndIdx .- stimStartIdx) + pre + post + 1
     # HWZCT
     avgStim = zeros(size(tseries)[1:3]..., nStimuli, trialTime);
     ## sloooow
-    for (i,start) in enumerate(stimStartIdx)
-        stop = start -pre + trialTime - 1
+    for (i, start) in enumerate(stimStartIdx)
+        stop = start - pre + trialTime - 1
         trialType = trialOrder[i]
-        avgStim[:,:,:,trialType,:] .+= tseries[:,:,:,start-pre:stop]
+        avgStim[:,:,:,trialType,:] .+= tseries[:,:,:,start - pre:stop]
     end
     avgStim ./= nTrialsPerStimulus;
 end
 
-sym_adjust_gamma(image, gamma) = sign.(image) .* adjust_gamma(abs.(image),gamma)
+sym_adjust_gamma(image, gamma) = sign.(image) .* adjust_gamma(abs.(image), gamma)
 
 function constructGroupMasks(groupLocs, H, W, Z;
-  targetSizePx=(7μm * 14.4/25) / 0.6299544139175637μm)
-    groupMasks = Gray.(zeros(Bool, H,W,Z, size(groupLocs,1)))
-    for (g,group) in enumerate(groupLocs)
-        for (x,y,z) = eachrow(group)
-            draw!(view(groupMasks,:,:,z,g), Ellipse(CirclePointRadius(x,y,targetSizePx)))
+  targetSizePx=(7μm * 14.4 / 25) / 0.6299544139175637μm)
+    groupMasks = Gray.(zeros(Bool, H, W, Z, size(groupLocs, 1)))
+    for (g, group) in enumerate(groupLocs)
+        for (x, y, z) = eachrow(group)
+            draw!(view(groupMasks, :, :, z, g), Ellipse(CirclePointRadius(x, y, targetSizePx)))
         end
     end
     reinterpret(Bool, groupMasks)
@@ -530,7 +554,7 @@ end
 
 function allWithin(array, fraction)
     theMean = mean(array)
-    threshold = ceil(fraction*theMean)
+    threshold = ceil(fraction * theMean)
     @assert all(abs.(array .- theMean) .< threshold)
 end
 
@@ -538,25 +562,25 @@ function findMatGroups(outdir;
         group_re=Regex("param_BHV004_(\\d+)\\.mat\$"))
     mats = glob("*.mat", outdir)
     # ensure we match the name/regex
-    matMatches = filter(m->m!=nothing,match.(group_re, mats))
-    mats = joinpath.(outdir,getfield.(matMatches,:match))
-    group_nums = parse.(Int,getindex.(matMatches,1))
+    matMatches = filter(m -> m != nothing, match.(group_re, mats))
+    mats = joinpath.(outdir, getfield.(matMatches, :match))
+    group_nums = parse.(Int, getindex.(matMatches, 1))
     mats = mats[sortperm(group_nums)]
 end
 
 function rpadArray(array, n)
-    toPad = n - size(array,1)
-    parent(padarray(array, Fill(0, (0,), (toPad,) ) ))
+    toPad = n - size(array, 1)
+    parent(padarray(array, Fill(0, (0,), (toPad,))))
 end
 
 function makeCellsDF(target_groups, stimStartIdx, stimEndIdx, trialOrder)
     cells = DataFrame(x=Int64[], y=Int64[], z=Int64[],
     stimStart=Int64[], stimStop=Int64[])
-    for (i,g) in enumerate(trialOrder)
+    for (i, g) in enumerate(trialOrder)
         group = target_groups[g]
         start = stimStartIdx[i]
         endT = stimEndIdx[i]
-        for (x,y,z) in eachrow(group)
+        for (x, y, z) in eachrow(group)
             xR, yR = Int(round(x, digits=0)), Int(round(y, digits=0))
             push!(cells, (xR, yR, z, start, endT))
         end
@@ -574,10 +598,8 @@ function findIdxOfClosestElem(elem, array)
 end
 
 function getPlaneETLvals(tseries_xml)
-    etlVals = sort(unique(round.(
-    parse.(Float64,
-        tseries_xml[xpath"//PVStateValue//SubindexedValue[@description='ETL']/@value"]
-    ), digits=1)))    
+    etlVals = sort(unique(round.(parse.(Float64,
+        tseries_xml[xpath"//PVStateValue//SubindexedValue[@description='ETL']/@value"]), digits=1)))    
 end
 
 """Convert target_groups z from meters to the plane Int from Imaging.
@@ -587,10 +609,10 @@ and pass 45 to this function.
 """
 function mapTargetGroupsToPlane(target_groups, etlVals; is1024=true, zOffset=0.)
     newTargetGroups = deepcopy(target_groups)
-    for g in 1:size(target_groups,1)
-        for i in 1:size(target_groups[g],1)
-            # in sean's code, units in meters, so *1e6
-            adjustedZ = newTargetGroups[g][i,3]*1e6-zOffset
+    for g in 1:size(target_groups, 1)
+        for i in 1:size(target_groups[g], 1)
+        # in sean's code, units in meters, so *1e6
+            adjustedZ = newTargetGroups[g][i,3] * 1e6 - zOffset
             idx = findIdxOfClosestElem(adjustedZ, etlVals)
             newTargetGroups[g][i,3] = idx
         end
@@ -601,18 +623,18 @@ function mapTargetGroupsToPlane(target_groups, etlVals; is1024=true, zOffset=0.)
             newTargetGroups[g] .= round.(newTargetGroups[g], digits=0)
         end
     end
-    map(g->Int64.(g), newTargetGroups)
+    map(g -> Int64.(g), newTargetGroups)
 end
-
+    
 function getROItrace()
     idx(CI, t) = CartesianIndex(CI.I[1], CI.I[2], t)
-end
+    end
 
-function zeroAdjust(image::Array{T,4}) where T<:Real
+function zeroAdjust(image::Array{T,4}) where T <: Real
     # PMT offset
     # @assert sum(image.==0) == 0
     im = image .- 8192
-    im[im.<0] .= 0
+    im[im .< 0] .= 0
     # every other line, reverse column for roundtrip correction
     # for B115, need to start with odd line else fliplr
     im[:,1:2:end,:,:] .= im[:,1:2:end,end:-1:1,:]
@@ -621,13 +643,13 @@ end
 
 idxWithTime(CI, t) = CartesianIndex(CI.I[1], CI.I[2], t)
 
-function imageCorrWithMask(images::Array{T,4}, mask; lag=0) where T<:Real
+function imageCorrWithMask(images::Array{T,4}, mask; lag=0) where T <: Real
     corImage = zeros(size(images)[1:3]...)
-    trace = extractTrace(images, mask)[1:end-lag]
+    trace = extractTrace(images, mask)[1:end - lag]
     p = Progress(prod(size(corImage)), 1, "Calc image corr: ")
     @threads for i in CartesianIndices(corImage)
         # corImage[i] = cor(trace, imageJkalmanFilter(view(images,i,:))[31:end])
-        corImage[i] = cor(trace, view(images,i,:)[lag+1:end])
+        corImage[i] = cor(trace, view(images, i, :)[lag + 1:end])
         next!(p)
     end
     corImage
@@ -635,10 +657,10 @@ end
 
 function Green(x)
     im = RGB(x)
-    RGB(zero(x),im.g,zero(x))
+    RGB(zero(x), im.g, zero(x))
 end
 
-export read_microns_per_pixel,
+    export read_microns_per_pixel,
     read_mask,
     zbrain_units,
     antsApplyTransforms,
@@ -667,6 +689,7 @@ export read_microns_per_pixel,
     getExpData,
     getTrialOrder,
     loadTseries,
+    write_experiment_to_tyh5,
     init_workers,
     trialAverage,
     colorImage,
