@@ -13,6 +13,7 @@ tif840path = "/mnt/deissero/users/tyler/b115/2020-12-16_h2b6s-chrmine-kv2.1_6dpf
 # tif840path = "/mnt/deissero/users/tyler/b115/2020-12-17_h2b6s_chrmine-kv2.1_7dpf/fish2/SingleImage-840nm-1024-019/SingleImage-840nm-1024-019_Cycle00001_Ch3_000001.ome.tif"
 tif840path = "/mnt/deissero/users/tyler/b115/2021-01-11_chrmine-kv2.1_h2b6s_6dpf/fish1_nochrmine/SingleImage-840nm-1024-018/SingleImage-840nm-1024-018_Cycle00001_Ch3_000001.ome.tif"
 tif840path = "/mnt/deissero/users/tyler/b115/2021-01-11_chrmine-kv2.1_h2b6s_7dpf/fish1_gcamp_control/SingleImage-840nm-1024-019/SingleImage-840nm-1024-019_Cycle00001_Ch3_000001.ome.tif"
+tif840path = "/mnt/deissero/users/tyler/b115/2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/SingleImage-840nm-1024-020/SingleImage-840nm-1024-020_Cycle00001_Ch3_000001.ome.tif"
 # to burn at etl=0 if using calibration circa 2020-12-15, need +45 offset
 # offset = float(uconvert(m, 45μm)) / m # prior to 2021 / starting on ...12/15...? should check...
 offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
