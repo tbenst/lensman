@@ -199,11 +199,7 @@ function create_slm_stim(target_groups, outname::String; slmNum=1)
     targets_mats = []
     for (i, targets) in enumerate(target_groups)
         name = "$(outname)_group_$i"
-<<<<<<< HEAD
         push!(targets_mats,create_targets_mat(targets, name, slmNum=slmNum))
-=======
-        push!(targets_mats, create_targets_mat(targets, name))
->>>>>>> 32a90db584bed98b11374ed1d78235c673a0a1f6
     end
     trials_txt = create_trials_txt(targets_mats, outname)
     return targets_mats, trials_txt
