@@ -8,7 +8,8 @@ def assign_tseries_to_dset(dset, tseries, channel=0, batch_size=1024):
     "dset is 5D (T, C, Z, H, W), tseries is 4D (T, Z, H, W)"
     if len(tseries.shape) == 4:
         T, Z, H, W = tseries.shape
-        for z in tqdm(range(Z)):
+        for z in range(Z):
+            print(f"saving z-plane {z}")
             # Using batching to write out tseries (these blobs are massive ~75GB)
             for b in tqdm(range(0, T, batch_size)):
                 dset[b:b + batch_size, channel, z] = tseries[b:b + batch_size, z]
@@ -84,6 +85,7 @@ def write_tseries_to_tyh5(tseries, output_path, num_channels=1, compression_leve
         dset_raw.attrs['dimensions'] = 'TCZHW'
 
         # Need to generate 256. TODO(allan.raventos): generate 512 if raw is 1024
+        # TB comment: perhaps convenient if small is always 256, regardless of raw
         dset_small_shape = (T, num_channels, Z, small_size, small_size)
         print('about to resize {}'.format(dset_small_shape))
         tseries_small = resize_images(tseries, small_size, small_size, interpolation=cv2.INTER_LINEAR)

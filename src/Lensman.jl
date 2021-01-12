@@ -20,6 +20,8 @@ scipy = PyNULL()
 machinery = PyNULL()
 # py_utils = PyNULL()
 
+
+# TODO: should we auto-install python dependencies via `tables = pyimport_conda("tables", "pytables")` or similar?
 function __init__()
     pyimport("skimage")
     copy!(peak_local_max, pyimport("skimage.feature").peak_local_max)
@@ -40,7 +42,13 @@ include("Bruker.jl")
 # include("segment.jl")
 
 zbrain_units = (0.798μm, 0.798μm, 2μm)
-tmppath = ANTsRegistration.userpath()
+
+try
+    tmppath = ANTsRegistration.userpath()
+catch
+    @warn "ANTs does not officially support Windows. Disabling."
+    tmppath = mktemp()
+end
 
 "Read (sparse) mask from Zbrain atlas and reshape to dense Array."
 function read_mask(masks, idx; W=621, H=1406, Z=138, units=zbrain_units)
@@ -504,10 +512,9 @@ function loadTseries(tifdir)
     tseries
 end
 
-function write_experiment_to_tyh5(fish_dir, exp_name, output_path)
+function write_experiment_to_tyh5(tseries, output_path; compression_level=3)
     # Convention on output path?
-    tif_dir = joinpath(fish_dir, exp_name);
-    tseries = loadTseries(tif_dir);
+    # tseries = loadTseries(tif_dir);
 
     loader = machinery.SourceFileLoader("py_utils", "src/py_utils.py")
     py_utils = loader.load_module("py_utils")
