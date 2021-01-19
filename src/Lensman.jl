@@ -340,7 +340,7 @@ function write_experiment_to_tyh5(tseries, output_path; compression_level=3)
     # Convention on output path?
     # tseries = loadTseries(tif_dir);
 
-    loader = machinery.SourceFileLoader("py_utils", "src/py_utils.py")
+    loader = machinery.SourceFileLoader("py_utils", joinpath(dirname(@__FILE__), "py_utils.py"))
     py_utils = loader.load_module("py_utils")
     py_utils.write_tseries_to_tyh5(tseries, output_path)
     size(tseries)
