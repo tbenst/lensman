@@ -1,28 +1,20 @@
 ##
-ENV["DISPLAY"] = "localhost:11.0"
+ENV["DISPLAY"] = "localhost:10.0"
 using Sockets, Observables, Statistics, Images, ImageView, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
-    Compose, ImageMagick, Random
+    Compose, ImageMagick, Random, LightXML
 import Gadfly
 using Unitful: μm, m, s
 ##
-# tif840path = "/mnt/deissero/users/tyler/b115/2020-12-15_h2b6s_chrmine_kv2.1_5dpf/fish2/SingleImage-840nm-512-017/SingleImage-840nm-512-017_Cycle00001_Ch3_000001.ome.tif"
-# tif840path = "/mnt/deissero/users/tyler/b115/2020-12-16_h2b6s-chrmine-kv2.1_6dpf/fish2/SingleImage-840nm-1024-017/SingleImage-840nm-1024-017_Cycle00001_Ch3_000001.ome.tif" # best 
-# tif840path = "/mnt/deissero/users/tyler/b115/2020-12-17_h2b6s_chrmine-kv2.1_7dpf/fish1/SingleImage-840nm-1024-018/SingleImage-840nm-1024-018_Cycle00001_Ch3_000001.ome.tif"
-# tif840path = "/mnt/deissero/users/tyler/b115/2020-12-17_h2b6s_chrmine-kv2.1_7dpf/fish2/SingleImage-840nm-1024-019/SingleImage-840nm-1024-019_Cycle00001_Ch3_000001.ome.tif"
-# tif840path = "/mnt/deissero/users/tyler/b115/2021-01-11_chrmine-kv2.1_h2b6s_6dpf/fish1_nochrmine/SingleImage-840nm-1024-018/SingleImage-840nm-1024-018_Cycle00001_Ch3_000001.ome.tif"
-# tif840path = "/mnt/deissero/users/tyler/b115/2021-01-11_chrmine-kv2.1_h2b6s_7dpf/fish1_gcamp_control/SingleImage-840nm-1024-019/SingleImage-840nm-1024-019_Cycle00001_Ch3_000001.ome.tif"
-# tif840path = "/mnt/deissero/users/tyler/b115/2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/SingleImage-840nm-1024-020/SingleImage-840nm-1024-020_Cycle00001_Ch3_000001.ome.tif"
-tif840path = "/mnt/deissero/users/tyler/b115/2021-01-18_chrmine_kv2.1_h2b6s_6dpf/fish1_chrmine/SingleImage-840nm-1024-019/SingleImage-840nm-1024-019_Cycle00001_Ch3_000001.ome.tif"
-# to burn at etl=0 if using calibration circa 2020-12-15, need +45 offset
-# offset = float(uconvert(m, 45μm)) / m # prior to 2021 / starting on ...12/15...? should check...
-offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
-zOffset = offset * 1e6
-fishDir = joinpath(splitpath(tif840path)[1:end-2]...)
-expName = splitpath(tif840path)[end-1]
-avgImage = ImageMagick.load(tif840path)
+tseriesDir = "/mnt/deissero/users/tyler/b113/2021-01-18_elavl3-chrmine-kv2.1_h2b6s_6dpf/fish1_chrmine/resting-005"
+tseries = loadTseries(tseriesDir)
+
+fishDir = joinpath(splitpath(tseriesDir)[1:end-2]...)
+expName = splitpath(tseriesDir)[end-1]
+avgImage = mean(tseries, dims=(3,4))[:,:,1,1]
 size(avgImage)
+imshow(avgImage)
 ## may want to now skip to Analysis section if not analyzing live
 # compile
 ##
@@ -43,8 +35,13 @@ imshow(img)
 println("found $(size(candidateTargetLocs,1)) potential targets")
 ## Sample 128 neurons
 nNeurons = 1024
-# nNeurons = 1
-neuron_locs = sample(candidateTargetLocs, nNeurons, replace=false)     
+# not needed if not so many...
+if size(candidateTargetLocs,1) < nNeurons
+    neuron_locs = candidateTargetLocs
+    nNeurons = size(candidateTargetLocs,1)
+else
+    neuron_locs = sample(candidateTargetLocs, nNeurons, replace=false)
+end
 
 # Visualize stim targets
 img = RGB.(imadjustintensity(avgImage))
@@ -56,30 +53,73 @@ channelview(img)[1,:,:,:] .= 0.5*float(stim_points)
 imshow(img)
 img;
 
-##
-# targets1 = [ 606. 636. offset;
-#            ] ./ 2
+## Write xml
+# create an empty XML document
+W = size(avgImage,2) 
+xmlGpl = XMLDocument() # create & attach a root node
+xGplRoot = create_root(xmlGpl, "PVGalvoPointList")
+xmlSeries = XMLDocument() # create & attach a root node
+xSeriesRoot = create_root(xmlSeries, "PVSavedMarkPointSeriesElements")
+set_attribute(xSeriesRoot, "Iterations", "1")
+set_attribute(xSeriesRoot, "IterationDelay", "5000.0")
+for (i,ci) in enumerate(neuron_locs[randperm(nNeurons)])
+    y,x = Tuple(ci)
+    # empirically, X ∈ [-7.6, 7.6], Y ∈ [8.3, -8.3]
+    # where "(1,1)" is (-7.6,8.3)
+    # and "(512,512)" is (7.6,-8.3)
+    # and "(1,74)" meaning row 1 col 74 is (-5.37,8.3) 
+    # and "(256,256)" is (0,0)
+    x = (x-W/2)/(W/2) # map to (-1,1)
+    x *= 7.6
+    y = (y-W/2)/(W/2)
+    y *= 8.3
+    
+    gplList = new_child(xGplRoot, "PVGalvoPoint")
+    # todo use Dict or named argument instead..?
+    set_attribute(gplList, "X", "$x")
+    set_attribute(gplList, "Y", "$y")
+    set_attribute(gplList, "Name", "Point $i")
+    set_attribute(gplList, "Index", "$(i-1)")
+    set_attribute(gplList, "ActivityType", "MarkPoints")
+    set_attribute(gplList, "UncagingLaser", "Uncaging")
+    set_attribute(gplList, "UncagingLaserPower", "0.76")
+    set_attribute(gplList, "Duration", "2")
+    set_attribute(gplList, "IsSpiral", "True")
+    set_attribute(gplList, "SpiralSize", "0.220801205703228") # 7μm
+    set_attribute(gplList, "SpiralRevolutions", "5")
+    set_attribute(gplList, "Z", "0")
 
-# create_slm_stim([targets1],
-#     "/mnt/deissero/users/tyler/slm/masks/2020-11-30/fish1-single-cell")
+    mpe = new_child(xSeriesRoot, "PVMarkPointElement")
+    set_attribute(mpe, "Repetitions", "5")
+    set_attribute(mpe, "UncagingLaser", "Uncaging")
+    set_attribute(mpe, "UncagingLaserPower", "0")
+    set_attribute(mpe, "TriggerFrequency", "None")
+    set_attribute(mpe, "TriggerSelection", "None")
+    set_attribute(mpe, "TriggerCount", "1")
+    set_attribute(mpe, "AsyncSyncFrequency", "None")
+    set_attribute(mpe, "VoltageOutputCategoryName", "None")
+    set_attribute(mpe, "VoltageRecCategoryName", "Current")
+    set_attribute(mpe, "parameterSet", "CurrentSettings")
+
+    # nested under <PVMarkPointElement>!
+    gpe = new_child(mpe, "PVGalvoPointElement")
+    if i==1
+        set_attribute(gpe, "InitialDelay", "15")
+    else
+        set_attribute(gpe, "InitialDelay", "0.12")
+    end
+    set_attribute(gpe, "InterPointDelay", "248")
+    set_attribute(gpe, "Duration", "170") # from exported file but ????
+    # set_attribute(gpe, "Duration", "2")
+    set_attribute(gpe, "SpiralRevolutions", "5")
+    set_attribute(gpe, "AllPointsAtOnce", "False")
+    set_attribute(gpe, "Points", "Point $i")
+    set_attribute(gpe, "Indices", "$i" )
+end
 
 
-# one cell at a time
-# target_groups = [cartIdx2SeanTarget(neuron_loc, offset)
-#     for neuron_loc in neuron_locs]
-
-# k neurons per stim
-k = 32
-target_groups = [vcat(cartIdx2SeanTarget.(locs, fill(offset, k))...)
-    for locs in Iterators.partition(neuron_locs,k)]
-
-
-## Save files for SLM stim
-name = "1024cell-32concurrent-zoffset_$(zOffset)"
-outname = joinpath(fishDir, name)
-
-create_slm_stim(target_groups,
-    joinpath(fishDir, name))
+save_file(xmlSeries, joinpath(fishDir, "$(nNeurons)cell_sequential.xml"))
+save_file(xmlGpl, joinpath(fishDir, "$(nNeurons)cell_sequential.gpl"))
 
 
 

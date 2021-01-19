@@ -1,4 +1,5 @@
 using LinearAlgebra, StatsBase, ProgressMeter, JuMP
+import Base.Threads.@threads
 
 """Sparse (min L1) solution to Y=AX for unknown A.
     
