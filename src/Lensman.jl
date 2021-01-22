@@ -439,7 +439,7 @@ end
 "Add stim-evoked df/f to cells DataFrame."
 function makeCellsDF(tseries, cells, roiMask; winSize=15, delay=0)
     cellDf_f = zeros(size(cells,1))
-    for (i, (x,y,z,stimStart,stimStop)) in enumerate(eachrow(cells))
+    for (i, (x,y,z,group,stimStart,stimStop)) in enumerate(eachrow(cells))
         mask = roiMask[i] 
         neuronTrace = extractTrace(tseries, mask)
         neuronTrace = imageJkalmanFilter(neuronTrace)
@@ -454,6 +454,9 @@ function makeCellsDF(tseries, cells, roiMask; winSize=15, delay=0)
         # solution: use percentile f0
         # f0 = percentile(neuronTrace,0.1)
         df_f = (f-f0)/(f0+1e-8)
+        if isnan(df_f)
+            @show f, f0, i, x, y, z, stimStart, stimStop, theStart, stimStart-1
+        end
         cellDf_f[i] = df_f
     end
 
@@ -471,7 +474,7 @@ function constructROImasks(cells, H, W, Z; targetSizePx)
     # TODO: this is inefficient if cell if stimulated more than once
     # since we duplicate mask, maybe use dict instead..?
     roiMask = []
-    for (x,y,z,stimStart,stimStop) = eachrow(cells)
+    for (x,y,z,group,stimStart,stimStop) = eachrow(cells)
         mask = Gray.(zeros(Bool, H,W,Z))
         draw!(view(mask,:,:,z), Ellipse(CirclePointRadius(x,y,targetSizePx)))
         mask = findall(channelview(mask))

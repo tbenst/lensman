@@ -112,3 +112,7 @@ other optimizations:
 
 ### shared drive
 sudo mount -t cifs -o username=mslm_cnc115 //171.65.101.227/CNC_B115_mSLM /mnt/b115_mSLM/
+
+## rsync
+name="2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/TSeries-1024cell-32concurrent-047"
+rsync -avP sher:'/oak/stanford/groups/deissero/users/tyler/b115/2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/*.ty.h5' /data/dlab/b115/2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/

@@ -124,7 +124,7 @@ tseries = SharedArray{Normed{UInt16,16},4}((H, W, Z, T),
 
     """
 function tseriesTiffDirMetadata(tifdir, containsStr="Ch3")
-    tiff_files = joinpath.(tifdir, filter(x -> (x[end - 6:end] == "ome.tif") &
+    tiff_files = joinpath.(tifdir, filter(x -> (length(x) >= 7) & (x[end - 6:end] == "ome.tif") &
         occursin(containsStr, x), readdir(tifdir)))
     framePlane2tiffPath = Dict(getFramePlane(tp) => tp for tp in tiff_files)
     framePlanes = hcat(collect.(keys(framePlane2tiffPath))...)
