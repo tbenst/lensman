@@ -9,7 +9,7 @@ def assign_tseries_to_dset(dset, tseries, channel=0, batch_size=1024):
     if len(tseries.shape) == 4:
         T, Z, H, W = tseries.shape
         for z in range(Z):
-            print(f"saving z-plane {z}")
+            print('Saving z-plane {} out of {}'.format(z + 1, Z))
             # Using batching to write out tseries (these blobs are massive ~75GB)
             for b in tqdm(range(0, T, batch_size)):
                 dset[b:b + batch_size, channel, z] = tseries[b:b + batch_size, z]
@@ -20,7 +20,6 @@ def assign_tseries_to_dset(dset, tseries, channel=0, batch_size=1024):
 def resize_images(images, target_width, target_height, interpolation=cv2.INTER_LINEAR):
     assert len(images.shape) == 4
     T, Z, original_height, original_width = images.shape
-    print('Original: {}'.format(images.shape))
     fx = target_width / original_width
     fy = target_height / original_height
 
@@ -34,41 +33,72 @@ def resize_images(images, target_width, target_height, interpolation=cv2.INTER_L
     return resized_images
 
 
-def write_tseries_to_tyh5(tseries, output_path, num_channels=1, compression_level=3, small_size=256):
-    """
-    NOTE: not a huge deal if doesn't fit in memory (can just read from tiff_files)
+def write_experiment_to_tyh5(
+    tseries,
+    output_path,
+    stim_masks=None,
+    stim_used_at_each_timestep=None,
+    num_channels=1,
+    compression_level=3,
+    small_size=256
+):
+    """Write out a full experiment (including stim_masks if available) to .ty.h5
 
     Parameters
     ----------
-    tseries
+    tseries: np.uint16 array
+        (H, W, Z, T) time series
 
-    output_path
+    output_path: str
+        Path to write .ty.h5 to
 
-    num_channels
+    stim_masks: np.bool array, default: None
+        Set of unique binary masks used for stimulation
+        Shape: (n_stimuli, Z, H, W)
 
-    compression_level
+    stim_used_at_each_timestep: np.int64 array, default: None
+        Entry i is 0 if no stimulation was active at ith timestep, otherwise
+        stim used at this timestep is stim_masks[i - 1]
+        Shape: (T,)
+
+    num_channels: int, default: 1
+        This isn't really doing much as we currently do not have support for more channels
+        TODO(allan.raventos): add support for multiple channels
+
+    compression_level: int, default: 3
+        Compression level to use for 'blosc:zstd' when writing out data
+
+    small_size: int, default: 256
+        Size to write to '/imaging/small', which will generally be used for training
 
     Notes
     -----
     This function is less useful if full tseries doesn't fit in RAM (in that case we'll
-    need to load from TIFF files directly - not the end of the world)
-    """
-    print(tseries.shape)
-    print(tseries.dtype)
-    print('Output path: {}'.format(output_path))
-    with tables.open_file(output_path, 'w') as tyh5:
-        print(f'opened {output_path}')
+    need to load from TIFF files directly - can write this later if/when needed)
 
-        # This doesn't seem to work
-        # if not 'version' in tyh5.root._v_attrs:
-        #     tyh5.root._v_attrs['version'] = version
+    `nothing` on Julia side converts to `None` here as desired
+    """
+    if tseries.dtype != np.uint16 or len(tseries.shape) != 4:
+        raise TypeError('tseries does not have the expected type or shape')
+
+    H, W, Z, T = tseries.shape
+
+    # Check that `stim_masks` has the correct type and shape
+    if stim_masks is not None and stim_masks.dtype != np.bool:
+        raise TypeError('stim_masks does not have the expected type')
+    if len(stim_masks.shape) != 4 or stim_masks.shape[1:] != (Z, H, W):
+        raise ValueError('stim_masks does not have the expected dimensions')
+
+    # Check that `stim_used_at_each_timestep` has the correct type and shape
+    if stim_used_at_each_timestep is not None and stim_used_at_each_timestep.dtype != np.int64:
+        raise TypeError('stim_used_at_each_timestep does not have the expected type')
+    if stim_used_at_each_timestep.shape != (T, ):
+        raise ValueError('stim_used_at_each_timestep should be as long as tseries')
+
+    with tables.open_file(output_path, 'w') as tyh5:
 
         compression_filter = tables.filters.Filters(complevel=compression_level, complib='blosc:zstd')
 
-        # First just assume shape that comes out of Lensman.loadTseries
-        # TODO(allan.raventos): add support for channels if needed
-        assert len(tseries.shape) == 4
-        H, W, Z, T = tseries.shape
         tseries = np.transpose(tseries, (3, 2, 0, 1))  # HWZT -> TZHW
         imaging_group = tyh5.create_group('/', 'imaging')
         imaging_attrs = tyh5.root['imaging']._v_attrs
@@ -80,21 +110,38 @@ def write_tseries_to_tyh5(tseries, output_path, num_channels=1, compression_leve
         dset_raw = tyh5.create_carray(
             imaging_group, 'raw', tables.Atom.from_dtype(tseries.dtype), shape=dset_shape, filters=compression_filter
         )
-        print('tseries shape before adding {}'.format(tseries.shape))
+        print('Writing tseries (TZHW={}) to "/imaging/raw" (TCZHW={})'.format(tseries.shape, dset_raw.shape))
         assign_tseries_to_dset(dset_raw, tseries)
         dset_raw.attrs['dimensions'] = 'TCZHW'
 
-        # Need to generate 256. TODO(allan.raventos): generate 512 if raw is 1024
+        # Generate '/imaging/small' at the requested size
         # TB comment: perhaps convenient if small is always 256, regardless of raw
         dset_small_shape = (T, num_channels, Z, small_size, small_size)
-        print('about to resize {}'.format(dset_small_shape))
         tseries_small = resize_images(tseries, small_size, small_size, interpolation=cv2.INTER_LINEAR)
         dset_small = tyh5.create_carray(
             imaging_group, 'small', tables.Float32Atom(), shape=dset_small_shape, filters=compression_filter
         )
+        print(
+            'Writing resized tseries (TZHW={}) to "/imaging/small" (TCZHW={})'.format(
+                tseries_small.shape, dset_small.shape
+            )
+        )
         assign_tseries_to_dset(dset_small, tseries_small)
         dset_small.attrs['dimensions'] = 'TCZHW'
 
-        # TODO(allan.raventos): write out stim mask
-        # Tensor holding masks (num_masks, H, W)
-        # 1D array with entry i corresponding to mask used at timestep i (could use 0 for no mask)
+        if stim_masks is not None and stim_used_at_each_timestep is not None:
+            # Not creating chunked arrawys for stim data as, in this format, it really does not require much space at all
+            stim_group = tyh5.create_group('/imaging', 'stim')
+            print(
+                'Writing stim_masks (NZHW={}) and stim_used_at_each_timestep (T={}) to "/imaging/stim"'.format(
+                    stim_masks.shape, stim_used_at_each_timestep.shape[0]
+                )
+            )
+            tyh5.create_array(
+                stim_group, 'stim_masks', stim_masks, atom=tables.BoolAtom()
+            )  # presumably BoolAtom is legit
+            tyh5.create_array(
+                stim_group, 'stim_used_at_each_timestep', stim_used_at_each_timestep, atom=tables.Int64Atom()
+            )
+        else:
+            print('"/imaging/stim" not populated as stim data was not provided')
