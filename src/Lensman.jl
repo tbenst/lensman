@@ -353,6 +353,7 @@ function write_experiment_to_tyh5(tseries, output_path; compression_level=3)
     GC.gc()
 end
 
+"Calculate average response for each unique stimuli"
 function trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder; pre=16, post=16)
     nStimuli = maximum(trialOrder)
     nTrials = size(trialOrder, 1)
@@ -364,7 +365,7 @@ function trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder; pre=16, pos
     # HWZCT
     avgStim = zeros(size(tseries)[1:3]..., nStimuli, trialTime);
     ## sloooow
-    for (i, start) in enumerate(stimStartIdx)
+    @showprogress for (i, start) in enumerate(stimStartIdx)
         stop = start - pre + trialTime - 1
         trialType = trialOrder[i]
         avgStim[:,:,:,trialType,:] .+= tseries[:,:,:,start - pre:stop]
@@ -422,14 +423,21 @@ end
 "Create DataFrame with row per individual cell stimulated."
 function makeCellsDF(target_groups, stimStartIdx, stimEndIdx, trialOrder)
     cells = DataFrame(x=Int64[], y=Int64[], z=Int64[], stimGroup=Int64[],
-    stimStart=Int64[], stimStop=Int64[])
+        stimStart=Int64[], stimStop=Int64[], cellID=Int64[])
+    cellIDs = Dict()
     for (i, g) in enumerate(trialOrder)
         group = target_groups[g]
         start = stimStartIdx[i]
         endT = stimEndIdx[i]
         for (x, y, z) in eachrow(group)
+            if (x,y,z) in keys(cellIDs)
+                cellID = cellIDs[(x,y,z)]
+            else
+                cellID = length(cellIDs) + 1
+                cellIDs[(x,y,z)] = cellID
+            end
             xR, yR = Int(round(x, digits=0)), Int(round(y, digits=0))
-            push!(cells, (xR, yR, z, i, start, endT))
+            push!(cells, (xR, yR, z, i, start, endT, cellID))
         end
     end
     cells
@@ -506,6 +514,11 @@ end
 function getPlaneETLvals(tseries_xml)
     etlVals = sort(unique(round.(parse.(Float64,
         tseries_xml[xpath"//PVStateValue//SubindexedValue[@description='ETL']/@value"]), digits=1)))    
+    if (0.0 in etlVals) & (-0.0 in etlVals)
+        return etlVals[(~).(etlVals .=== -0.0)]
+    else
+        etlVals
+    end
 end
 
 """Convert target_groups z from meters to the plane Int from Imaging.
@@ -525,11 +538,11 @@ function mapTargetGroupsToPlane(target_groups, etlVals; is1024=true, zOffset=0.)
         if is1024
             newTargetGroups[g][:,1:2] *= 2
         else
-            @info "will alias fractional target center to nearest Int"
-            newTargetGroups[g] .= round.(newTargetGroups[g], digits=0)
+            # @info "will alias fractional target center to nearest Int"
+            # newTargetGroups[g] .= round.(newTargetGroups[g], digits=0)
         end
     end
-    map(g -> Int64.(g), newTargetGroups)
+    map(g -> all(isinteger.(g)) ? Int64.(g) : g, newTargetGroups)
 end
     
 function getROItrace()
@@ -632,6 +645,7 @@ end
     entangledInfluenceMaps,
     makeCellsDF,
     constructROImasks,
-    plotStim
+    plotStim,
+    printMatKeys
     # , segment_nuclei
 end

@@ -1,9 +1,12 @@
 
 """Make .mat file for Sean's multiSLM stim software.
 
-We minimize number of targetGroups for speed"""
+We minimize number of targetGroups for speed.
+for Y shared: localToRemote = matpath -> "Y:\\" * replace(matpath[14:end], "/" => "\\")
+"""
 # ::Array{Float64,2}
-function create_targets_mat(targets, outname::String; slmNum=1)
+function create_targets_mat(targets, outname::String; slmNum=1,
+        localToRemote = matpath -> "O:\\" * replace(matpath[14:end], "/" => "\\"))
     # outdir = "/mnt/deissero/users/tyler/slm/masks/")
     # today_str = Dates.format(Date(now()), DateFormat("Y-mm-dd"))
     # today_dir = mkpath(joinpath(outdir, today_str))
@@ -59,32 +62,43 @@ function create_targets_mat(targets, outname::String; slmNum=1)
 
     matwrite(matpath, stim_struct)
     # strip /mnt/deissero... this is needed since Matlab on windows will read the file
-    return "O:\\" * replace(matpath[14:end], "/" => "\\")
+    return localToRemote(matpath)
 end
 
 # ::Array{String,1}
+"""Create trials txt file with matpath and power.
+
+Defaults to 1 repetition per mat with power fraction 1. Can add multiple
+by specifying powers
+"""
 function create_trials_txt(targets_mats, outname::String;
-        outdir="/mnt/deissero/users/tyler/slm/masks/")
+        outdir="/mnt/deissero/users/tyler/slm/masks/",
+        powers=[1])
     today_str = Dates.format(Date(now()), DateFormat("Y-mm-dd"))
     today_dir = mkpath(joinpath(outdir, today_str))
     txtpath = joinpath(today_dir, "$outname.txt")
     
     txt_io = open(txtpath, "w")
-    for matpath in targets_mats
-        println(txt_io, matpath * "\t1")
+    for power in powers
+        for matpath in targets_mats
+            println(txt_io, matpath * "\t$power")
+        end
     end
     close(txt_io)
     return txtpath
 end
 
 "Outname is for local filesystem (build platform)"
-function create_slm_stim(target_groups, outname::String; slmNum=1)
+function create_slm_stim(target_groups, outname::String; slmNum=1,
+        localToRemote = matpath -> "O:\\" * replace(matpath[14:end], "/" => "\\"),
+        powers=[1])
+    # create mat files; save windows path
     targets_mats = []
     for (i, targets) in enumerate(target_groups)
         name = "$(outname)_group_$i"
-        push!(targets_mats,create_targets_mat(targets, name, slmNum=slmNum))
+        push!(targets_mats,create_targets_mat(targets, name, slmNum=slmNum, localToRemote=localToRemote))
     end
-    trials_txt = create_trials_txt(targets_mats, outname)
+    trials_txt = create_trials_txt(targets_mats, outname, powers=powers)
     return targets_mats, trials_txt
 end
 
@@ -168,4 +182,17 @@ function getTimeFromFilename(fn)
     dt = parse.(Int, (gs["year"], gs["month"], gs["day"],
                      gs["hour"], gs["min"], gs["sec"]))
     DateTime(dt...)
+end
+
+"Recursively print keys."
+function printMatKeys(mat; level=0, max_level=10)
+    if level > max_level
+        return nothing
+    end
+    for key in keys(mat)
+        if typeof(key) == String
+            println("  "^level * "$key")
+            printMatKeys(mat[key], level=level+1, max_level=max_level)
+        end
+    end
 end

@@ -1,45 +1,27 @@
 ##
-ENV["DISPLAY"] = "localhost:12.0"
+ENV["DISPLAY"] = "localhost:11.0"
 using Sockets, Observables, Statistics, Images, ImageView, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
     Compose, ImageMagick, Random, PyCall
 import Gadfly
-using Unitful: μm, m, s
+using Unitful: μm, m, s, mW
 
 ##
 offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
 zOffset = offset * 1e6
 
-# tyh5Path = "/mnt/deissero/users/tyler/b115/2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/TSeries-1024cell-32concurrent-047.ty.h5"
-# tyh5Path = "/data/dlab/b115/2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/TSeries-1024cell-32concurrent-047.ty.h5"
-tifDir = "/mnt/deissero/users/tyler/b115/2021-01-11_chrmine-kv2.1_h2b6s_6dpf/fish1_nochrmine/TSeries-1024cell-32concurrent-043"
-tyh5Path = "/mnt/deissero/users/tyler/b115/2021-01-18_chrmine_kv2.1_h2b6s_6dpf/fish1_chrmine/TSeries-1024cell-32concurrent-2reps-043.ty.h5"
-# tyh5Path = "/mnt/deissero/users/tyler/b115/2021-01-18_chrmine_kv2.1_h2b6s_6dpf/fish2_nochrmine/TSeries-1024cell-32concurrent-2reps-044.ty.h5"
-# tyh5Path = "/data/dlab/b115/2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/TSeries-1024cell-32concurrent-5ppc-048.ty.h5"
-# tyh5Path = "/mnt/deissero/users/tyler/b115/2020-12-17_gc6f-h33r_7dpf/fish1/TSeries_10stim_4times-40power-newFOV-050.ty.h5"
-# tifDir = "/mnt/deissero/users/tyler/b115/2020-12-15_h2b6s_chrmine_kv2.1_5dpf/fish2/TSeries-1024cell-32concurrent-038"
-# tyh5Path = tifDir
+# tyh5Path = "/mnt/deissero/users/tyler/b115/2021-01-18_chrmine_kv2.1_h2b6s_6dpf/fish1_chrmine/TSeries-1024cell-32concurrent-2reps-043.ty.h5"
+# tyh5Path = "/data/dlab/b115/2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-046.ty.h5"
+tyh5Path = "/data/dlab/b115/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043.ty.h5"
 fishDir = joinpath(splitpath(tyh5Path)[1:end-1]...)
 expName = replace(splitpath(tyh5Path)[end], ".ty.h5" => "")
 tseriesDir = joinpath(fishDir, expName)
-# tseries = loadTseries(tseriesDir);
 
 tseries = h5read(tyh5Path, "/imaging/raw")
 @assert size(tseries,4)==1
 tseries = permutedims(tseries, (2,1,3,4,5))
 tseries = tseries[:,:,:,1,:];
-
-## plot whole image...
-brainTrace = mean(tseries, dims=(1,2,3))[1,1,1,:]
-brainTrace = imageJkalmanFilter(brainTrace)
-p = plot((1:size(brainTrace,1)) ./ volRate, brainTrace, left_margin=50px,
-    xlabel="time (s)", ylabel="fluorescence")
-for (stimStart,stimStop) in zip(stimStartIdx, stimEndIdx)
-    plot!(Lensman.rectangle((stimStop-stimStart)/volRate,maximum(brainTrace)-minimum(brainTrace),
-        stimStart/volRate, minimum(brainTrace)), opacity=.5, label="")
-end
-p
 
 ##
 (H, W, Z, T) = size(tseries)
@@ -62,6 +44,12 @@ volRate = frameRate / Z
 slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
 trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
 
+# read power
+@assert length(glob("*.txt", fishDir)) == 1 # if not, need to be careful to choose
+slmTxtFile = glob("*.txt", fishDir)[1]
+stimGroupDF = CSV.File(open(read, slmTxtFile), header=["filepath", "powerFraction"]) |> DataFrame
+stimGroupDF = stimGroupDF[trialOrder,:]
+
 stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFile, Z)
 allWithin(diff(stimStartIdx),0.05)
 # adjust for expected number of stimuli....
@@ -73,9 +61,10 @@ avgStimDuration = mean(stimEndIdx .- stimStartIdx)
 @assert 30 > avgStimDuration > 3
 
 # Assumes no sequence of stim
+firstTargetGroup = matread.(findMatGroups(slmExpDir)[1])
+lastTargetGroup = matread.(findMatGroups(slmExpDir)[end])
 target_groups = [mat["cfg"]["maskS"]["targets"][1]
     for mat in matread.(findMatGroups(slmExpDir))]
-    
 
 nStimuli = maximum(trialOrder)
 nTrials = size(trialOrder,1)
@@ -84,11 +73,16 @@ nTrialsPerStimulus = Int(size(trialOrder,1) / nStimuli)
 # cells = Array{Array{Float64,1}}
 is1024 = size(tseries,1)==1024
 targetsWithPlaneIndex = mapTargetGroupsToPlane(target_groups, etlVals,
-is1024=is1024, zOffset=zOffset)
+    is1024=is1024, zOffset=zOffset)
 
-@warn "only using first 32... (also why only 63 stimuli??"
-cells = makeCellsDF(targetsWithPlaneIndex, stimStartIdx[1:32], stimEndIdx[1:32], trialOrder[1:32])
-cells2 = makeCellsDF(targetsWithPlaneIndex, stimStartIdx[33:63], stimEndIdx[33:63], trialOrder[33:63])
+cells = makeCellsDF(targetsWithPlaneIndex, stimStartIdx, stimEndIdx, trialOrder)
+@warn "hardcoded laser power"
+slm1MaxPower = firstTargetGroup["cfg"]["mode"]["BHV001"]["FOV"]["PowerPerCell"]
+slm1Power = 850mW
+slm1powerPerCell = slm1Power * slm1MaxPower / 1000
+cells[!, :slmNum] .= 1
+
+cells[!, :laserPower] = round.(typeof(1.0mW), map(g->stimGroupDF.powerFraction[g], cells.stimGroup) .* slm1powerPerCell, digits=1)
 
 stimLocs = map(CartesianIndex ∘ Tuple, eachrow(cells[:,[2,1]]))
 
@@ -113,29 +107,31 @@ avgImgWithTargets = addTargetsToImage(copy(avgImageAdj), cartIdx2Array(stimLocs)
     targetSize=targetSizePx)
 save(joinpath(plotDir,"$(expName)_avgImgWithTargets.png"), avgImgWithTargets)
 
-winSize = Int(ceil(5*volRate))
+winSize = Int(ceil(2*volRate))
 # delay=Int(ceil(volRate*2))
 delay=0
 
 roiMask = constructROImasks(cells, H, W, Z, targetSizePx=targetSizePx);
 
 cellsDF = makeCellsDF(tseries, cells, roiMask, winSize=winSize, delay=delay);
-cellsDF2 = makeCellsDF(tseries, cells2, roiMask, winSize=winSize, delay=delay);
-
-rankings = sortperm(cellsDF.df_f, lt=(>))
-rankings2 = sortperm(cellsDF2.df_f, lt=(>))
+meanDf_f = combine(groupby(cellsDF, :cellID), :df_f => mean).df_f_mean
+@show [sum(cellsDF.df_f[cellsDF.laserPower .== p] .> 0.4) for p in [3.6mW, 7.2mW, 10.8mW, 14.4mW]]
+@show sum(meanDf_f .> 0.4)
+cellIDrankings = sortperm(meanDf_f, lt=(>))
 numNaN = sum(isnan.(cellsDF.df_f))
 @assert numNaN == 0
 
-@show sum(cellsDF.df_f.>0.1), sum(cellsDF.df_f.>0.4), sum(cellsDF.df_f.>1.)
-@show sum(cellsDF2.df_f.>0.1), sum(cellsDF2.df_f.>0.4), sum(cellsDF2.df_f.>1.)
+@show sum(meanDf_f.>0.1), sum(meanDf_f.>0.4), sum(meanDf_f.>1.)
 
+for power in sort(unique(cellsDF.laserPower))
+    println("$power: $(mean(cellsDF.df_f[cellsDF.laserPower .== power]))")
+end
 # only 26 are >40% for two stim in control...
-intersect(cellsDF.x[cellsDF.df_f.>0.4], cellsDF2.x[cellsDF2.df_f.>0.4])
-@show first(cellsDF[rankings[numNaN+1:end],:],50)
+# @show first(cellsDF[rankings[numNaN+1:end],:],50)
 
 ##
-histogram(cellsDF.df_f)
+# histogram(cellsDF.df_f)
+Gadfly.plot(cellsDF, x="df_f",  ygroup="laserPower", Gadfly.Geom.subplot_grid(Gadfly.Geom.histogram))
 
 ##
 before = Int(ceil(volRate*10))
@@ -147,12 +143,13 @@ nplots = 40
 # nplots = 8
 # for idx in rankings[end:-1:end-nplots+1]
 # for idx in 1:nplots
-for idx in rankings[1:nplots]
+for cellID in cellIDrankings[1:nplots]
 # for idx in randperm(nplots)
-    push!(plots, plotStim(tseries,roiMask,cells,idx, volRate, before=before, after=after))
+    indices = findall(cellsDF.cellID .== cellID)
+    push!(plots, plotStim(tseries,roiMask,cells,indices, volRate, before=before, after=after))
 end
 # p = plot(plots..., layout=(16, 4), legend=false, size=(1024,1024*2))
-p = plot(plots..., layout=(8,5), legend=false, size=(1024,1024*4))
+p = plot(plots..., layout=(8,5), size=(1024,1024*4))
 # savefig("/home/tyler/Downloads/gcamp-control-random.png")
 ##
 
@@ -167,3 +164,14 @@ end
 # img = PNG(joinpath(plotDir, "$(expName)_df_f_map_below10.png"), 6inch, 5inch)
 # Gadfly.draw(img, p_df_map)
 p_df_map
+
+## plot whole image...
+brainTrace = mean(tseries, dims=(1,2,3))[1,1,1,:]
+brainTrace = imageJkalmanFilter(brainTrace)
+p = plot((1:size(brainTrace,1)) ./ volRate, brainTrace, left_margin=50px,
+    xlabel="time (s)", ylabel="fluorescence")
+for (stimStart,stimStop) in zip(stimStartIdx, stimEndIdx)
+    plot!(Lensman.rectangle((stimStop-stimStart)/volRate,maximum(brainTrace)-minimum(brainTrace),
+        stimStart/volRate, minimum(brainTrace)), opacity=.5, label="")
+end
+p

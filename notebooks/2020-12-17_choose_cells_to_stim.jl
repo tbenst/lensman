@@ -1,5 +1,5 @@
 ##
-ENV["DISPLAY"] = "localhost:11.0"
+ENV["DISPLAY"] = "localhost:12.0"
 using Sockets, Observables, Statistics, Images, ImageView, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
@@ -17,8 +17,9 @@ using Unitful: μm, m, s
 # tif840path = "/mnt/deissero/users/tyler/b115/2021-01-18_chrmine_kv2.1_h2b6s_6dpf/fish1_chrmine/SingleImage-840nm-1024-019/SingleImage-840nm-1024-019_Cycle00001_Ch3_000001.ome.tif"
 # tif840path = "/mnt/deissero/users/tyler/b115/2021-01-18_chrmine_kv2.1_h2b6s_6dpf/fish2_nochrmine/SingleImage-840nm-1024-020/SingleImage-840nm-1024-020_Cycle00001_Ch3_000001.ome.tif"
 # tif840path = "/mnt/deissero/users/tyler/b115/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/SingleImage-840nm-1024-maxgdd-020/SingleImage-840nm-1024-maxgdd-020_Cycle00001_Ch3_000001.ome.tif"
-tif840path = "/mnt/deissero/users/tyler/b115/2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish1_chrmine/SingleImage-840nm-1024-022/SingleImage-840nm-1024-022_Cycle00001_Ch3_000001.ome.tif"
-tif840path = "/mnt/deissero/users/tyler/b115/2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish2_nochrmine/SingleImage-840nm-1024-024/SingleImage-840nm-1024-024_Cycle00001_Ch3_000001.ome.tif"
+# tif840path = "/mnt/deissero/users/tyler/b115/2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish1_chrmine/SingleImage-840nm-1024-022/SingleImage-840nm-1024-022_Cycle00001_Ch3_000001.ome.tif"
+# tif840path = "/mnt/deissero/users/tyler/b115/2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish2_nochrmine/SingleImage-840nm-1024-024/SingleImage-840nm-1024-024_Cycle00001_Ch3_000001.ome.tif"
+tif840path = "/mnt/b115_data/tyler/2021-01-25_rsChrmine_6f_6dpf/fish1/SingleImage-820nm-1024-018/SingleImage-820nm-1024-018_Cycle00001_Ch3_000001.ome.tif"
 # to burn at etl=0 if using calibration circa 2020-12-15, need +45 offset
 # offset = float(uconvert(m, 45μm)) / m # prior to 2021 / starting on ...12/15...? should check...
 offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
@@ -80,10 +81,15 @@ target_groups = [vcat(cartIdx2SeanTarget.(locs, fill(offset, k))...)
 
 # Save files for SLM stim
 name = "1024cell-32concurrent-zoffset_$(zOffset)"
-outname = joinpath(fishDir, name)
+# outname = joinpath(fishDir, name)
 
+# workaround if Oak is sucking; copy to Y:\ 
+tmpOut = mktempdir()
+outname = joinpath(tmpOut, name)
 create_slm_stim(target_groups,
-    joinpath(fishDir, name))
+    outname)
+
+println("Oak performance workaround: sudo cp /$tmpOut $fishDir ")
 
 # for 4 power, modify txt by hand: duplicate all rows and add e.g. 0.25, 0.5, 0.75 after each duplicated group
 
