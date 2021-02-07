@@ -117,8 +117,8 @@ targetSizePx = 7μm * (14.4/25) / microscope_units[1]
 avgImgWithTargets = addTargetsToImage(copy(avgImageAdj), cartIdx2Array(stimLocs),
     targetSize=targetSizePx)
 save(joinpath(plotDir,"$(expName)_avgImgWithTargets.png"), avgImgWithTargets)
-
-winSize = Int(ceil(2*volRate))
+##
+winSize = Int(ceil(5*volRate))
 # delay=Int(ceil(volRate*2))
 delay=0
 
@@ -181,15 +181,16 @@ for cellID in cellIDrankings[1:nplots]
 end
 # p = plot(plots..., layout=(16, 4), legend=false, size=(1024,1024*2))
 p = plot(plots..., layout=(5,3), size=(1000,800))
-savefig(p, joinpath(plotDir, "$(expName)_best15traces.png"))
+# savefig(p, joinpath(plotDir, "$(expName)_best15traces.png"))
+savefig(p, joinpath(plotDir, "$(expName)_best15traces_5sec_window.png"))
 p
 # savefig("/home/tyler/Downloads/gcamp-control-random.png")
 ##
 
 cellDFcontrol = Arrow.Table("/scratch/2021-01-25_gcamp6f_6dpf/fish1/TSeries-1024cell-32concurrent-4power-044_cellsDF.arrow") |> DataFrame
 ##
-nreps = 2
-n = maximum(cellsDF.cellID)*2
+nreps = 1
+n = maximum(cellsDF.cellID)*nreps
 # idxs = sortperm(cellDFcontrol.df_f)
 # Gadfly.plot(cellDFcontrol[idxs,:], x=:df_f, y=(1:n)./n, Geom.line, color=:laserPower)
 p = nothing

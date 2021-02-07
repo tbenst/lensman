@@ -34,11 +34,10 @@ function __init__()
     pyimport("scipy.ndimage")
     copy!(autolevel_percentile, pyimport("skimage.filters.rank").autolevel_percentile)
 
-    # Nifty way to load local Python source code. This loads "src/py_utils" into a global `py_utils`
+    # Nifty util to load local Python source code
     copy!(machinery, pyimport("importlib.machinery"))
-    # copy!(py_utils, pyimport("importlib.machinery").SourceFileLoader("py_utils", "src/py_utils.py").load_module("py_utils"))
 end
-    
+
 
 include("Bruker.jl")
 include("files.jl")
@@ -145,14 +144,14 @@ function imageJkalmanFilter(ys;gain=0.8,useBurnIn=true)
     end
     predictions
 end
-
+    
 function extractTrace(tseries, mask::Array{Bool,T}) where T
     extractTrace(tseries, findall(mask))
 end
 
 function extractTrace(tseries, cartIdxs::Array{T,1}) where T <: CartesianIndex
     nT = size(tseries, ndims(tseries))
-    trace = zeros(Float64, nT) 
+    trace = zeros(Float64, nT)
     for t in 1:nT
         trace[t] = mean(reinterpret(UInt16, view(tseries, cartIdxs, t)))
     end
@@ -164,10 +163,10 @@ function df_f(f_timeseries, f0_timeseries)
     d = ndims(f_timeseries)
     f = selectdim(mean(f_timeseries, dims=d), d, 1)
     f0 = selectdim(mean(f0_timeseries, dims=d), d, 1)
-    @. (f-f0)/f
+    @. (f - f0) / f
 end
 
-cartesianIndToArray = cartIdx2Array
+    cartesianIndToArray = cartIdx2Array
 
 "Given (2d) image and list of CartesianIndices, return RGB image."
 function colorImage(image, cartesianIdxs; nDilate=0, imAlpa=0.5)
@@ -204,18 +203,19 @@ targetSize=4.41 comes from 7um spiral on 25x objective @ 1x (0.63 μm/px)
 """
 function addTargetsToImage(image::Array{RGB{T},2}, targetLocs::Array{<:Real,2};
   channel="red", targetSize::Real=11.11, alpha=0.4) where T <: Real
+
     stim = zeros(Gray, size(image))
     for (x, y) in eachrow(targetLocs)
         # draw!(stim, Ellipse(CirclePointRadius(y,x,targetSize)))
         draw!(stim, CirclePointRadius(y, x, targetSize))
     end
-    
+
     if channel == "red"
-        c = 1
+    c = 1
     elseif channel == "blue"
         c = 3
     elseif channel == "red"
-    c = 2
+        c = 2
     else
         throw(ArgumentError("Bad channel $channel"))
     end
@@ -292,7 +292,7 @@ end
 only times that are within subfolders were used by a "Run"
 EXAMPLE: slmExpDir=/mnt/deissero/users/tyler/b115/SLM_files/02-Nov-2020
 e.g. after generating holograms, on first run (21h09m31s),
-a subfolder is created like 2020_11_2_21_6_50_, and Sean's code 
+a subfolder is created like 2020_11_2_21_6_50_, and Sean's code
 copies trialOrder_2020_11_02___21h09m31s.txt to it.
 
 If we "Stop" and "Run" again without regenerating (but possibly
@@ -300,7 +300,7 @@ changing trial order), no new folder is made BUT the new files for
 the RUN are copied to the same subfolder
 (trialOrder_2020_11_02___22h04m47s.txt)
 """
-function getTrialOrder(slmExpDir, expDate)    
+function getTrialOrder(slmExpDir, expDate)
     slmRunDirs = joinpath.(slmExpDir,
         filter(x -> isdir(joinpath(slmExpDir, x)), readdir(slmExpDir)))
 
@@ -330,7 +330,7 @@ function loadTseries(tifdir)
     H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir)
     tseries = Array{UInt16}(undef, H, W, Z, T)
     p = Progress(T, 1, "Load Tseries: ")
-    
+
     @threads for t in 1:T
         for z in 1:Z
             tp = framePlane2tiffPath[t,z]
@@ -341,29 +341,131 @@ function loadTseries(tifdir)
     tseries
 end
 
-function write_experiment_to_tyh5(tseries, output_path; compression_level=3)
-    # Convention on output path?
-    # tseries = loadTseries(tif_dir);
 
-    loader = machinery.SourceFileLoader("py_utils", joinpath(dirname(@__FILE__), "py_utils.py"))
-    py_utils = loader.load_module("py_utils")
-    py_utils.write_tseries_to_tyh5(tseries, output_path)
-    size(tseries)
-    
-    # TODO: write out stim pattern if it's available
-    #   - tricky with the zOffset and such
+function get_slm_stim_masks(tif_dir, slm_dir, tseries, z_offset)
+    """
+    # Arguments
+    - `tif_dir::String`: path to directory holding experiment data (<fish_dir>/<exp_name>)
+    - `slm_dir::String`: path to directory containing SLM metadata for experiments
+       (e.g. "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment")
 
-    # TODO: Is this seriously not enough?
-    tseries = nothing
-    GC.gc()
+    # note
+    - This function is currently only valid for use with the 25x objective and NOT with
+      the 16x (14.4x) objective
+    """
+    # Only using tseries for its shape
+    (H, W, Z, T) = size(tseries)
+
+    # TODO(allan.raventos): really should get rid of this `is_1024`
+    if H == W == 512
+        is_1024 = false
+    elseif H == W == 1024
+        is_1024 = true
+    else
+        error("Only supporting (H, W) in {(512, 512), (1024, 1024)}")
+    end
+
+    @warn "This hard-coding is no good, putting at top of function for visibility"
+    # Physical distance per pixel for microscope (same for x and y)
+    microscope_units_xy = 0.6299544139175637μm
+    if is_1024
+        microscope_units_xy *= 2
+    end
+    # Assume that "7um" spiral galvo signal is calibrated for 16x, not 25x (16x is actually 14.4x)
+    # so that the spiral is smaller than 7um by a factor of 14.4 / 25
+    target_size_px = 7μm * (14.4 / 25) / microscope_units_xy
+
+    # Parse stimulation start and end times from voltage recordings
+    voltage_file = glob("*VoltageRecording*.csv", tif_dir)[1]
+    stim_start_idx, stim_end_idx = getStimTimesFromVoltages(voltage_file, Z)
+
+    # If empty we have no stimulations so return nothing
+    if length(stim_start_idx) == 0
+        return (nothing, nothing)
+    end
+
+    # Read SLM stim files
+    data_folders = splitpath(tif_dir)
+    # xml_path is e.g. <fish_dir>/<exp_name>/<exp_name>.xml
+    xml_path = joinpath(data_folders..., data_folders[end] * ".xml")
+    exp_date, frame_rate, etl_vals = getExpData(xml_path)
+
+    # If imaging many planes, may need to read another xml file since didn't get all planes in first file
+    # Volume gets imaged at 1/Zth of the frame rate
+    @assert length(etl_vals) == Z
+    @info "assume imaging from top-down"
+
+    # Load SLM files (TODO: handle this constant path better)
+    slm_exp_dir = joinpath(slm_dir, Dates.format(exp_date, "dd-u-Y"))
+    trial_order, _ = getTrialOrder(slm_exp_dir, exp_date)
+    n_stimuli = maximum(trial_order)
+    n_trials = size(trial_order, 1)
+    @assert n_trials == size(stim_start_idx, 1)
+
+    # Load target groups
+    target_groups = [mat["cfg"]["maskS"]["targets"][1]
+        for mat in matread.(findMatGroups(slm_exp_dir))]
+
+    ## Array of matrices indicating x, y z (or was it y, x, z..?)
+    targets_with_plane_index = mapTargetGroupsToPlane(target_groups, etl_vals,
+        is1024=is_1024, zOffset=z_offset)
+
+    # Generate mask of targeted locations
+    stim_masks = Gray.(zeros(Bool, n_stimuli, Z, H, W))
+    for (stim_idx, target_group) in enumerate(targets_with_plane_index)
+        for (x, y, z) in eachrow(target_group)
+            draw!(view(stim_masks, stim_idx, z, :, :), Ellipse(CirclePointRadius(x, y, target_size_px)))
+        end
+    end
+    stim_masks = convert(Array{Bool}, stim_masks)
+
+    # Create array holding at position i a 0 if no stim was begin applied at timestep i and
+    # stim_mask_idx otherwise (meaning that `stim_masks[stim_mask_idx]` was used)
+    stim_used_at_each_timestep = zeros(Int64, T)
+    for (_start, _end, trial_stim_idx) in zip(stim_start_idx, stim_end_idx, trial_order)
+        for idx in _start:_end
+            stim_used_at_each_timestep[idx] = trial_stim_idx
+        end
+    end
+
+    stim_masks, stim_used_at_each_timestep;
+
 end
 
+
+function write_experiment_to_tyh5(tseries, stim_masks, stim_used_at_each_timestep, output_path; compression_level=3)
+    """
+    # Arguments
+    - `tseries::Array{UInt16, 4}`: (H, W, Z, T) fluorescence volume time series
+    - `stim_masks`
+    - `stim_used_at_each_timestep`
+    - `output_path::String`: full path to write .ty.h5 file to
+    - `compression_level::Int`: compression level to use for blosc:zstd when writing out data
+    """
+
+    # TODO(allan.raventos): pyutils can probably be set as a global at the top of this module
+    loader = machinery.SourceFileLoader("py_utils", joinpath(dirname(@__FILE__), "py_utils.py"))
+    py_utils = loader.load_module("py_utils")
+    py_utils.write_experiment_to_tyh5(
+        tseries,
+        output_path,
+        stim_masks=stim_masks,
+        stim_used_at_each_timestep=stim_used_at_each_timestep,
+        compression_level=compression_level
+    )
+
+end
+
+<<<<<<< HEAD
 "Calculate average response for each unique stimuli"
+=======
+
+>>>>>>> 8b41756a45109d44a43a04f1df6cd62925cd92a3
 function trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder; pre=16, post=16)
     nStimuli = maximum(trialOrder)
     nTrials = size(trialOrder, 1)
     nTrialsPerStimulus = Int(size(trialOrder, 1) / nStimuli)
-    @assert nTrials == size(stimStartIdx, 1) # check TTL start-times match 
+    @assert nTrials == size(stimStartIdx, 1) # check TTL start-times match
 
     ## avg stim effec
     trialTime = minimum(stimEndIdx .- stimStartIdx) + pre + post + 1
@@ -377,7 +479,7 @@ function trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder; pre=16, pos
     end
     avgStim ./= nTrialsPerStimulus;
 end
-
+    
 sym_adjust_gamma(image, gamma) = sign.(image) .* adjust_gamma(abs.(image), gamma)
 
 function constructGroupMasks(groupLocs, H, W, Z;
@@ -392,12 +494,12 @@ function constructGroupMasks(groupLocs, H, W, Z;
 end
 
 
-function init_workers(nprocs=36) 
+    function init_workers(nprocs=36)
     addprocs(nprocs)
     exp = quote
         @everywhere begin
             import Pkg
-            Pkg.activate(".")
+        Pkg.activate(".")
             using Lensman
         end
     end
@@ -408,7 +510,9 @@ function allWithin(array, fraction)
     theMean = mean(array)
     threshold = ceil(fraction * theMean)
     @assert all(abs.(array .- theMean) .< threshold)
+
 end
+
 
 function findMatGroups(outdir;
         group_re=Regex("param_BHV004_(\\d+)\\.mat\$"))
@@ -423,6 +527,7 @@ end
 function rpadArray(array, n)
     toPad = n - size(array, 1)
     parent(padarray(array, Fill(0, (0,), (toPad,))))
+
 end
 
 "Create DataFrame with row per individual cell stimulated."
@@ -476,24 +581,24 @@ end
 
 "Add stim-evoked df/f to cells DataFrame."
 function makeCellsDF(tseries, cells, roiMask; winSize=15, delay=0)
-    cellDf_f = zeros(size(cells,1))
-    for (i, (x,y,z,group,stimStart,stimStop)) in enumerate(eachrow(cells))
+    cellDf_f = zeros(size(cells, 1))
+    for (i, (x, y, z, group, stimStart, stimStop)) in enumerate(eachrow(cells))
         mask = roiMask[i] 
         neuronTrace = extractTrace(tseries, mask)
         neuronTrace = imageJkalmanFilter(neuronTrace)
-        theStart = maximum([stimStart-winSize, 1])
-        theEnd = minimum([stimStop+winSize, size(tseries, ndims(tseries))])
-        f = mean(neuronTrace[stimStop+delay:theEnd])
+        theStart = maximum([stimStart - winSize, 1])
+        theEnd = minimum([stimStop + winSize, size(tseries, ndims(tseries))])
+        f = mean(neuronTrace[stimStop + delay:theEnd])
         
         # problem: if neuron happens to be active and declining before stim,
         # we may miss
-        f0 = mean(neuronTrace[theStart:stimStart-1])
+        f0 = mean(neuronTrace[theStart:stimStart - 1])
 
         # solution: use percentile f0
         # f0 = percentile(neuronTrace,0.1)
-        df_f = (f-f0)/(f0+1e-8)
+        df_f = (f - f0) / (f0 + 1e-8)
         if isnan(df_f)
-            @show f, f0, i, x, y, z, stimStart, stimStop, theStart, stimStart-1
+            @show f, f0, i, x, y, z, stimStart, stimStop, theStart, stimStart - 1
         end
         cellDf_f[i] = df_f
     end
@@ -503,7 +608,7 @@ function makeCellsDF(tseries, cells, roiMask; winSize=15, delay=0)
         newCells.df_f = cellDf_f
         return newCells
     else
-        return insertcols!(newCells, size(cells,2)+1, :df_f => cellDf_f)
+        return insertcols!(newCells, size(cells, 2) + 1, :df_f => cellDf_f)
     end
 end
 
@@ -555,15 +660,16 @@ function constructROImasks(cells, H, W, Z; targetSizePx)
     # TODO: this is inefficient if cell if stimulated more than once
     # since we duplicate mask, maybe use dict instead..?
     roiMask = []
-    for (x,y,z,group,stimStart,stimStop) = eachrow(cells)
-        mask = Gray.(zeros(Bool, H,W,Z))
-        draw!(view(mask,:,:,z), Ellipse(CirclePointRadius(x,y,targetSizePx)))
+    for (x, y, z, group, stimStart, stimStop) = eachrow(cells)
+        mask = Gray.(zeros(Bool, H, W, Z))
+        draw!(view(mask, :, :, z), Ellipse(CirclePointRadius(x, y, targetSizePx)))
         mask = findall(channelview(mask))
         push!(roiMask, mask)
     end
     roiMask
 end
 
+<<<<<<< HEAD
 function constructROImasks(cells, H, W; targetSizePx)
     # TODO: this is inefficient if cell if stimulated more than once
     # since we duplicate mask, maybe use dict instead..?
@@ -578,6 +684,9 @@ function constructROImasks(cells, H, W; targetSizePx)
 end
 
 f_lookup_cellidx(xyzToIdx) = (x,y,z) -> map((a,b,c)->xyzToIdx[(a,b,c)], x, y, z)
+=======
+f_lookup_cellidx(xyzToIdx) = (x, y, z) -> map((a, b, c) -> xyzToIdx[(a, b, c)], x, y, z)
+>>>>>>> 8b41756a45109d44a43a04f1df6cd62925cd92a3
 
 "Add a column with index per unique (x,y,z)."
 function addCellIdx(cells::DataFrame, xyzToIdx)
@@ -595,16 +704,20 @@ aa2a(array) = copy(hcat(array...)')
 function findIdxOfClosestElem(elem, array)
     dist = @. (array - elem)^2
     return sortperm(dist)[1]
-end
+    end
 
 function getPlaneETLvals(tseries_xml)
     etlVals = sort(unique(round.(parse.(Float64,
+<<<<<<< HEAD
         tseries_xml[xpath"//PVStateValue//SubindexedValue[@description='ETL']/@value"]), digits=1)))    
     if (sum(etlVals .=== 0.0)==1) & (sum(etlVals .=== -0.0)==1)
         return etlVals[(~).(etlVals .=== -0.0)]
     else
         etlVals
     end
+=======
+        tseries_xml[xpath"//PVStateValue//SubindexedValue[@description='ETL']/@value"]), digits=1)))
+>>>>>>> 8b41756a45109d44a43a04f1df6cd62925cd92a3
 end
 
 """Convert target_groups z from meters to the plane Int from Imaging.
@@ -633,10 +746,10 @@ end
     
 function getROItrace()
     idx(CI, t) = CartesianIndex(CI.I[1], CI.I[2], t)
-    end
+end
 
 function zeroAdjust(image::Array{T,4}) where T <: Real
-    # PMT offset
+# PMT offset
     # @assert sum(image.==0) == 0
     im = image .- 8192
     im[im .< 0] .= 0
@@ -645,7 +758,7 @@ function zeroAdjust(image::Array{T,4}) where T <: Real
     im[:,1:2:end,:,:] .= im[:,1:2:end,end:-1:1,:]
     im
 end
-
+    
 idxWithTime(CI, t) = CartesianIndex(CI.I[1], CI.I[2], t)
 
 function imageCorrWithMask(images::Array{T,4}, mask; lag=0) where T <: Real
@@ -661,11 +774,11 @@ function imageCorrWithMask(images::Array{T,4}, mask; lag=0) where T <: Real
 end
 
 function Green(x)
-    im = RGB(x)
+        im = RGB(x)
     RGB(zero(x), im.g, zero(x))
 end
 
-    export read_microns_per_pixel,
+export read_microns_per_pixel,
     read_mask,
     zbrain_units,
     antsApplyTransforms,
@@ -695,6 +808,7 @@ end
     getTrialOrder,
     loadTseries,
     write_experiment_to_tyh5,
+    get_slm_stim_masks,
     init_workers,
     trialAverage,
     colorImage,
@@ -722,7 +836,7 @@ end
     Green,
     sym_adjust_gamma,
     zeroAdjust,
-    perm, 
+    perm,
     cartIdx2SeanTarget512,
     reconstructA,
     addCellIdx,
