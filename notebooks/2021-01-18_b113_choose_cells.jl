@@ -156,7 +156,8 @@ voltageFile = glob("*VoltageRecording*.csv", tseriesDir)[1]
 dataFolders = splitpath(tseriesDir)
 xmlPath = joinpath(dataFolders..., dataFolders[end] * ".xml")
 expDate, frameRate, etlVals = getExpData(xmlPath)
-Z = size(etlVals,1)
+numETLvals = size(etlVals,1) # added 1/19 to avoid accidental bad Z
+@assert numETLvals == Z # added 1/19
 volRate = frameRate / Z
 slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
 trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)

@@ -3,7 +3,7 @@ ENV["DISPLAY"] = "localhost:11.0"
 using Sockets, Observables, Statistics, Images, ImageView, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
-    Compose, ImageMagick, Random, PyCall
+    Compose, ImageMagick, Random, PyCall, Arrow
 import Gadfly
 using Unitful: μm, m, s, mW
 
@@ -12,8 +12,17 @@ offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
 zOffset = offset * 1e6
 
 # tyh5Path = "/mnt/deissero/users/tyler/b115/2021-01-18_chrmine_kv2.1_h2b6s_6dpf/fish1_chrmine/TSeries-1024cell-32concurrent-2reps-043.ty.h5"
-# tyh5Path = "/data/dlab/b115/2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-046.ty.h5"
-tyh5Path = "/data/dlab/b115/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043.ty.h5"
+tyh5Path = "/data/dlab/b115/2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-046.ty.h5"
+# tyh5Path = "/scratch/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043.ty.h5"
+# tyh5Path = "/data/dlab/b115/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043.ty.h5"
+# tyh5Path = "/scratch/2021-01-25_gcamp6f_6dpf/fish1/TSeries-1024cell-32concurrent-4power-044.ty.h5"
+
+# TODO 1/29
+# tyh5Path =  "/mnt/b115_data/tyler/2021-01-25_rsChrmine_6f_6dpf/fish1"
+# tyh5Path =  "/mnt/b115_data/tyler/2021-01-25_rsChrmine_6f_6dpf/fish2/TSeries-1024cell-32concurrent-4power-043.ty.h5"
+# tyh5Path =  "/mnt/b115_data/tyler/2021-01-25_rsChrmine_6f_6dpf/fish3/TSeries-1024cell-32concurrent-4power-046.ty.h5"
+# tyh5Path =  "/data/dlab/b115/2021-01-26_rsChRmine_6f_7dpf/fish1/TSeries-31concurrent-168trial-3rep-4power-043.ty.h5"
+
 fishDir = joinpath(splitpath(tyh5Path)[1:end-1]...)
 expName = replace(splitpath(tyh5Path)[end], ".ty.h5" => "")
 tseriesDir = joinpath(fishDir, expName)
@@ -22,9 +31,9 @@ tseries = h5read(tyh5Path, "/imaging/raw")
 @assert size(tseries,4)==1
 tseries = permutedims(tseries, (2,1,3,4,5))
 tseries = tseries[:,:,:,1,:];
+(H, W, Z, T) = size(tseries)
 
 ##
-(H, W, Z, T) = size(tseries)
 @show (H, W, Z, T)
 slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 plotDir = joinpath(fishDir, "plots")
@@ -39,7 +48,8 @@ voltageFile = glob("*VoltageRecording*.csv", tseriesDir)[1]
 dataFolders = splitpath(tseriesDir)
 xmlPath = joinpath(dataFolders..., dataFolders[end] * ".xml")
 expDate, frameRate, etlVals = getExpData(xmlPath)
-Z = size(etlVals,1)
+numETLvals = size(etlVals,1)
+@assert numETLvals == Z
 volRate = frameRate / Z
 slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
 trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
@@ -76,6 +86,7 @@ targetsWithPlaneIndex = mapTargetGroupsToPlane(target_groups, etlVals,
     is1024=is1024, zOffset=zOffset)
 
 cells = makeCellsDF(targetsWithPlaneIndex, stimStartIdx, stimEndIdx, trialOrder)
+##
 @warn "hardcoded laser power"
 slm1MaxPower = firstTargetGroup["cfg"]["mode"]["BHV001"]["FOV"]["PowerPerCell"]
 slm1Power = 850mW
@@ -128,8 +139,28 @@ for power in sort(unique(cellsDF.laserPower))
 end
 # only 26 are >40% for two stim in control...
 # @show first(cellsDF[rankings[numNaN+1:end],:],50)
+open(tseriesDir*"_cellsDF.arrow", "w") do io
+    tempDF = copy(cellsDF)
+    tempDF.laserPower /= 1mW # can't serialize...
+    Arrow.write(io, tempDF)
+end
+## map of high df/f (top 50% of laser power only)
+maxPower = maximum(cellsDF.laserPower)
+Gadfly.with_theme(:dark) do
+    # mean_df = combine(groupby(cellsDF[cellsDF.laserPower .> mean(cellsDF.laserPower),:], :cellID), :df_f => mean)
+    mean_df = combine(groupby(cellsDF[cellsDF.laserPower .== maxPower,:], :cellID), :df_f => mean)
+    mean_df = innerjoin(unique(cellsDF[:,[:x,:y,:cellID]]), mean_df, on=:cellID)
+    dfmap = Gadfly.plot(mean_df, x=:x, y=:y, Gadfly.Geom.point, color=:df_f_mean,
+        Gadfly.Scale.color_continuous(minvalue=-1, maxvalue=1),
+        Gadfly.Coord.cartesian(yflip=true,aspect_ratio=1.))
+    img = SVG(joinpath(plotDir,"$(expName)_dfmap.svg"), 6inch, 5inch)
+    Gadfly.draw(img, dfmap)
+    dfmap
+end
+
 
 ##
+
 # histogram(cellsDF.df_f)
 Gadfly.plot(cellsDF, x="df_f",  ygroup="laserPower", Gadfly.Geom.subplot_grid(Gadfly.Geom.histogram))
 
@@ -138,7 +169,7 @@ before = Int(ceil(volRate*10))
 after = Int(ceil(volRate*20))
 # best
 plots = []
-nplots = 40
+nplots = 15
 
 # nplots = 8
 # for idx in rankings[end:-1:end-nplots+1]
@@ -149,21 +180,45 @@ for cellID in cellIDrankings[1:nplots]
     push!(plots, plotStim(tseries,roiMask,cells,indices, volRate, before=before, after=after))
 end
 # p = plot(plots..., layout=(16, 4), legend=false, size=(1024,1024*2))
-p = plot(plots..., layout=(8,5), size=(1024,1024*4))
+p = plot(plots..., layout=(5,3), size=(1000,800))
+savefig(p, joinpath(plotDir, "$(expName)_best15traces.png"))
+p
 # savefig("/home/tyler/Downloads/gcamp-control-random.png")
 ##
 
-# TODO: why do we have NaN values...?
-cmax = maximum(abs.(cellsDF.df_f[(~).(isnan.(cellsDF.df_f))]))
-p_df_map = Gadfly.with_theme(:dark) do
-    Gadfly.plot(cellsDF[(~).(isnan.(cellsDF.df_f)), :], x=:x, y=:y, Gadfly.Geom.point, size=[targetSizePx], color=:df_f,
-        Gadfly.Scale.color_continuous(minvalue=-1, maxvalue=1),
-        Gadfly.Coord.cartesian(yflip=true, fixed=true))
+cellDFcontrol = Arrow.Table("/scratch/2021-01-25_gcamp6f_6dpf/fish1/TSeries-1024cell-32concurrent-4power-044_cellsDF.arrow") |> DataFrame
+##
+nreps = 2
+n = maximum(cellsDF.cellID)*2
+# idxs = sortperm(cellDFcontrol.df_f)
+# Gadfly.plot(cellDFcontrol[idxs,:], x=:df_f, y=(1:n)./n, Geom.line, color=:laserPower)
+p = nothing
+xmin = minimum(vcat(cellDFcontrol.df_f, cellsDF.df_f))
+xmax = maximum(vcat(cellDFcontrol.df_f, cellsDF.df_f))
+# df = cellDFcontrol
+df = copy(cellsDF)
+df.laserPower /= 1mW
+cmax = maximum(df.laserPower)
+for (i,pow) in enumerate(unique(df.laserPower))
+    if i==1
+        global p = plot(sort(df.df_f[df.laserPower .== pow],rev=true),
+            (1:n)./n, line_z = pow, seriescolor=:lajolla, colorbar=false,
+            label=pow, clims=(0,cmax), xlims=(xmin,xmax), ylabel="probability",
+            xlabel="df/f")
+    else
+        p = plot!(sort(df.df_f[df.laserPower .== pow],rev=true),
+            (1:n)./n, line_z = pow, seriescolor=:lajolla, colorbar=false,
+            label=pow, clims=(0,cmax), xlims=(xmin,xmax))
+    end
 end
-
-# img = PNG(joinpath(plotDir, "$(expName)_df_f_map_below10.png"), 6inch, 5inch)
-# Gadfly.draw(img, p_df_map)
-p_df_map
+# savefig(p, joinpath(plotDir, "control_df_f_survival.png"))
+savefig(p, joinpath(plotDir, "$(expName)_df_f_survival.png"))
+p
+##
+n = length(cellDFcontrol.)
+p = plot(sort(cellDFcontrol.df_f), (1:n)./n, 
+    xlabel = "sample", ylabel = "Probability", 
+    title = "Empirical Cumluative Distribution", label = "")
 
 ## plot whole image...
 brainTrace = mean(tseries, dims=(1,2,3))[1,1,1,:]

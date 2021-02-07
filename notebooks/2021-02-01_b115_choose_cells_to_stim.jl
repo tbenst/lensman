@@ -15,30 +15,45 @@ using Unitful: μm, m, s, mW
 # tif840path = "/mnt/b115_data/tyler/2021-01-25_rsChrmine_6f_6dpf/fish3/SingleImage-840nm-1024-027/SingleImage-840nm-1024-027_Cycle00001_Ch3_000001.ome.tif"
 # tif840path = "/mnt/b115_data/tyler/2021-01-26_rsChRmine_6f_7dpf/fish1/SingleImage-840nm-1024-023/SingleImage-840nm-1024-023_Cycle00001_Ch3_000001.ome.tif"
 # tif840path = "/mnt/b115_data/tyler/2021-01-26_rsChRmine_6f_7dpf/fish2/SingleImage-840nm-1024-026/SingleImage-840nm-1024-026_Cycle00001_Ch3_000001.ome.tif"
-tif840path = "/mnt/deissero/users/tyler/b115/2021-02-01_h33r_6f_5dpf/fish1/SingleImage-840nm-1024-023/SingleImage-840nm-1024-023_Cycle00001_Ch3_000001.ome.tif"
-tif1000path = "/mnt/deissero/users/tyler/b115/2021-02-01_h33r_6f_5dpf/fish1/SingleImage-1000nm-1024-024/SingleImage-1000nm-1024-024_Cycle00001_Ch2_000001.ome.tif"
+# tif840path = "/mnt/deissero/users/tyler/b115/2021-02-01_h33r_6f_5dpf/fish1/SingleImage-840nm-1024-023/SingleImage-840nm-1024-023_Cycle00001_Ch3_000001.ome.tif"
+# tif1000path = "/mnt/deissero/users/tyler/b115/2021-02-01_h33r_6f_5dpf/fish1/SingleImage-1000nm-1024-024/SingleImage-1000nm-1024-024_Cycle00001_Ch2_000001.ome.tif"
 # tif920path = "/mnt/b115_data/tyler/2021-01-26_rsChRmine_6f_7dpf/fish1/SingleImage-920nm-1024-025/SingleImage-920nm-1024-025_Cycle00001_Ch3_000001.ome.tif"
 # tif1000path = "/mnt/b115_data/tyler/2021-01-26_rsChRmine_6f_7dpf/fish1/SingleImage-1000nm-1024-024/SingleImage-1000nm-1024-024_Cycle00001_Ch2_000001.ome.tif"
+
+# fishDir = joinpath(splitpath(tif840path)[1:end-2]...)
+# fishDir = "/mnt/deissero/users/tyler/b115/2021-02-02_f1_h33r_GC6f_6dpf/fish1_nochrmine"
+fishDir = "/mnt/b115_data/tyler/2021-02-02_wt_chrmine_GC6f/fish3"
+
+
+tif840path = glob("*840*", fishDir)[end]
+tif840path = glob("*Ch3*.tif", tif840path)[end]
+tif920path = glob("*920*", fishDir)[end]
+tif920path = glob("*Ch3*.tif", tif920path)[end]
+tif1000path = glob("*1000*", fishDir)[end]
+# tif1000path = glob("*Ch3*.tif", tif1000path)[end]
+tif1000path = glob("*Ch2*.tif", tif1000path)[end]
+
 # to burn at etl=0 if using calibration circa 2020-12-15, need +45 offset
 # offset = float(uconvert(m, 45μm)) / m # prior to 2021 / starting on ...12/15...? should check...
-offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
+offset = float(uconvert(m, 45μm)) / m # since 2020-02-01
 zOffset = offset * 1e6
-fishDir = joinpath(splitpath(tif840path)[1:end-2]...)
 expName = splitpath(tif840path)[end-1]
 im840 = ImageMagick.load(tif840path)
 rgb840 = RGB.(imadjustintensity(adjust_gamma(im840, 1.5)))
 channelview(rgb840)[[1,3],:,:] .= 0
 (H, W) = size(im840)
 ##
-# im920 = ImageMagick.load(tif920path)
 im1000 = ImageMagick.load(tif1000path)
 channelview(im840)[[1,3],:,:] .= 0
 rgb1000 = RGB.(imadjustintensity(adjust_gamma(im1000, 3.)))
 channelview(im1000)[[2,3],:,:] .= 0
-# rgb920 = RGB.(imadjustintensity(adjust_gamma(im920, 2.)))
-# channelview(im920)[[1,3],:,:] .= 0
 rgbBoth = rgb840
 channelview(rgbBoth)[1,:,:] .= channelview(rgb1000)[1,:,:]
+rgbBoth
+
+im920 = ImageMagick.load(tif920path)
+rgb920 = RGB.(imadjustintensity(adjust_gamma(im920, 2.)))
+channelview(im920)[[1,3],:,:] .= 0
 rgbBoth
 ## may want to now skip to Analysis section if not analyzing live
 # thresh of 1.5 is reasonable for gcamp
@@ -50,6 +65,7 @@ redEdgeIdxs = minimum(cartIdx2Array(redCandidateTargetLocs),dims=2) .<= 5
 redEdgeIdxs = redEdgeIdxs[:,1] .| (maximum(cartIdx2Array(redCandidateTargetLocs),dims=2) .>= H-5)[:,1]
 println("remove $(sum(redEdgeIdxs)) red edge indices")
 redCandidateTargetLocs = redCandidateTargetLocs[(~).(redEdgeIdxs)]
+"$(length(redCandidateTargetLocs)) red candidates"
 ##
 greenCandNeuronCenterMask = findNeurons(im840,thresh_adjust=1.5, featSize=4,maxiSize=8);
 greenCandidateTargetLocs = findall(greenCandNeuronCenterMask)
@@ -57,23 +73,44 @@ greenEdgeIdxs = minimum(cartIdx2Array(greenCandidateTargetLocs),dims=2) .<= 5
 greenEdgeIdxs = greenEdgeIdxs[:,1] .| (maximum(cartIdx2Array(greenCandidateTargetLocs),dims=2) .>= H-5)[:,1]
 println("remove $(sum(greenEdgeIdxs)) green edge indices")
 greenCandidateTargetLocs = greenCandidateTargetLocs[(~).(greenEdgeIdxs)]
+"$(length(greenCandidateTargetLocs)) green candidates"
 # green only targetting...
 # candidateTargetLocs = greenCandidateTargetLocs
 ##
 green_points = zeros(Bool,size(im840))
 green_points[greenCandidateTargetLocs] .= true
-greenTargets = findall(dilate(dilate(dilate(dilate(green_points)))))
+greenTargetCircs = findall(dilate(dilate(dilate(dilate(green_points)))))
 
-candidateTargetLocs = intersect(greenTargets, redCandidateTargetLocs)
+red_points = zeros(Bool,size(im840))
+red_points[redCandidateTargetLocs] .= true
+redTargetCircs = findall(dilate(dilate(dilate(dilate(red_points)))))
+
+# we use all targets with intersection of expression
+candidateTargetLocs = intersect(greenTargetCircs, redCandidateTargetLocs)
+println("$(length(candidateTargetLocs)) green&red candidates")
+# and sample more from green until we have 1024 targets
+extraCandidateTargetLocs = setdiff(greenCandidateTargetLocs, redTargetCircs)
+"$(length(extraCandidateTargetLocs)) green-only candidates"
+  
 ##
 
 # if true
 if false
     @warn "manual removal of eye idxs"
     candArray = cartIdx2Array(candidateTargetLocs)
-    eyeIdxs = ((candArray[:,1] .<= 253) .&
-        (candArray[:,2] .>= 669))
+    eyeIdxs = (((candArray[:,1] .>= 758) .&
+        (candArray[:,2] .>= 619))) .| (
+            (candArray[:,1] .>= 666) .& (candArray[:,2] .>= 824)
+        )
+    extraCandArray = cartIdx2Array(extraCandidateTargetLocs)
+    extraEyeIdxs = (((extraCandArray[:,1] .>= 758) .&
+        (extraCandArray[:,2] .>= 619))) .| (
+            (extraCandArray[:,1] .>= 666) .& (extraCandArray[:,2] .>= 824)
+        )
+    # eyeIdxs = ((candArray[:,1] .<= 253) .&
+    #     (candArray[:,2] .>= 669))
     candidateTargetLocs = candidateTargetLocs[(~).(eyeIdxs)]
+    extraCandidateTargetLocs = extraCandidateTargetLocs[(~).(extraEyeIdxs)]
 end
 
 
@@ -81,26 +118,32 @@ end
 
 # addTargetsToImage(im840, candidateTargetLocs)
 
-##
+## see the red&green targets
 # img = copy(rgbBoth)
 img = copy(rgb840)
-stim_points = zeros(Bool,size(img))
-stim_points[candidateTargetLocs] .= true
-stim_points = dilate(dilate(stim_points))
+redgreen_points = zeros(Bool,size(img))
+redgreen_points[candidateTargetLocs] .= true
+redgreen_points = dilate(dilate(redgreen_points))
+green_points = zeros(Bool,size(img))
+green_points[extraCandidateTargetLocs] .= true
+green_points = dilate(dilate(green_points))
 # channelview(img)[[1,3],:,:,:] .= 0
-# channelview(img)[3,:,:,:] .= 0.5 * float(stim_points)
-channelview(img)[1,:,:,:] .= 0.3 * float(stim_points)
+# channelview(img)[3,:,:,:] .= 0.5 * float(redgreen_points)
+channelview(img)[3,:,:,:] .= 0.3 * float(green_points)
+channelview(img)[1,:,:,:] .= 0.3 * float(redgreen_points)
 imshow(img)
-println("found $(size(candidateTargetLocs,1)) potential targets")
+
 ## Sample 1024 neurons
 nNeurons = 1024
 # nNeurons = 1
-if length(candidateTargetLocs) > nNeurons
-    neuron_locs = sample(candidateTargetLocs, nNeurons, replace=false)     
+if length(candidateTargetLocs) >= nNeurons
+    neuron_locs = sample(candidateTargetLocs, nNeurons, replace=false)
 else
-    neuron_locs = candidateTargetLocs
+    nToAdd = nNeurons - length(candidateTargetLocs)
+    extras = sample(extraCandidateTargetLocs, nToAdd, replace=false)
+    neuron_locs = vcat(candidateTargetLocs, extras)
 end
-
+##
 # Visualize stim targets
 img = RGB.(imadjustintensity(im840))
 stim_points = zeros(Bool,size(img))
@@ -124,18 +167,24 @@ target_groups = [vcat(cartIdx2SeanTarget.(locs, fill(offset, length(locs)))...)
 
 N = length(neuron_locs)
 ## Save files for SLM stim
-nPower = 4
+nPower = 5
 name = "$(N)cell-$(k)concurrent-zoffset_$(zOffset)_$(nPower)powers"
-outname = joinpath(fishDir, name)
+expSLMdir = joinpath(fishDir,"slm")
+outname = joinpath(expSLMdir, name)
+if ~isdir(expSLMdir)
+    mkdir(expSLMdir)
+end
 if isfile(outname*".txt")
     error("file already exists! refusing to clobber")
 end
 
 create_slm_stim(target_groups, outname,
-    localToRemote = matpath -> "Y:" * replace(matpath[15:end], "/" => "\\"),
-    powers=collect(1:nPower)/nPower)
+localToRemote = matpath -> "Y:" * replace(matpath[15:end], "/" => "\\"),
+powers=collect(1:nPower)/nPower)
 
-24 .* collect(1:nPower)/nPower ./ 1000 .* 840mW
+powerPerCell = 30
+println("Powers for power per cell of $powerPerCell")
+powerPerCell .* collect(1:nPower)/nPower ./ 1000 .* 840mW
 
 ###### ROUND 2 ##########
 ## load TSeries & analyze cells.
@@ -348,5 +397,54 @@ if isfile(outname*".txt")
 end
 
 create_slm_stim(chosenTargetGroups, outname,
-    localToRemote = matpath -> "Y:" * replace(matpath[15:end], "/" => "\\"),
+    # localToRemote = matpath -> "Y:" * replace(matpath[15:end], "/" => "\\"),
     powers=[1])
+
+
+## scratch - 3 trial shuffle
+nStims = 4
+nReps = 30
+nTrials = nStims * nReps
+trialOrder = repeat(collect(1:nStims),nTrials)[randperm(nTrials)]
+
+transitions = zeros(4,4)
+prev = trialOrder[1]
+
+for next in trialOrder[2:end]
+    transitions[prev,next] += 1
+    prev = next
+end
+
+@show sum(transitions)
+# this is bad as transitions are unbalanced
+transitions
+
+## 
+nStims = 4
+nReps = 8 # transition reps
+nTrials = nStims^2 * nReps + 1
+
+transitionsLeft = ones(4,4) * nReps
+trialOrder = Int64[]
+
+push!(trialOrder, rand(1:nStims))
+for i in 2:nTrials
+    prevStim = trialOrder[i-1]
+    candidateTransitionsLeft = findall(transitionsLeft[prevStim,:] .> 0)
+    nextStim = rand(candidateTransitionsLeft)
+    push!(trialOrder, nextStim)
+    transitionsLeft[prevStim,nextStim] -= 1
+end
+
+# validate
+transitions = zeros(4,4)
+prev = trialOrder[1]
+
+for next in trialOrder[2:end]
+    transitions[prev,next] += 1
+    prev = next
+end
+
+@show sum(transitions)
+# this is bad as transitions are unbalanced
+transitions

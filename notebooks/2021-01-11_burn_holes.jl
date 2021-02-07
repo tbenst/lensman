@@ -2,14 +2,14 @@ using Lensman
 using Unitful: μm, m, s, uconvert
 
 ## SLM 2
-offset2Microns = 0μm
-slmNum = 2
+offset2Microns = 120μm
+slmNum = 1
 offset = float(uconvert(m, offset2Microns)) / m
 targets1 = [128. 128. offset; 384. 384. offset; 128. 384. offset; 384. 128. offset;]
 
 offsetStr = replace(string(offset2Microns), " μm"=>"_um")
 create_slm_stim([targets1],
-    "/mnt/deissero/users/tyler/slm/masks/2021-01-11_4square_SLM$(slmNum)_offset_$(offsetStr)",
+    "/mnt/deissero/users/tyler/slm/masks/2021-02-01_4square_SLM$(slmNum)_offset_$(offsetStr)",
     slmNum=slmNum)
 
 

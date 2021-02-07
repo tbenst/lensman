@@ -47,10 +47,10 @@ include("files.jl")
 zbrain_units = (0.798μm, 0.798μm, 2μm)
 
 try
-    tmppath = ANTsRegistration.userpath()
+    global tmppath = ANTsRegistration.userpath()
 catch
     @warn "ANTs does not officially support Windows. Disabling."
-    tmppath = mktemp()
+    global tmppath = mktemp()
 end
 
 "Read (sparse) mask from Zbrain atlas and reshape to dense Array."
@@ -279,7 +279,12 @@ function getExpData(xmlPath)
     # much faster by prepending /PVScan/PVStateShard[1] to search first frame only
     framePeriod = parse(Float64, tseries_xml[xpath"/PVScan/PVStateShard[1]/PVStateValue[@key='framePeriod']/@value"][1])
     frameRate = 1 / framePeriod
-    etlVals = getPlaneETLvals(tseries_xml)
+    etlVals = nothing
+    try
+        etlVals = getPlaneETLvals(tseries_xml)
+    catch
+        etlVals = nothing
+    end
     expDate, frameRate, etlVals
 end
 
@@ -444,6 +449,31 @@ function makeCellsDF(target_groups, stimStartIdx, stimEndIdx, trialOrder)
 end
 
 
+"""Create DataFrame with row per individual cell stimulated.
+
+Used recordings with many trials.
+"""
+function makeCellsDF(target_groups, stimStartIdx::Int, stimEndIdx::Int, trialOrder)
+    cells = DataFrame(x=Int64[], y=Int64[], z=Int64[], trialNum=Int64[],
+        stimStart=Int64[], stimStop=Int64[], cellID=Int64[])
+    cellIDs = Dict()
+    for (i, g) in enumerate(trialOrder)
+        group = target_groups[g]
+        for (x, y, z) in eachrow(group)
+            if (x,y,z) in keys(cellIDs)
+                cellID = cellIDs[(x,y,z)]
+            else
+                cellID = length(cellIDs) + 1
+                cellIDs[(x,y,z)] = cellID
+            end
+            xR, yR = Int(round(x, digits=0)), Int(round(y, digits=0))
+            push!(cells, (xR, yR, z, i, stimStartIdx, stimEndIdx, cellID))
+        end
+    end
+    cells
+end
+
+
 "Add stim-evoked df/f to cells DataFrame."
 function makeCellsDF(tseries, cells, roiMask; winSize=15, delay=0)
     cellDf_f = zeros(size(cells,1))
@@ -477,6 +507,49 @@ function makeCellsDF(tseries, cells, roiMask; winSize=15, delay=0)
     end
 end
 
+"Add stim-evoked df/f to cells DataFrame."
+function makeCellsDF(tseries, cells, roiMask, trials::Bool; winSize=15, delay=0)
+    if trials == false
+        makeCellsDF(tseries, cells, roiMask; winSize=winSize, delay=delay)
+    end
+    cellDf_f = zeros(size(cells,1))
+    p = Progress(size(cells,1), 1, "Calc df/f: ")
+
+    # for (i, (x,y,z,trialNum,stimStart,stimStop)) in enumerate(eachrow(cells))
+    @threads for i in 1:size(cells,1)
+        (x,y,z,trialNum,stimStart,stimStop) = cells[i,:]
+        mask = roiMask[i] 
+        neuronTrace = extractTrace(tseries[:,:,:,trialNum], mask)
+        neuronTrace = imageJkalmanFilter(neuronTrace)
+        theStart = maximum([stimStart-winSize, 1])
+        # minus one since last dim of tseries is trialNum
+        theEnd = minimum([stimStop+winSize, size(tseries, ndims(tseries)-1)])
+        f = mean(neuronTrace[stimStop+delay:theEnd])
+        
+        # problem: if neuron happens to be active and declining before stim,
+        # we may miss
+        f0 = mean(neuronTrace[theStart:stimStart-1])
+
+        # solution: use percentile f0
+        # f0 = percentile(neuronTrace,0.1)
+        df_f = (f-f0)/(f0+1e-8)
+        if isnan(df_f)
+            @show f, f0, i, x, y, z, stimStart, stimStop, theStart, stimStart-1
+        end
+        cellDf_f[i] = df_f
+        next!(p)
+    end
+
+    newCells = copy(cells)
+    if "df_f" in names(cells)
+        newCells.df_f = cellDf_f
+        return newCells
+    else
+        return insertcols!(newCells, size(cells,2)+1, :df_f => cellDf_f)
+    end
+end
+
+
 "Create binary mask of HxWxZ for each neuron location."
 function constructROImasks(cells, H, W, Z; targetSizePx)
     # TODO: this is inefficient if cell if stimulated more than once
@@ -485,6 +558,19 @@ function constructROImasks(cells, H, W, Z; targetSizePx)
     for (x,y,z,group,stimStart,stimStop) = eachrow(cells)
         mask = Gray.(zeros(Bool, H,W,Z))
         draw!(view(mask,:,:,z), Ellipse(CirclePointRadius(x,y,targetSizePx)))
+        mask = findall(channelview(mask))
+        push!(roiMask, mask)
+    end
+    roiMask
+end
+
+function constructROImasks(cells, H, W; targetSizePx)
+    # TODO: this is inefficient if cell if stimulated more than once
+    # since we duplicate mask, maybe use dict instead..?
+    roiMask = []
+    for (x,y,z,trialNum,stimStart,stimStop) = eachrow(cells)
+        mask = Gray.(zeros(Bool, H,W))
+        draw!(view(mask,:,:), Ellipse(CirclePointRadius(x,y,targetSizePx)))
         mask = findall(channelview(mask))
         push!(roiMask, mask)
     end
@@ -514,7 +600,7 @@ end
 function getPlaneETLvals(tseries_xml)
     etlVals = sort(unique(round.(parse.(Float64,
         tseries_xml[xpath"//PVStateValue//SubindexedValue[@description='ETL']/@value"]), digits=1)))    
-    if (0.0 in etlVals) & (-0.0 in etlVals)
+    if (sum(etlVals .=== 0.0)==1) & (sum(etlVals .=== -0.0)==1)
         return etlVals[(~).(etlVals .=== -0.0)]
     else
         etlVals
@@ -629,7 +715,6 @@ end
     aa2a,
     calcGroupsPerCell,
     stonerPerm,
-    makeCellsDF,
     findIdxOfClosestElem,
     mapTargetGroupsToPlane,
     constructGroupMasks,
