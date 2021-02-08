@@ -456,11 +456,7 @@ function write_experiment_to_tyh5(tseries, stim_masks, stim_used_at_each_timeste
 
 end
 
-<<<<<<< HEAD
 "Calculate average response for each unique stimuli"
-=======
-
->>>>>>> 8b41756a45109d44a43a04f1df6cd62925cd92a3
 function trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder; pre=16, post=16)
     nStimuli = maximum(trialOrder)
     nTrials = size(trialOrder, 1)
@@ -669,7 +665,6 @@ function constructROImasks(cells, H, W, Z; targetSizePx)
     roiMask
 end
 
-<<<<<<< HEAD
 function constructROImasks(cells, H, W; targetSizePx)
     # TODO: this is inefficient if cell if stimulated more than once
     # since we duplicate mask, maybe use dict instead..?
@@ -683,10 +678,7 @@ function constructROImasks(cells, H, W; targetSizePx)
     roiMask
 end
 
-f_lookup_cellidx(xyzToIdx) = (x,y,z) -> map((a,b,c)->xyzToIdx[(a,b,c)], x, y, z)
-=======
 f_lookup_cellidx(xyzToIdx) = (x, y, z) -> map((a, b, c) -> xyzToIdx[(a, b, c)], x, y, z)
->>>>>>> 8b41756a45109d44a43a04f1df6cd62925cd92a3
 
 "Add a column with index per unique (x,y,z)."
 function addCellIdx(cells::DataFrame, xyzToIdx)
@@ -708,16 +700,12 @@ function findIdxOfClosestElem(elem, array)
 
 function getPlaneETLvals(tseries_xml)
     etlVals = sort(unique(round.(parse.(Float64,
-<<<<<<< HEAD
-        tseries_xml[xpath"//PVStateValue//SubindexedValue[@description='ETL']/@value"]), digits=1)))    
+        tseries_xml[xpath"//PVStateValue//SubindexedValue[@description='ETL']/@value"]), digits=1)))
     if (sum(etlVals .=== 0.0)==1) & (sum(etlVals .=== -0.0)==1)
         return etlVals[(~).(etlVals .=== -0.0)]
     else
         etlVals
     end
-=======
-        tseries_xml[xpath"//PVStateValue//SubindexedValue[@description='ETL']/@value"]), digits=1)))
->>>>>>> 8b41756a45109d44a43a04f1df6cd62925cd92a3
 end
 
 """Convert target_groups z from meters to the plane Int from Imaging.
