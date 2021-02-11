@@ -1,5 +1,5 @@
 ##
-ENV["DISPLAY"] = "localhost:11.0"
+ENV["DISPLAY"] = "localhost:13.0"
 using Sockets, Observables, Statistics, Images, ImageView, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
@@ -12,7 +12,11 @@ offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
 zOffset = offset * 1e6
 
 # tyh5Path = "/mnt/deissero/users/tyler/b115/2021-01-18_chrmine_kv2.1_h2b6s_6dpf/fish1_chrmine/TSeries-1024cell-32concurrent-2reps-043.ty.h5"
-tyh5Path = "/data/dlab/b115/2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-046.ty.h5"
+# tyh5Path = "/data/dlab/b115/2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-046.ty.h5"
+tifDir = "/mnt/deissero/users/tyler/b115/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-076"
+# tifDir = "/mnt/deissero/users/tyler/b115/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-10zplane-077"
+# tifDir = "/mnt/deissero/users/tyler/b115/2021-02-02_f1_h33r_GC6f_6dpf/fish2/TSeries-1024cell-32concurrent-5power-060"
+# tifDir = "/mnt/deissero/users/tyler/b115/2021-02-02_f1_h33r_GC6f_6dpf/fish1_nochrmine/TSeries-1024cell-32concurrent-5power-044"
 # tyh5Path = "/scratch/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043.ty.h5"
 # tyh5Path = "/data/dlab/b115/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043.ty.h5"
 # tyh5Path = "/scratch/2021-01-25_gcamp6f_6dpf/fish1/TSeries-1024cell-32concurrent-4power-044.ty.h5"
@@ -23,14 +27,22 @@ tyh5Path = "/data/dlab/b115/2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish1_chrmine/TS
 # tyh5Path =  "/mnt/b115_data/tyler/2021-01-25_rsChrmine_6f_6dpf/fish3/TSeries-1024cell-32concurrent-4power-046.ty.h5"
 # tyh5Path =  "/data/dlab/b115/2021-01-26_rsChRmine_6f_7dpf/fish1/TSeries-31concurrent-168trial-3rep-4power-043.ty.h5"
 
-fishDir = joinpath(splitpath(tyh5Path)[1:end-1]...)
-expName = replace(splitpath(tyh5Path)[end], ".ty.h5" => "")
+# fishDir = joinpath(splitpath(tyh5Path)[1:end-1]...)
+# expName = replace(splitpath(tyh5Path)[end], ".ty.h5" => "")
+
+fishDir = joinpath(splitpath(tifDir)[1:end-1]...)
+expName = replace(splitpath(tifDir)[end], ".ty.h5" => "")
+tylerSLMDir = joinpath(fishDir, "slm")
+
+
 tseriesDir = joinpath(fishDir, expName)
 
-tseries = h5read(tyh5Path, "/imaging/raw")
-@assert size(tseries,4)==1
-tseries = permutedims(tseries, (2,1,3,4,5))
-tseries = tseries[:,:,:,1,:];
+# tseries = h5read(tyh5Path, "/imaging/raw")
+# @assert size(tseries,4)==1
+# tseries = permutedims(tseries, (2,1,3,4,5))
+# tseries = tseries[:,:,:,1,:];
+
+tseries = loadTseries(tifDir)
 (H, W, Z, T) = size(tseries)
 
 ##
@@ -43,7 +55,7 @@ end
 
 # TODO: wrap more of cell in function to reduce inline code..?
 voltageFile = glob("*VoltageRecording*.csv", tseriesDir)[1]
-
+2
 # read slm stim files
 dataFolders = splitpath(tseriesDir)
 xmlPath = joinpath(dataFolders..., dataFolders[end] * ".xml")
@@ -55,8 +67,9 @@ slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
 trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
 
 # read power
-@assert length(glob("*.txt", fishDir)) == 1 # if not, need to be careful to choose
-slmTxtFile = glob("*.txt", fishDir)[1]
+@assert length(glob("*.txt", tylerSLMDir)) == 1 # if not, need to be careful to choose
+
+slmTxtFile = glob("*.txt", tylerSLMDir)[1]
 stimGroupDF = CSV.File(open(read, slmTxtFile), header=["filepath", "powerFraction"]) |> DataFrame
 stimGroupDF = stimGroupDF[trialOrder,:]
 
@@ -141,19 +154,19 @@ end
 # @show first(cellsDF[rankings[numNaN+1:end],:],50)
 open(tseriesDir*"_cellsDF.arrow", "w") do io
     tempDF = copy(cellsDF)
-    tempDF.laserPower /= 1mW # can't serialize...
+    tempDF.laserPower /= 1mW # can't serialize units...
     Arrow.write(io, tempDF)
 end
 ## map of high df/f (top 50% of laser power only)
 maxPower = maximum(cellsDF.laserPower)
 Gadfly.with_theme(:dark) do
-    # mean_df = combine(groupby(cellsDF[cellsDF.laserPower .> mean(cellsDF.laserPower),:], :cellID), :df_f => mean)
-    mean_df = combine(groupby(cellsDF[cellsDF.laserPower .== maxPower,:], :cellID), :df_f => mean)
+    mean_df = combine(groupby(cellsDF[cellsDF.laserPower .> mean(cellsDF.laserPower),:], :cellID), :df_f => mean)
+    # mean_df = combine(groupby(cellsDF[cellsDF.laserPower .== maxPower,:], :cellID), :df_f => mean)
     mean_df = innerjoin(unique(cellsDF[:,[:x,:y,:cellID]]), mean_df, on=:cellID)
     dfmap = Gadfly.plot(mean_df, x=:x, y=:y, Gadfly.Geom.point, color=:df_f_mean,
         Gadfly.Scale.color_continuous(minvalue=-1, maxvalue=1),
         Gadfly.Coord.cartesian(yflip=true,aspect_ratio=1.))
-    img = SVG(joinpath(plotDir,"$(expName)_dfmap.svg"), 6inch, 5inch)
+    img = SVG(joinpath(plotDir,"$(expName)_dfmap_top_half_powers.svg"), 6inch, 5inch)
     Gadfly.draw(img, dfmap)
     dfmap
 end
@@ -169,7 +182,8 @@ before = Int(ceil(volRate*10))
 after = Int(ceil(volRate*20))
 # best
 plots = []
-nplots = 15
+# nplots = 15
+nplots = 45
 
 # nplots = 8
 # for idx in rankings[end:-1:end-nplots+1]
@@ -180,25 +194,35 @@ for cellID in cellIDrankings[1:nplots]
     push!(plots, plotStim(tseries,roiMask,cells,indices, volRate, before=before, after=after))
 end
 # p = plot(plots..., layout=(16, 4), legend=false, size=(1024,1024*2))
-p = plot(plots..., layout=(5,3), size=(1000,800))
-# savefig(p, joinpath(plotDir, "$(expName)_best15traces.png"))
-savefig(p, joinpath(plotDir, "$(expName)_best15traces_5sec_window.png"))
+# p = plot(plots..., layout=(5,3), size=(1000,800)) # 15 plots
+p = plot(plots..., layout=(15,3), size=(1000,2400)) # 45 plots
+savefig(p, joinpath(plotDir, "$(expName)_best45traces.png"))
+# savefig(p, joinpath(plotDir, "$(expName)_best15traces_5sec_window.png"))
 p
 # savefig("/home/tyler/Downloads/gcamp-control-random.png")
 ##
+# cellDFcontrol = Arrow.Table("/scratch/2021-01-25_gcamp6f_6dpf/fish1/TSeries-1024cell-32concurrent-4power-044_cellsDF.arrow") |> DataFrame
+# arrowPath = "/mnt/deissero/users/tyler/b115/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-076_cellsDF.arrow"
+arrowPath = tifDir*"_cellsDF.arrow"
+df = Arrow.Table(arrowPath) |> DataFrame
+df
 
-cellDFcontrol = Arrow.Table("/scratch/2021-01-25_gcamp6f_6dpf/fish1/TSeries-1024cell-32concurrent-4power-044_cellsDF.arrow") |> DataFrame
+
 ##
-nreps = 1
-n = maximum(cellsDF.cellID)*nreps
-# idxs = sortperm(cellDFcontrol.df_f)
-# Gadfly.plot(cellDFcontrol[idxs,:], x=:df_f, y=(1:n)./n, Geom.line, color=:laserPower)
-p = nothing
-xmin = minimum(vcat(cellDFcontrol.df_f, cellsDF.df_f))
-xmax = maximum(vcat(cellDFcontrol.df_f, cellsDF.df_f))
 # df = cellDFcontrol
 df = copy(cellsDF)
 df.laserPower /= 1mW
+
+
+nreps = 1
+n = maximum(df.cellID)*nreps
+# idxs = sortperm(cellDFcontrol.df_f)
+# Gadfly.plot(cellDFcontrol[idxs,:], x=:df_f, y=(1:n)./n, Geom.line, color=:laserPower)
+p = nothing
+# xmin = minimum(vcat(df.df_f, df.df_f))
+# xmax = maximum(vcat(df.df_f, df.df_f))
+xmin = -0.5
+xmax = 2.0
 cmax = maximum(df.laserPower)
 for (i,pow) in enumerate(unique(df.laserPower))
     if i==1

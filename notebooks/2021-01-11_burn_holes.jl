@@ -46,10 +46,14 @@ create_slm_stim([targets1, targets2],
     "/mnt/deissero/users/tyler/slm/masks/2020-11-16_registration_8square_20_60um")
 ##
 zOffset = float(uconvert(m, 10μm)) / m
+slmNum = 2
+first = round(typeof(1μm), uconvert(μm, zOffset*(1-8)m)) / μm
+last = round(typeof(1μm), uconvert(μm, zOffset*(16-8)m)) / μm
 targets1 = copy(hcat([[256, 16+32*(i-1), zOffset*(i-8)] for i in 1:4]...)')
 targets2 = copy(hcat([[256, 16+32*(i-1), zOffset*(i-8)] for i in 5:8]...)')
 targets3 = copy(hcat([[256, 16+32*(i-1), zOffset*(i-8)] for i in 9:12]...)')
 targets4 = copy(hcat([[256, 16+32*(i-1), zOffset*(i-8)] for i in 13:16]...)')
 
 create_slm_stim([targets1, targets2, targets3, targets4],
-    "/mnt/deissero/users/tyler/slm/masks/2020-12-15_registration_12line_zsweep_-70_80")
+    "/mnt/deissero/users/tyler/slm/masks/2021-02-09_SLM$(slmNum)_12line_zsweep_$(first)_$(last)",
+    slmNum=slmNum)

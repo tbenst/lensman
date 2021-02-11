@@ -10,7 +10,7 @@
 ## run cell to init VSCode Julia
 @warn raw"ensure using Olympus 25x in Prairie View, else ETL will be off"
 ##
-ENV["DISPLAY"] = "localhost:12"
+ENV["DISPLAY"] = "localhost:15"
 using FileIO, NRRD, ImageView, HDF5, MAT, Images,
     Unitful, AxisArrays, StaticArrays, CoordinateTransformations,
     ImageView, TestImages, NRRD, LinearAlgebra, ImageMagick,
@@ -18,29 +18,26 @@ using FileIO, NRRD, ImageView, HDF5, MAT, Images,
     NIfTI, ImageContrastAdjustment, ImageView, Images, ImageView,
     ImageSegmentation, ImageMagick, Random, StatsBase,
     ImageDraw, Lensman, ImageFiltering, Glob, Plots, HDF5,
-    Dates
-    import Base.Threads.@threads
+    Dates, DataFrames, CSV
+import Base.Threads.@threads
 using Unitful: μm, m, s
 sio = pyimport("scipy.io")
 if Sys.iswindows()
     error("this script only supports linux!")
 end
 zbrain_dir = "/data/zbrain"
-offset = float(uconvert(m, 45μm)) / m # since 2020-02-01
+offset = float(uconvert(m, 0μm)) / m # since 2020-02-10 for SLM2
+slmNum = 2
 zOffset = offset * 1e6
 
 ##
-fishDir = "/mnt/b115_data/tyler/2021-02-02_wt_chrmine_GC6f/fish4"
+# fishDir = "/mnt/b115_data/tyler/2021-02-02_wt_chrmine_GC6f/fish4"
+# fishDir = "/mnt/b115_data/tyler/2021-02-09_gcamp6f_7dpf/fish2"
 
 zseriesDir = glob("ZSeries*", fishDir)[end]
 
 zseries = readZseriesTiffDir(zseriesDir)
 H, W, Z = size(zseries)
-
-zseries = zeros(Normed{UInt16,16}, H, W, size(zseriesFiles, 1))
-@threads for z in 1:size(zseriesFiles,1)
-    zseries[:,:,z] = ImageMagick.load(zseriesFiles[z])
-end
 
 if size(zseries,1)==512
     microscope_units = (2* 0.6299544139175637μm, 2* 0.6299544139175637μm, 2.0μm)
@@ -50,34 +47,7 @@ else
     @error "unknown microscope units"
 end
 
-
-size(zseries)
-
-#####
-    ## Read microns Per pixel (from file...)
-#####
-
-# open(glob("*.xml",zseriesDir)[1], "r") do io
-#     zseries_xml = read(io, String)
-#     global zseries_xml = xp_parse(zseries_xml)
-# end
-
-# "apply each function to args"
-# funprod(functions...) = (args...)->map(x->x(args...), functions)
-
-# micronsPerPixel_xml = zseries_xml[xpath"""//PVStateValue[@key="micronsPerPixel"]"""][1]
-# # parse xml
-# lookup_μm = axis -> etree -> parse(Float64,
-#     micronsPerPixel_xml[xpath"""IndexedValue[@index="$axis"]"""][1].attr["value"])μm
-# microscope_units = funprod(map(lookup_μm, ["YAxis", "XAxis", "ZAxis"])...)(micronsPerPixel_xml)
-
-# convert to 25x units (16x is actually 14.4x, assumes Prairie View has 16x selected)
-# @info "assuming 16x units but using 25x objective"
-# microscope_units = ((microscope_units[1:2] .* (14.4/25))..., microscope_units[3])
-# microscope_units = (0.5μm, 0.5μm, 1.5μm)
-
-# TODO: make Olympus 25x in bruker have proper units....
-
+##
 # zseries = centered(zseries) # need centered for qd registration
 zseries = AxisArray(zseries, (:y, :x, :z), microscope_units)
 adj_zseries = adjust_histogram(imadjustintensity(zseries), Equalization())
@@ -86,7 +56,7 @@ adj_zseries = AxisArray(adj_zseries, (:y, :x, :z), microscope_units)
 microscope_units
 
 #####
-## Read Zbrain H2B
+## Read Zbrain cytosolic gcamp
 #####
 gcamp_zbrain = AxisArray(permutedims(
         h5read("$zbrain_dir/AnatomyLabelDatabase.hdf5", "Elavl3-GCaMP5G_6dpf_MeanImageOf7Fish"),
@@ -361,7 +331,7 @@ end
 create_slm_stim([left_hab_targets, right_hab_targets, raphe_targets, control_targets],
     slmOutName,
     localToRemote = matpath -> "Y:" * replace(matpath[15:end], "/" => "\\"),
-    powers=[1])
+    powers=[1], slmNum=slmNum)
 
 ## trialOrder
 nStims = 4

@@ -25,7 +25,7 @@ function create_targets_mat(targets, outname::String; slmNum=1,
     H, W = 512, 512
     out_mat["im"][1] = zeros(H, W)
     out_mat["im"][2] = zeros(H, W)
-    @assert all(targets .< 512)
+    @assert all(targets .<= 512)
 
     out_mat["targets"] = Array{Any}(nothing, 1, 1)
     out_mat["targets"][1] = copy(targets) # ensure not an Adjoint type
@@ -195,4 +195,18 @@ function printMatKeys(mat; level=0, max_level=10)
             printMatKeys(mat[key], level=level+1, max_level=max_level)
         end
     end
+end
+
+function parseXML(xmlPath)
+    local xml
+    open(xmlPath, "r") do io
+        xml = read(io, String)
+        xml = xp_parse(xml);
+    end
+    xml
+end
+
+function getImagingPockels(prairieViewXML)
+    parse(Float64,
+        prairieViewXML[xpath"/PVScan/PVStateShard[1]/PVStateValue[@key='laserPower']/IndexedValue[1]/@value"][1])
 end

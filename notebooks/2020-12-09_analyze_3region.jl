@@ -1,5 +1,5 @@
 # need X11 forwarding for ssh, `ssh -X osprey`, then `echo $DISPLAY`, and fill below
-ENV["DISPLAY"] = "localhost:11"
+ENV["DISPLAY"] = "localhost:15"
 # ENV["DISPLAY"] = ":0"
 using FileIO, NRRD, ImageView, HDF5, MAT, Images,
     Unitful, AxisArrays, StaticArrays, CoordinateTransformations,
@@ -33,7 +33,8 @@ stim1Dir = "/scratch/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lr
 # TO-RUN
 # stim1Dir = "/oak/stanford/groups/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-039"
 # tifDir = stim2Dir
-tifDir = stim1Dir
+# tifDir = stim1Dir
+tifDir = "/mnt/deissero/users/tyler/b115/2021-02-09_gcamp6f_7dpf/fish2/TSeries-lrhab-raphe-balanced-transitions-137"
 
 # TODO: copy slmExpDir (see below) to, say,  `/scratch/SLM_files/`, so no dependency on network
 slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"

@@ -3,7 +3,7 @@ module Lensman
 using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     ImageDraw, ImageFiltering, PyCall, MAT, Dates, DataStructures,
     Statistics, SharedArrays, CSV, DataFrames, Suppressor, Plots,
-    LinearAlgebra
+    LinearAlgebra, LibExpat
 import Base.Threads.@threads
 using Distributed
 import Unitful: μm
@@ -412,6 +412,8 @@ function get_slm_stim_masks(tif_dir, slm_dir, tseries, z_offset)
 
     # Generate mask of targeted locations
     stim_masks = Gray.(zeros(Bool, n_stimuli, Z, H, W))
+    @warn "drawing diameter twice the size as target, maybe change?"
+    # but may add robustness to motion..?
     for (stim_idx, target_group) in enumerate(targets_with_plane_index)
         for (x, y, z) in eachrow(target_group)
             draw!(view(stim_masks, stim_idx, z, :, :), Ellipse(CirclePointRadius(x, y, target_size_px)))
@@ -833,6 +835,8 @@ export read_microns_per_pixel,
     makeCellsDF,
     constructROImasks,
     plotStim,
-    printMatKeys
+    printMatKeys,
+    getImagingPockels,
+    parseXML
     # , segment_nuclei
 end
