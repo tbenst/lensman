@@ -19,9 +19,13 @@ def assign_tseries_to_dset(dset, tseries, channel=0, batch_size=1024):
 
 def resize_images(images, target_width, target_height, interpolation=cv2.INTER_LINEAR):
     assert len(images.shape) == 4
-    T, Z, original_height, original_width = images.shape
+    _, _, original_height, original_width = images.shape
     fx = target_width / original_width
     fy = target_height / original_height
+
+    is_binary_image = (images.dtype == np.uint8)
+    if is_binary_image:
+        assert interpolation == cv2.INTER_NEAREST
 
     example_resized_image = cv2.resize((images[0, 0]), None, fx=fx, fy=fy, interpolation=interpolation)
     assert example_resized_image.shape == (target_height, target_width), 'Only allowing exact resizes'
@@ -30,6 +34,12 @@ def resize_images(images, target_width, target_height, interpolation=cv2.INTER_L
     for t, volume in enumerate(images):
         for z, image in enumerate(volume):
             resized_images[t, z] = cv2.resize(image, None, fx=fx, fy=fy, interpolation=interpolation)
+
+    # If images passed in were boolean then return as such
+    if is_binary_image:
+        assert set(np.unique(resized_images)).issubset({0, 1})
+        resized_images = np.uint8(resized_images)
+
     return resized_images
 
 
@@ -43,6 +53,18 @@ def write_experiment_to_tyh5(
     small_size=256
 ):
     """Write out a full experiment (including stim_masks if available) to .ty.h5
+
+    Structure written out is:
+
+    IMAGING
+    |--- RAW
+    |--- SMALL
+    STIM
+    |--- MASKS
+        |--- RAW
+        |--- SMALL
+    |--- STIM_USED_AT_EACH_TIMESTEP
+
 
     Parameters
     ----------
@@ -89,6 +111,10 @@ def write_experiment_to_tyh5(
     if len(stim_masks.shape) != 4 or stim_masks.shape[1:] != (Z, H, W):
         raise ValueError('stim_masks does not have the expected dimensions')
 
+    # Hacky but seemingly necessary, h5py won't read the default pytables bool type
+    stim_masks = np.uint8(stim_masks)
+    assert set(np.unique(stim_masks)).issubset({0, 1})
+
     # Check that `stim_used_at_each_timestep` has the correct type and shape
     if stim_used_at_each_timestep is not None and stim_used_at_each_timestep.dtype != np.int64:
         raise TypeError('stim_used_at_each_timestep does not have the expected type')
@@ -131,15 +157,16 @@ def write_experiment_to_tyh5(
 
         if stim_masks is not None and stim_used_at_each_timestep is not None:
             # Not creating chunked arrawys for stim data as, in this format, it really does not require much space at all
-            stim_group = tyh5.create_group('/imaging', 'stim')
+            stim_group = tyh5.create_group('/', 'stim')
             print(
-                'Writing stim_masks (NZHW={}) and stim_used_at_each_timestep (T={}) to "/imaging/stim"'.format(
+                'Writing stim_masks (NZHW={}) and stim_used_at_each_timestep (T={}) to "/stim"'.format(
                     stim_masks.shape, stim_used_at_each_timestep.shape[0]
                 )
             )
-            tyh5.create_array(
-                stim_group, 'stim_masks', stim_masks, atom=tables.BoolAtom()
-            )  # presumably BoolAtom is legit
+            mask_group = tyh5.create_group(stim_group, 'masks')
+            tyh5.create_array(mask_group, 'raw', stim_masks, atom=tables.UInt8Atom())
+            stim_masks_small = resize_images(stim_masks, small_size, small_size, interpolation=cv2.INTER_NEAREST)
+            tyh5.create_array(mask_group, 'small', stim_masks_small, atom=tables.UInt8Atom())
             tyh5.create_array(
                 stim_group, 'stim_used_at_each_timestep', stim_used_at_each_timestep, atom=tables.Int64Atom()
             )
