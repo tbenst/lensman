@@ -1,5 +1,5 @@
 ##
-ENV["DISPLAY"] = "localhost:14.0"
+ENV["DISPLAY"] = "localhost:11.0"
 using Sockets, Observables, Statistics, Images, ImageView, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
@@ -12,16 +12,9 @@ using Unitful: μm, m, s
 offset = float(uconvert(m, 0μm)) / m # when using SLM2 since 2020-02-?
 zOffset = offset * 1e6
 
-# tyh5Path = "/mnt/deissero/users/tyler/b115/2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/TSeries-1024cell-32concurrent-047.ty.h5"
-# tyh5Path = "/data/dlab/b115/2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/TSeries-1024cell-32concurrent-047.ty.h5"
-# tseriesDir = "/mnt/deissero/users/tyler/b115/2021-01-11_chrmine-kv2.1_h2b6s_6dpf/fish1_nochrmine/TSeries-1024cell-32concurrent-043"
-# tyh5Path = "/mnt/deissero/users/tyler/b115/2021-01-18_chrmine_kv2.1_h2b6s_6dpf/fish1_chrmine/TSeries-1024cell-32concurrent-2reps-043.ty.h5"
-# tyh5Path = "/mnt/deissero/users/tyler/b115/2021-01-18_chrmine_kv2.1_h2b6s_6dpf/fish2_nochrmine/TSeries-1024cell-32concurrent-2reps-044.ty.h5"
-# tyh5Path = "/data/dlab/b115/2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/TSeries-1024cell-32concurrent-5ppc-048.ty.h5"
-# tyh5Path = "/mnt/deissero/users/tyler/b115/2020-12-17_gc6f-h33r_7dpf/fish1/TSeries_10stim_4times-40power-newFOV-050.ty.h5"
-# tseriesDir = "/mnt/deissero/users/tyler/b115/2020-12-15_h2b6s_chrmine_kv2.1_5dpf/fish2/TSeries-1024cell-32concurrent-038"
-# tseriesDir = "/mnt/deissero/users/tyler/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
-tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
+# tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
+# tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055"
+tseriesDir = "/data/dlab/b115/2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051"
 # tyh5Path = tseriesDir
 
 if tseriesDir[end] == "/"
@@ -29,10 +22,10 @@ if tseriesDir[end] == "/"
 end
 
 
-tseries = loadTseries(tseriesDir);
 fishDir = joinpath(splitpath(tseriesDir)[1:end-1]...)
 expName = splitpath(tseriesDir)[end]
 
+tseries = loadTseries(tseriesDir);
 # tyh5
 
 # fishDir = joinpath(splitpath(tyh5Path)[1:end-1]...)
@@ -43,17 +36,6 @@ expName = splitpath(tseriesDir)[end]
 # @assert size(tseries,4)==1
 # tseries = permutedims(tseries, (2,1,3,4,5))
 # tseries = tseries[:,:,:,1,:];
-
-## plot whole image...
-brainTrace = mean(tseries, dims=(1,2,3))[1,1,1,:]
-brainTrace = imageJkalmanFilter(brainTrace)
-p = plot((1:size(brainTrace,1)) ./ volRate, brainTrace, left_margin=50px,
-    xlabel="time (s)", ylabel="fluorescence")
-for (stimStart,stimStop) in zip(stimStartIdx, stimEndIdx)
-    plot!(Lensman.rectangle((stimStop-stimStart)/volRate,maximum(brainTrace)-minimum(brainTrace),
-        stimStart/volRate, minimum(brainTrace)), opacity=.5, label="")
-end
-p
 
 ##
 (H, W, Z, T) = size(tseries)
@@ -107,11 +89,6 @@ end
 #     for mat in matread.(findMatGroups(slmExpDir))]
 
 # group_stim_freq = [getMatStimFreq(mat) for mat in matread.(findMatGroups(slmExpDir))]
-
-##
-exMat = matread(findMatGroups(slmExpDir)[1])["cfg"]
-println(keys(exMat))
-exMat["exp"]
 
 ##
 nStimuli = maximum(trialOrder)
@@ -188,6 +165,7 @@ end
 histogram(cellsDF.df_f)
 
 ##
+# volRate = 30
 before = Int(ceil(volRate*10))
 after = Int(ceil(volRate*20))
 # best
@@ -215,8 +193,8 @@ p_df_map = Gadfly.with_theme(:dark) do
         Gadfly.Coord.cartesian(yflip=true, fixed=true))
 end
 
-# img = PNG(joinpath(plotDir, "$(expName)_df_f_map_below10.png"), 6inch, 5inch)
-# Gadfly.draw(img, p_df_map)
+img = PNG(joinpath(plotDir, "$(expName)_df_f_map.png"), 6inch, 5inch)
+Gadfly.draw(img, p_df_map)
 p_df_map
 
 ## extract and save traces for easy plotting later...
@@ -244,3 +222,100 @@ first(fluor,5)
 open(tseriesDir*"_cells_fluorescence.arrow", "w") do io
     Arrow.write(io, fluor)
 end
+
+## compare 8cell vs 32cell concurrent!
+concurrent32Table = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054_cells_fluorescence.arrow"
+fluor32 = copy(Arrow.Table(concurrent32Table) |> DataFrame);
+concurrent8Table = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055_cells_fluorescence.arrow"
+fluor8 = copy(Arrow.Table(concurrent8Table) |> DataFrame;)
+
+cells32 = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054_cellsDF.arrow"
+cells32 = copy(Arrow.Table(cells32) |> DataFrame);
+cells8 = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055_cellsDF.arrow"
+cells8 = copy(Arrow.Table(cells8) |> DataFrame;)
+## cellID is not matched in two experiments :/
+# need to match by (x,y)
+xyToCellID = Dict()
+for cell in eachrow(cells32)
+    x, y, cellID = cell[[:x,:y,:cellID]]
+    xyToCellID[(x,y)] = cellID
+end
+length(xyToCellID)
+
+cellIDmap = Dict()
+for i in 1:size(cells8,1)
+    x, y, cellID = cells8[i,[:x,:y,:cellID]]
+    newID = xyToCellID[(x,y)]
+    cellIDmap[cellID] = newID
+    cells8[i,:cellID] = newID
+end
+
+for i in 1:size(fluor8,1)
+    fluor8[i,:cellID] = cellIDmap[fluor8[i,:cellID]]
+end
+
+## add stim freq to fluor...
+
+insertcols!(fluor8, :stimFreq =>
+    [cells8[findall(cells8.stimStart .== start)[1],:stimFreq] for start in fluor8.stimStart])
+insertcols!(fluor32, :stimFreq =>
+    [cells32[findall(cells32.stimStart .== start)[1],:stimFreq] for start in fluor32.stimStart])
+##
+
+function rawToDf_f(fluor::DataFrame, before=before)
+    fluorDF = []
+    # operate over each cell's trace...
+    for df in groupby(fluor, [:cellID, :stimStart])
+        kalmanFilt = imageJkalmanFilter(df.f)
+        f0 = mean(kalmanFilt[1:before])
+        df = copy(df)
+        df_f = @. (kalmanFilt - f0) / (f0 + 10)
+        insertcols!(df, size(df,2), :df_f => df_f)
+        select!(df, Not(:f))
+        push!(fluorDF, df)
+    end
+    fluorDF = vcat(fluorDF...)
+end
+
+fluorDF = rawToDf_f(fluor8)
+insertcols!(fluorDF, :nConcurrent => 8)
+fluorDF32 = rawToDf_f(fluor32)
+insertcols!(fluorDF32, :nConcurrent => 32)
+fluorDF = vcat(fluorDF, fluorDF32)
+meanTimeDf = combine(groupby(fluorDF, [:cellID, :time, :nConcurrent]), :df_f => mean)
+
+
+## 32 concurrent vs 8 concurrent
+# idxs = map(c->c in cellIDrankings[1:nplots], meanTimeDf[meanTimeDf.cellID)
+plots = Gadfly.Plot[]
+cellIDs = unique(cells8.cellID)
+nCells = length(cellIDs)
+for cellID in cellIDs[randperm(nCells)[1:nplots]]
+    idxs = meanTimeDf.cellID .== cellID
+    push!(plots, Gadfly.plot(meanTimeDf[idxs,:], x=:time, y=:df_f_mean, color=:nConcurrent,
+        Gadfly.Geom.line, ))
+end
+
+p_nConcurrent = gridstack(reshape(plots, 8,5))
+plotPath = joinpath(plotDir, "$(expName)_nConcurrent_shuffle_3.png")
+img = PNG(plotPath, 32inch, 16inch)
+Gadfly.draw(img, p_nConcurrent)
+@show plotPath
+p_nConcurrent
+
+##
+plots = Gadfly.Plot[]
+for cellID in cellIDs[randperm(nCells)[1:nplots]]
+    idxs = fluorDF.cellID .== cellID
+    push!(plots, Gadfly.plot(fluorDF[idxs,:], x=:time, y=:df_f, color=:stimFreq,
+        Gadfly.Geom.line, ))
+end
+
+p_nConcurrent = gridstack(reshape(plots, 8,5))
+plotPath = joinpath(plotDir, "$(expName)_stimFreq.png")
+img = PNG(plotPath, 32inch, 16inch)
+Gadfly.draw(img, p_nConcurrent)
+@show plotPath
+p_nConcurrent
+
+## TODO: fit/calculate tau off & plot across population...

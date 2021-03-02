@@ -1,5 +1,5 @@
 # need X11 forwarding for ssh, `ssh -X osprey`, then `echo $DISPLAY`, and fill below
-ENV["DISPLAY"] = "localhost:15"
+ENV["DISPLAY"] = "localhost:12"
 # ENV["DISPLAY"] = ":0"
 using FileIO, NRRD, ImageView, HDF5, MAT, Images,
     Unitful, AxisArrays, StaticArrays, CoordinateTransformations,
@@ -17,7 +17,7 @@ using Base.Iterators: peel
 import Unitful: μm
 ##
 # can set in Julia extension settings for vscode, search "num threads"
-stim1Dir = "/scratch/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
+# stim1Dir = "/scratch/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
 # stim2Dir = "/mnt/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab-raphe-20trial-part2-047/"
 
 # VoltageRecording stopped short :/
@@ -34,10 +34,15 @@ stim1Dir = "/scratch/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lr
 # stim1Dir = "/oak/stanford/groups/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-039"
 # tifDir = stim2Dir
 # tifDir = stim1Dir
-tifDir = "/mnt/deissero/users/tyler/b115/2021-02-09_gcamp6f_7dpf/fish2/TSeries-lrhab-raphe-balanced-transitions-137"
+
+# gc6f control vs WT ChRmine
+# tifDir = "/mnt/deissero/users/tyler/b115/2021-02-09_gcamp6f_7dpf/fish2/TSeries-lrhab-raphe-balanced-transitions-137"
+# tifDir = "/mnt/deissero/users/tyler/b115/2021-02-02_wt_chrmine_GC6f/fish4/TSeries-stim-3region-1control-045"
+tifDir = "/data/dlab/b115/2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-lrhab-raphe-control-129trial-052/"
 
 # TODO: copy slmExpDir (see below) to, say,  `/scratch/SLM_files/`, so no dependency on network
-slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"
+slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
+# slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"
 
 
 expName = splitpath(tifDir)[end]
@@ -48,7 +53,8 @@ tseries = loadTseries(tifDir);
 ##
 voltageFile = glob("*VoltageRecording*.csv", tifDir)[1]
 stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFile, Z)
-@assert length(stimStartIdx) == 120
+@assert length(stimStartIdx) == 129
+# @assert length(stimStartIdx) == 120
 
 ## single stim example
 imshow(imadjustintensity(tseries[:,:,:,stimStartIdx[1]-1:stimEndIdx[1]+1]))
@@ -70,7 +76,7 @@ trialOrder, _ = getTrialOrder(slmExpDir, expDate)
 
 nStimuli = maximum(trialOrder)
 nTrials = size(trialOrder,1)
-nTrialsPerStimulus = Int(size(trialOrder,1) / nStimuli)
+@show nTrials, nStimuli
 @assert nTrials == size(stimStartIdx,1) # check TTL start-times match 
 
 target_groups = [mat["cfg"]["maskS"]["targets"][1]
@@ -96,16 +102,16 @@ try
 catch
 end
 ##
-avgStim = h5read(joinpath(fishDir,expName*"_avgStim.h5"), "/block1");
+# avgStim = h5read(joinpath(fishDir,expName*"_avgStim.h5"), "/block1");
 (H, W, Z, nStim) = size(avgStim)
 ## STA
 window = Int(ceil(3*volRate))
 @assert (window < post) & (window < pre)
-cmax = 4
-cmin = -0.75
+cmax = 2
+cmin = -0.5
 cnorm = matplotlib.colors.TwoSlopeNorm(vmin=cmin,vcenter=0,vmax=cmax)
 
-for stimNum in 1:3
+for stimNum in 1:nStimuli
     f = mean(avgStim[:,:,:,stimNum,end-window+1:end],dims=4)[:,:,:,1]
     f0 = mean(avgStim[:,:,:,stimNum,1:window],dims=4)[:,:,:,1]
     df = f - f0
