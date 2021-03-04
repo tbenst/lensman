@@ -13,6 +13,7 @@ using Unitful: μm, m, s, mW
 # fishDir = "/mnt/deissero/users/tyler/b115/2021-02-16_h2b6s_wt-chrmine/fish3"
 # fishDir = "/mnt/b115_data/tyler/2021-02-23_h2b6s/fish1/SingleImage-840nm-1024-027"
 fishDir = "/mnt/deissero/users/tyler/b115/2021-03-02_h33r-6f-6dpf/fish1"
+fishDir = "/mnt/deissero/users/tyler/b115/2021-03-02_h33r-6f-6dpf/fish2"
 useRed = true
 
 tif840path = glob("*840*", fishDir)[end]
@@ -33,12 +34,9 @@ channelview(rgb840)[[1,3],:,:] .= 0
 if useRed
     im1000 = ImageMagick.load(tif1000path)
     rgb1000 = RGB.(imadjustintensity(adjust_gamma(im1000, 3.)))
-    channelview(rgb1000)[[1,3],:,:] .= 0;
+    channelview(rgb1000)[[2,3],:,:] .= 0;
 end
 (H, W) = size(im840)
-##
-
-
 
 ## may want to now skip to Analysis section if not analyzing live
 # thresh of 1.5 is reasonable for gcamp
@@ -104,9 +102,9 @@ if true
 # if false
     @warn "manual removal of eye idxs"
     eye_indices(arr) = (
-            (arr[:,1] .<= 338) .& (arr[:,2] .>= 465)
+            (arr[:,1] .<= 419) .& (arr[:,2] .>= 644)
         ) .| (
-            (arr[:,1] .>= 642) .& (arr[:,2] .>= 450)
+            (arr[:,1] .>= 705) .& (arr[:,2] .>= 479)
         )
 
     eyeIdxs = eye_indices(cartIdx2Array(candidateTargetLocs))
@@ -135,15 +133,8 @@ else
 end
 ##
 # Visualize stim targets
-img = RGB.(imadjustintensity(im840))
-stim_points = zeros(Bool,size(img))
-stim_points[neuron_locs] .= true
-stim_points = dilate(dilate(stim_points))
-channelview(img)[[1,3],:,:,:] .= 0
-channelview(img)[1,:,:,:] .= 0.5*float(stim_points)
-imshow(img)
-img;
-
+imshow(addTargetsToImage(copy(rgb840), cartIdx2Array(neuron_locs),
+    targetSize=targetSizePx))
 
 # one cell at a time
 # target_groups = [cartIdx2SeanTarget(neuron_loc, offset)
