@@ -1,5 +1,5 @@
 ##
-ENV["DISPLAY"] = "localhost:11.0"
+ENV["DISPLAY"] = "localhost:10.0"
 using Sockets, Observables, Statistics, Images, ImageView, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
@@ -7,34 +7,63 @@ using Sockets, Observables, Statistics, Images, ImageView, Lensman,
 import Gadfly
 using Unitful: μm, m, s
 ##
-tseriesDir = "/mnt/deissero/users/tyler/b113/2021-01-18_elavl3-chrmine-kv2.1_h2b6s_6dpf/fish1_chrmine/resting-005"
-tseries = loadTseries(tseriesDir)
+# fishDir = "/scratch/b113/2021-02-17_wt-chrmine_h2b6s_8dpf/fish1"
+fishDir = "/scratch/b113/2021-02-18_h2b_wtchrmine/fish1"
+tif840path = glob("*840*", fishDir)[end]
+tif840path = glob("*Ch3*.tif", tif840path)[end]
 
-fishDir = joinpath(splitpath(tseriesDir)[1:end-2]...)
-expName = splitpath(tseriesDir)[end-1]
-avgImage = mean(tseries, dims=(3,4))[:,:,1,1]
-size(avgImage)
-imshow(avgImage)
+expName = splitpath(tif840path)[end-1]
+im840 = ImageMagick.load(tif840path)
+rgb840 = RGB.(imadjustintensity(adjust_gamma(im840, 1.5)))
+channelview(rgb840)[[1,3],:,:] .= 0
+(H, W) = size(im840)
+
+if W==512
+    microscope_units = (2* 0.6299544139175637μm, 2* 0.6299544139175637μm, 2.0μm)
+elseif W==1024
+    microscope_units = (0.6299544139175637μm, 0.6299544139175637μm, 2.0μm)
+else
+    @error "unknown microscope units"
+end
+
 ## may want to now skip to Analysis section if not analyzing live
 # compile
 ##
-candNeuronCenterMask = findNeurons(avgImage,thresh_adjust=1.5, featSize=4,maxiSize=8);
+im840Adj = adjust_gamma(imadjustintensity(im840), 0.5)
+im840Adj = RGB.(im840Adj)
+
+candNeuronCenterMask = findNeurons(im840,thresh_adjust=1.5, featSize=4,maxiSize=8);
 candidateTargetLocs = findall(candNeuronCenterMask)
 # candidateTargets = copy(mask2ind(candNeuronCenterMask))
 
-# addTargetsToImage(avgImage, candidateTargetLocs)
+targetSizePx = 7μm * (14.4/25) / microscope_units[1]
+avgImgWithTargets = addTargetsToImage(copy(im840Adj),
+    cartIdx2Array(candidateTargetLocs),
+    targetSize=targetSizePx)
 
-
-img = RGB.(imadjustintensity(avgImage))
-stim_points = zeros(Bool,size(img))
-stim_points[candidateTargetLocs] .= true
-stim_points = dilate(dilate(stim_points))
-channelview(img)[[1,3],:,:,:] .= 0
-channelview(img)[1,:,:,:] .= 0.25 * float(stim_points)
-imshow(img)
+imshow(avgImgWithTargets)
 println("found $(size(candidateTargetLocs,1)) potential targets")
+## remove eye targets...
+
+if true
+# if false
+    @warn "manual removal of eye idxs"
+    candArray = cartIdx2Array(candidateTargetLocs)
+    
+    # left eye or right eye
+    eyeIdxs = (((candArray[:,1] .<= 127) .&
+        (candArray[:,2] .<= 190))) .| (
+            (candArray[:,1] .>= 692) .& (candArray[:,2] .>= 560)
+        )  .| (
+            (candArray[:,1] .>= 393) .& (candArray[:,2] .<= 174)
+        )
+    candidateTargetLocs = candidateTargetLocs[(~).(eyeIdxs)]
+end
+
+
+
 ## Sample 128 neurons
-nNeurons = 1024
+nNeurons = 32
 # not needed if not so many...
 if size(candidateTargetLocs,1) < nNeurons
     neuron_locs = candidateTargetLocs
@@ -43,27 +72,36 @@ else
     neuron_locs = sample(candidateTargetLocs, nNeurons, replace=false)
 end
 
-# Visualize stim targets
-img = RGB.(imadjustintensity(avgImage))
-stim_points = zeros(Bool,size(img))
-stim_points[neuron_locs] .= true
-stim_points = dilate(dilate(stim_points))
-channelview(img)[[1,3],:,:,:] .= 0
-channelview(img)[1,:,:,:] .= 0.5*float(stim_points)
-imshow(img)
-img;
+avgImgWithTargets = addTargetsToImage(copy(im840Adj),
+    cartIdx2Array(neuron_locs),
+    targetSize=targetSizePx)
 
+imshow(avgImgWithTargets)
+# add outside the brain point for parking in between...
+neuron_locs = vcat([CartesianIndex(1,1)], neuron_locs)
 ## Write xml
 # create an empty XML document
-W = size(avgImage,2) 
+numStim = 10 # Hz since 1s stim... HARDCODE
+dwellTime = 2 # ms
+@warn "only setup for 1s stim, need to check if numStim is used correctly..."
+numSpirals = 10
+laserPowerPockels = 500
+repetitions = 8
+
+@assert nNeurons * repetitions <= 256 "approximately too big for Prairie View..."
+
+# following code contains reverse-engineered constants
 xmlGpl = XMLDocument() # create & attach a root node
 xGplRoot = create_root(xmlGpl, "PVGalvoPointList")
 xmlSeries = XMLDocument() # create & attach a root node
 xSeriesRoot = create_root(xmlSeries, "PVSavedMarkPointSeriesElements")
 set_attribute(xSeriesRoot, "Iterations", "1")
 set_attribute(xSeriesRoot, "IterationDelay", "5000.0")
-for (i,ci) in enumerate(neuron_locs[randperm(nNeurons)])
-    y,x = Tuple(ci)
+
+
+# first, we make points list (gpl) file
+for i in 1:nNeurons+1
+    y,x = Tuple(neuron_locs[i])
     # empirically, X ∈ [-7.6, 7.6], Y ∈ [8.3, -8.3]
     # where "(1,1)" is (-7.6,8.3)
     # and "(512,512)" is (7.6,-8.3)
@@ -71,9 +109,12 @@ for (i,ci) in enumerate(neuron_locs[randperm(nNeurons)])
     # and "(256,256)" is (0,0)
     x = (x-W/2)/(W/2) # map to (-1,1)
     x *= 7.6
-    y = (y-W/2)/(W/2)
+    y = (W/2-y)/(W/2)
     y *= 8.3
     
+    # empirical .gpl file laser powers:
+    # {400: 0.76, 100: 0.19, 200: 0.38, 300: 0.57}
+    laserPower = laserPowerPockels/100*0.19
     gplList = new_child(xGplRoot, "PVGalvoPoint")
     # todo use Dict or named argument instead..?
     set_attribute(gplList, "X", "$x")
@@ -82,40 +123,37 @@ for (i,ci) in enumerate(neuron_locs[randperm(nNeurons)])
     set_attribute(gplList, "Index", "$(i-1)")
     set_attribute(gplList, "ActivityType", "MarkPoints")
     set_attribute(gplList, "UncagingLaser", "Uncaging")
-    set_attribute(gplList, "UncagingLaserPower", "0.76")
-    set_attribute(gplList, "Duration", "2")
-    set_attribute(gplList, "IsSpiral", "True")
-    set_attribute(gplList, "SpiralSize", "0.220801205703228") # 7μm
-    set_attribute(gplList, "SpiralRevolutions", "5")
-    set_attribute(gplList, "Z", "0")
-
-    mpe = new_child(xSeriesRoot, "PVMarkPointElement")
-    set_attribute(mpe, "Repetitions", "5")
-    set_attribute(mpe, "UncagingLaser", "Uncaging")
-    set_attribute(mpe, "UncagingLaserPower", "0")
-    set_attribute(mpe, "TriggerFrequency", "None")
-    set_attribute(mpe, "TriggerSelection", "None")
-    set_attribute(mpe, "TriggerCount", "1")
-    set_attribute(mpe, "AsyncSyncFrequency", "None")
-    set_attribute(mpe, "VoltageOutputCategoryName", "None")
-    set_attribute(mpe, "VoltageRecCategoryName", "Current")
-    set_attribute(mpe, "parameterSet", "CurrentSettings")
-
-    # nested under <PVMarkPointElement>!
-    gpe = new_child(mpe, "PVGalvoPointElement")
-    if i==1
-        set_attribute(gpe, "InitialDelay", "15")
+    if i == 1
+        set_attribute(gplList, "UncagingLaserPower", "0")
     else
-        set_attribute(gpe, "InitialDelay", "0.12")
+        set_attribute(gplList, "UncagingLaserPower", "$laserPower")
     end
-    set_attribute(gpe, "InterPointDelay", "248")
-    set_attribute(gpe, "Duration", "170") # from exported file but ????
-    # set_attribute(gpe, "Duration", "2")
-    set_attribute(gpe, "SpiralRevolutions", "5")
-    set_attribute(gpe, "AllPointsAtOnce", "False")
-    set_attribute(gpe, "Points", "Point $i")
-    set_attribute(gpe, "Indices", "$i" )
+    set_attribute(gplList, "Duration", "$dwellTime")
+    set_attribute(gplList, "IsSpiral", "True")
+    set_attribute(gplList, "SpiralSize", "0.220801205703228") # 7μm for 25x objective
+    if i == 1
+        set_attribute(gplList, "SpiralRevolutions", "1")
+    else
+        set_attribute(gplList, "SpiralRevolutions", "$numSpirals")
+    end
+    set_attribute(gplList, "Z", "0")
 end
+
+
+
+# next, we make mark point series (xml) file
+for r in 1:repetitions
+    for i in randperm(nNeurons) .+1
+        createMarkPointElement(xSeriesRoot,1,numSpirals=1, initialDelay=4000)
+        interPointDelay = (1000-numStim*dwellTime)/numSpirals
+        createMarkPointElement(xSeriesRoot,i, numSpirals=numSpirals, interPointDelay=interPointDelay)
+    end
+end
+# interPointDelay = (1000-numStim*dwellTime)/numSpirals
+# createMarkPointElement(xSeriesRoot,1,numSpirals=1, initialDelay=4000)
+# createMarkPointElement(xSeriesRoot,3, numSpirals=numSpirals, interPointDelay=interPointDelay)
+# createMarkPointElement(xSeriesRoot,1,numSpirals=1, initialDelay=4000)
+# createMarkPointElement(xSeriesRoot,3, numSpirals=numSpirals, interPointDelay=interPointDelay)
 
 
 save_file(xmlSeries, joinpath(fishDir, "$(nNeurons)cell_sequential.xml"))

@@ -3,7 +3,7 @@ module Lensman
 using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     ImageDraw, ImageFiltering, PyCall, MAT, Dates, DataStructures,
     Statistics, SharedArrays, CSV, DataFrames, Suppressor, Plots,
-    LinearAlgebra, LibExpat
+    LinearAlgebra, LibExpat, LightXML
 import Base.Threads.@threads
 using Distributed
 import Unitful: μm
@@ -342,7 +342,7 @@ function loadTseries(tifdir)
 end
 
 
-function get_slm_stim_masks(tif_dir, slm_dir, tseries, z_offset)
+function get_slm_stim_masks(tif_dir, slm_dir, z_offset)
     """
     # Arguments
     - `tif_dir::String`: path to directory holding experiment data (<fish_dir>/<exp_name>)
@@ -353,8 +353,9 @@ function get_slm_stim_masks(tif_dir, slm_dir, tseries, z_offset)
     - This function is currently only valid for use with the 25x objective and NOT with
       the 16x (14.4x) objective
     """
-    # Only using tseries for its shape
-    (H, W, Z, T) = size(tseries)
+    # we avoid using tseries since so slow to read in, and don't want to error on
+    # directory not mounted, etc.
+    H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tif_dir)
 
     # TODO(allan.raventos): really should get rid of this `is_1024`
     if H == W == 512
@@ -373,7 +374,8 @@ function get_slm_stim_masks(tif_dir, slm_dir, tseries, z_offset)
     end
     # Assume that "7um" spiral galvo signal is calibrated for 16x, not 25x (16x is actually 14.4x)
     # so that the spiral is smaller than 7um by a factor of 14.4 / 25
-    target_size_px = 7μm * (14.4 / 25) / microscope_units_xy
+    # divide by 2 for radius
+    target_radius_px = 7μm * (14.4 / 25) / microscope_units_xy / 2
 
     # Parse stimulation start and end times from voltage recordings
     voltage_file = glob("*VoltageRecording*.csv", tif_dir)[1]
@@ -405,15 +407,15 @@ function get_slm_stim_masks(tif_dir, slm_dir, tseries, z_offset)
     # Load target groups
     target_groups = [mat["cfg"]["maskS"]["targets"][1]
         for mat in matread.(findMatGroups(slm_exp_dir))]
-
+        
+    @assert length(target_groups) == n_stimuli,
+        "trialOrder has max of $n_stimuli, but target_groups is length $(length(target_groups))"
     ## Array of matrices indicating x, y z (or was it y, x, z..?)
     targets_with_plane_index = mapTargetGroupsToPlane(target_groups, etl_vals,
         is1024=is_1024, zOffset=z_offset)
-
     # Generate mask of targeted locations
     stim_masks = Gray.(zeros(Bool, n_stimuli, Z, H, W))
-    @warn "drawing diameter twice the size as target, maybe change?"
-    # but may add robustness to motion..?
+
     for (stim_idx, target_group) in enumerate(targets_with_plane_index)
         for (x, y, z) in eachrow(target_group)
             draw!(view(stim_masks, stim_idx, z, :, :), Ellipse(CirclePointRadius(x, y, target_size_px)))
@@ -462,7 +464,7 @@ end
 function trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder; pre=16, post=16)
     nStimuli = maximum(trialOrder)
     nTrials = size(trialOrder, 1)
-    nTrialsPerStimulus = Int(size(trialOrder, 1) / nStimuli)
+    nTrialsPerStimulus = [sum(trialOrder .== i) for i in 1:nStimuli]
     @assert nTrials == size(stimStartIdx, 1) # check TTL start-times match
 
     ## avg stim effec
@@ -475,7 +477,10 @@ function trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder; pre=16, pos
         trialType = trialOrder[i]
         avgStim[:,:,:,trialType,:] .+= tseries[:,:,:,start - pre:stop]
     end
-    avgStim ./= nTrialsPerStimulus;
+    for i in 1:nStimuli
+        avgStim[:,:,:,i,:] ./= nTrialsPerStimulus[i]
+    end
+    avgStim
 end
     
 sym_adjust_gamma(image, gamma) = sign.(image) .* adjust_gamma(abs.(image), gamma)
@@ -580,8 +585,9 @@ end
 "Add stim-evoked df/f to cells DataFrame."
 function makeCellsDF(tseries, cells, roiMask; winSize=15, delay=0)
     cellDf_f = zeros(size(cells, 1))
-    for (i, (x, y, z, group, stimStart, stimStop)) in enumerate(eachrow(cells))
-        mask = roiMask[i] 
+    for (i,cell) in enumerate(eachrow(cells))
+        x, y, z, stimStart, stimStop, cellID = cell[[:x, :y, :z, :stimStart, :stimStop, :cellID]]
+        mask = roiMask[cellID]
         neuronTrace = extractTrace(tseries, mask)
         neuronTrace = imageJkalmanFilter(neuronTrace)
         theStart = maximum([stimStart - winSize, 1])
@@ -655,27 +661,29 @@ end
 
 "Create binary mask of HxWxZ for each neuron location."
 function constructROImasks(cells, H, W, Z; targetSizePx)
-    # TODO: this is inefficient if cell if stimulated more than once
-    # since we duplicate mask, maybe use dict instead..?
-    roiMask = []
-    for (x, y, z, group, stimStart, stimStop) = eachrow(cells)
+    @warn "now must index by cellID"
+    nCells = maximum(cells.cellID)
+    roiMask = Dict()
+    for cell in eachrow(cells)
+        (x, y, z, group, stimStart, stimStop, cellID) = cell[[:x,:y,:z,:stimGroup,:stimStart,:stimStop,:cellID]]
         mask = Gray.(zeros(Bool, H, W, Z))
         draw!(view(mask, :, :, z), Ellipse(CirclePointRadius(x, y, targetSizePx)))
         mask = findall(channelview(mask))
-        push!(roiMask, mask)
+        roiMask[cellID] = mask
     end
     roiMask
 end
 
 function constructROImasks(cells, H, W; targetSizePx)
-    # TODO: this is inefficient if cell if stimulated more than once
-    # since we duplicate mask, maybe use dict instead..?
-    roiMask = []
-    for (x,y,z,trialNum,stimStart,stimStop) = eachrow(cells)
+    @warn "now must index by cellID"
+    nCells = maximum(cells.cellID)
+    roiMask = Dict()
+    for cell in eachrow(cells)
+        (x,y,z,trialNum,stimStart,stimStop, cellID) = cell[[:x,:y,:z,:trialNum,:stimStart,:stimStop,:cellID]]
         mask = Gray.(zeros(Bool, H,W))
         draw!(view(mask,:,:), Ellipse(CirclePointRadius(x,y,targetSizePx)))
         mask = findall(channelview(mask))
-        push!(roiMask, mask)
+        roiMask[cellID] = mask
     end
     roiMask
 end
@@ -837,6 +845,7 @@ export read_microns_per_pixel,
     plotStim,
     printMatKeys,
     getImagingPockels,
-    parseXML
+    parseXML,
+    createMarkPointElement
     # , segment_nuclei
 end

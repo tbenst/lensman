@@ -1,7 +1,7 @@
 ## analyze cross-stim from imaging laser
-ENV["DISPLAY"] = "localhost:13"
+ENV["DISPLAY"] = "localhost:12"
 using Lensman, ImageView, Glob, LibExpat, StatsBase, ProgressMeter, DataFrames,
-    MAT, Images, ImageDraw
+    MAT, Images, ImageDraw, Arrow
 import Base.Threads.@threads
 using Unitful: μm, m, s
 import Plots
@@ -13,7 +13,10 @@ matplotlib = plt.matplotlib
 slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 
 ##
-fishDir = "/mnt/deissero/users/tyler/b115/2021-02-02_wt_chrmine_GC6f/fish3/"
+# fishDir = "/mnt/deissero/users/tyler/b115/2021-02-02_wt_chrmine_GC6f/fish3/"
+# fishDir = "/mnt/deissero/users/tyler/b115/2021-02-02_f1_h33r_GC6f_6dpf/fish2/"
+fishDir = "/mnt/deissero/users/tyler/b115/2021-02-08_gcamp6f_6dpf/fish1"
+# "/data/dlab/b115/2021-02-09_wt-chrmine_gcamp6f_7dpf/"
 # fishDir = "/mnt/deissero/users/tyler/b115/2021-02-02_f1_h33r_GC6f_6dpf/fish1_nochrmine"
 # tseriesDirs = glob("TSeries_cross-stim*", fishDir)
 tseriesDirs = glob("TSeries-cross-stim*", fishDir)
@@ -69,8 +72,8 @@ df = DataFrame(time=Float64[], f=Float64[], imagingPower=Int64[], trial=Int64[],
     H, W, T, nTrial = size(tseries)
 
     # use only the stimulation mask
-    avgTrace = reshape(extractTrace(reshape(tseries,H,W,T*nTrial), stim_mask), T, nTrial)
-    # avgTrace = mean(tseries, dims=(1,2))[1,1,:,:]
+    # avgTrace = reshape(extractTrace(reshape(tseries,H,W,T*nTrial), stim_mask), T, nTrial)
+    avgTrace = mean(tseries, dims=(1,2))[1,1,:,:]
     ts = collect(1:T) / frameRate
     for (t,trace) in enumerate(eachcol(avgTrace))
         df = vcat(df,
@@ -92,7 +95,17 @@ Gadfly.draw(SVG(joinpath(plotDir,"cross_stim.svg"), 9inch, 5inch), line)
 Gadfly.draw(PNG(joinpath(plotDir,"cross_stim.png"), 9inch, 5inch), line)
 line
 ##
-tseries = loadTseries(tseriesDirs[end]);
+tseriesDir = tseriesDirs[1]
+expName = splitpath(tseriesDir)[end]
+tseries = loadTseries(tseriesDir);
+expXmlPath = joinpath(tseriesDir,expName*".xml")
+
+tseries_xml = parseXML(expXmlPath);
+expDate, frameRate, etlVals = getExpData(expXmlPath)
+imagingPockels = round(Int,getImagingPockels(tseries_xml))
+
+
+
 # in ChrMine habenula lights up but that's it...?
 # but also in the control fish...? (but was injected...)
 trialAvg = mean(tseries, dims=(4))[:,:,:,1]
@@ -125,5 +138,10 @@ plt.axis("off")
 # plt.imshow(hcat(df_fs...), cmap="RdBu_r", norm=cnorm)
 plt.imshow(df_f, cmap="RdBu_r", norm=cnorm)
 plt.colorbar()
-fig.savefig(joinpath(plotDir,"max_power_cross_stim_df_map.png"))
-joinpath(plotDir,"max_power_cross_stim_df_map.png")
+fig.savefig(joinpath(plotDir,"max_power_cross_stim_df_map_p$imagingPockels.png"))
+joinpath(plotDir,"max_power_cross_stim_df_map_p$imagingPockels.png")
+
+##
+open(joinpath(fishDir, "cross-stim_df.arrow"), "w") do io
+    Arrow.write(io, df)
+end

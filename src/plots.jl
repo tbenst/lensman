@@ -1,7 +1,8 @@
 using Plots, Plots.PlotMeasures
 import Unitful: mW
-function plotStim(tseries,roiMask,cells, idx::Int, volRate; before=30, after=60)
-    roiM = roiMask[idx]
+function plotStim(tseries,roiMask,cells, idx::Int, volRate; before=30, after=60,
+        colorBy=:laserPower)
+    roiM = roiMask[cells[idx,:cellID]]
     x, y, z, _, stimStart, stimStop = cells[idx,:]
     theEnd = minimum([stimStop+after, size(tseries, ndims(tseries))])
     theStart = maximum([stimStart-before, 1])
@@ -17,9 +18,9 @@ function plotStim(tseries,roiMask,cells, idx::Int, volRate; before=30, after=60)
 end
 
 "Plot multiple traces for the same cell on same plot."
-function plotStim(tseries,roiMask,cells, indices::Array{Int,1}, volRate; before=30, after=60)
+function plotStim(tseries,roiMask,cells, indices::Array{Int,1}, volRate; before=30, after=60, colorBy=:laserPower)
     idx = indices[1]
-    roiM = roiMask[idx]
+    roiM = roiMask[cells[idx,:cellID]]
     stimStarts = cells[indices, :stimStart]
     stimStops = cells[indices, :stimStop]
     stimDur = maximum(stimStops .- stimStarts)
@@ -27,22 +28,31 @@ function plotStim(tseries,roiMask,cells, indices::Array{Int,1}, volRate; before=
     # timeRange = (-before+1:postTime)/volRate
     p = nothing
     maxF = 0.0
-    cmax = maximum(cells.laserPower) / mW
+    cmax = maximum(cells[:,colorBy])
+    if colorBy == :laserPower
+        cmax = cmax / mW
+    end
     for idx in indices
-        x, y, z, stimStart, stimStop, laserPower = cells[idx,[:x, :y, :z, :stimStart, :stimStop, :laserPower]]
+        x, y, z, stimStart, stimStop, color = cells[idx,[:x, :y, :z, :stimStart, :stimStop, colorBy]]
         theEnd = minimum([stimStop+after, size(tseries, ndims(tseries))])
         theStart = maximum([stimStart-before, 1])
         plotRange = theStart:theEnd
         timeRange = (plotRange .- stimStart) ./ volRate
         fluorescentTrace = extractTrace(tseries[:,:,:,plotRange], roiM)
         fluorescentTrace = imageJkalmanFilter(fluorescentTrace)
+        f0 = mean(fluorescentTrace[1:before])
+        fluorescentTrace .-= f0
+        fluorescentTrace ./= (f0 + 10)
+        if colorBy == :laserPower
+            color = color / mW
+        end
         if isnothing(p)
             p = plot(timeRange, fluorescentTrace, left_margin=50px, legend=false,
-                line_z=laserPower/mW, seriescolor=:lajolla, clims=(0,cmax), colorbar=false)
+                line_z=color, seriescolor=:lajolla, clims=(0,cmax), colorbar=false)
                 # xlabel="time (s)", ylabel="fluorescence")
         else
             plot!(timeRange, fluorescentTrace, left_margin=50px, legend=false,
-                line_z=laserPower/mW, seriescolor=:lajolla, clims=(0,cmax), colorbar=false)
+                line_z=color, seriescolor=:lajolla, clims=(0,cmax), colorbar=false)
         end
         maxF = maximum([maxF, maximum(fluorescentTrace)])
     end
@@ -52,7 +62,7 @@ function plotStim(tseries,roiMask,cells, indices::Array{Int,1}, volRate; before=
 end
 
 "Plot multiple traces for the same cell on same plot if recording multiple trials."
-function plotStim(tseries,roiMask,cells, indices::Array{Int,1}, volRate, trial::Bool; before=30, after=60)
+function plotStim(tseries,roiMask,cells, indices::Array{Int,1}, volRate, trial::Bool; before=30, after=60, colorBy=:laserPower)
     if ~trial
         plotStim(tseries,roiMask,cells, indices, volRate; before=before, after=after)
     end
@@ -65,22 +75,29 @@ function plotStim(tseries,roiMask,cells, indices::Array{Int,1}, volRate, trial::
     # timeRange = (-before+1:postTime)/volRate
     p = nothing
     maxF = 0.0
-    cmax = maximum(cells.laserPower) / mW
+    cmax = maximum(cells[:, colorBy])
+    if colorBy == :laserPower
+        cmax = cmax / mW
+    end
     for idx in indices
-        x, y, z, stimStart, stimStop, laserPower, trialNum = cells[idx,[:x, :y, :z, :stimStart, :stimStop, :laserPower, :trialNum]]
+        x, y, z, stimStart, stimStop, color, trialNum = cells[idx,[:x, :y, :z, :stimStart, :stimStop, colorBy, :trialNum]]
         theEnd = minimum([stimStop+after, size(tseries, ndims(tseries)-1)])
         theStart = maximum([stimStart-before, 1])
         plotRange = theStart:theEnd
         timeRange = (plotRange .- stimStart) ./ volRate
         fluorescentTrace = extractTrace(tseries[:,:,plotRange, trialNum], roiM)
         fluorescentTrace = imageJkalmanFilter(fluorescentTrace)
+        if colorBy == :laserPower
+            color = color / mW
+        end
+
         if isnothing(p)
             p = plot(timeRange, fluorescentTrace, left_margin=50px, legend=false,
-                line_z=laserPower/mW, seriescolor=:lajolla, clims=(0,cmax), colorbar=false)
+                line_z=color, seriescolor=:lajolla, clims=(0,cmax), colorbar=false)
                 # xlabel="time (s)", ylabel="fluorescence")
         else
             plot!(timeRange, fluorescentTrace, left_margin=50px, legend=false,
-                line_z=laserPower/mW, seriescolor=:lajolla, clims=(0,cmax), colorbar=false)
+                line_z=color, seriescolor=:lajolla, clims=(0,cmax), colorbar=false)
         end
         maxF = maximum([maxF, maximum(fluorescentTrace)])
     end

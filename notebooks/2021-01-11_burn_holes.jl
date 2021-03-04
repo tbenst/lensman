@@ -27,14 +27,16 @@ create_slm_stim([targets1],
 
 
 ##
-
-topOffset = float(uconvert(m, -20μm)) / m
-bottomOffset = float(uconvert(m, 40μm)) / m
+slmNum = 2
+topOffset = float(uconvert(m, -50μm)) / m
+bottomOffset = float(uconvert(m, 50μm)) / m
 targets1 = [128. 128. topOffset; 384. 384. topOffset; 128. 384. topOffset; 384. 128. topOffset;]
 targets2 = [128. 256. bottomOffset; 256. 128. bottomOffset; 256. 384. bottomOffset; 384. 256. bottomOffset;]
-
+topOffsetStr = replace(string(topOffset), " μm"=>"_um")
+bottomOffsetStr = replace(string(bottomOffset), " μm"=>"_um")
 create_slm_stim([targets1, targets2],
-    "/mnt/deissero/users/tyler/slm/masks/2020-11-16_registration_8square_-20_40um")
+    "/mnt/deissero/users/tyler/slm/masks/2021-02-15_8square_SLM$(slmNum)_offset_$(bottomOffsetStr)_$(topOffsetStr)",
+    slmNum=slmNum)
 
 ##
 topOffset = float(uconvert(m, 20μm)) / m

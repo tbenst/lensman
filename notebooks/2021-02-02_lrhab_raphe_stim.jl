@@ -10,7 +10,7 @@
 ## run cell to init VSCode Julia
 @warn raw"ensure using Olympus 25x in Prairie View, else ETL will be off"
 ##
-ENV["DISPLAY"] = "localhost:15"
+ENV["DISPLAY"] = "localhost:13"
 using FileIO, NRRD, ImageView, HDF5, MAT, Images,
     Unitful, AxisArrays, StaticArrays, CoordinateTransformations,
     ImageView, TestImages, NRRD, LinearAlgebra, ImageMagick,
@@ -33,6 +33,7 @@ zOffset = offset * 1e6
 ##
 # fishDir = "/mnt/b115_data/tyler/2021-02-02_wt_chrmine_GC6f/fish4"
 # fishDir = "/mnt/b115_data/tyler/2021-02-09_gcamp6f_7dpf/fish2"
+fishDir = "/mnt/deissero/users/tyler/b115/2021-02-16_6f_h33r_f0_6dpf/fish2"
 
 zseriesDir = glob("ZSeries*", fishDir)[end]
 
@@ -46,7 +47,7 @@ elseif size(zseries,1)==1024
 else
     @error "unknown microscope units"
 end
-
+H, W, Z
 ##
 # zseries = centered(zseries) # need centered for qd registration
 zseries = AxisArray(zseries, (:y, :x, :z), microscope_units)
@@ -132,8 +133,8 @@ warpedname = joinpath(outname*"_Warped.nii.gz")
 # if this fails, tmpfs may be out of space
 # try `rm -rf /run/user/1000/tyler/ANTs/`
 zbrain_registered = niread(warpedname);
-println("finished registering!")
 adj_zbrain_registered = adjust_histogram(imadjustintensity(zbrain_registered), Equalization());
+println("finished registering!")
 
 ## visualize results as sanity check
 im = RGB.(adj_zbrain_registered)
@@ -328,9 +329,17 @@ if isfile(slmOutName*".txt")
     error("file already exists! refusing to clobber")
 end
 
+if fishDir[1:13] == "/mnt/deissero"
+    localToRemote = matpath -> "O:\\" * replace(matpath[14:end], "/" => "\\")
+elseif fishDir[1:12] == "/mnt/b115_data"
+    localToRemote = matpath -> "Y:" * replace(matpath[15:end], "/" => "\\")
+else
+    error("need to manually specify remote path.")
+end
+    
 create_slm_stim([left_hab_targets, right_hab_targets, raphe_targets, control_targets],
     slmOutName,
-    localToRemote = matpath -> "Y:" * replace(matpath[15:end], "/" => "\\"),
+    localToRemote = localToRemote,
     powers=[1], slmNum=slmNum)
 
 ## trialOrder
@@ -347,11 +356,12 @@ for i in 2:nTrials
     candidateTransitionsLeft = findall(transitionsLeft[prevStim,:] .> 0)
     nextStim = rand(candidateTransitionsLeft)
     push!(trialOrder, nextStim)
-    transitionsLeft[prevStim,nextStim] -= 1
+    transitionsLeft[nextStim,prevStim] -= 1
 end
-
+@assert length(trialOrder) == nTrials
 ##
 trialOrderDF = DataFrame(copy(hcat(collect(1:nTrials), trialOrder)'))
 
 CSV.write(outname*"_trialOrder.txt", trialOrderDF, header=false, delim="\t")
 println("wrote $(outname*"_trialOrder.txt")")
+println("be sure to modify mSLM/SetupFiles/Experiments/<TODAY>/trialOrder.txt")
