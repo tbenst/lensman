@@ -57,7 +57,7 @@ avgImages = []
     avgTrace = mean(tseries, dims=(1,2))[1,1,:,:]
     push!(avgImages, mean(tseries, dims=(3,4))[:,:,1,1])
     ts = collect(1:T) / frameRate
-    # TODO: mean, ymin, ymax seem wrong / duplicate...?
+    # TODO: mean, ymin, ymax are duplicated...?
     for (t,trace) in enumerate(eachcol(avgTrace))
         df = vcat(df,
             DataFrame(time=ts, f=trace, imagingPower=imagingPockels,
@@ -107,7 +107,7 @@ df = vcat(dfWT, dfRS, dfControl)
 function rawToDf_f(fluor::DataFrame, before=50)
     fluorDF = []
     # operate over each cell's trace...
-    for df in groupby(fluor, [:genotype, :trial])
+    for df in groupby(fluor, [:genotype, :trial, :imagingPower])
         kalmanFilt = imageJkalmanFilter(df.f)
         f0 = mean(kalmanFilt[1:before])
         df = copy(df)
@@ -119,13 +119,33 @@ function rawToDf_f(fluor::DataFrame, before=50)
     fluorDF = vcat(fluorDF...)
 end
 
-df_f = rawToDf_f(df)
-insertcols!(dfControl, size(dfControl,2)+1, :genotype => "Control")
+df_f = DataFrame(time=Float64[], imagingPower=String[], mean=Float64[],
+    ymin=Float64[], ymax=Float64[], genotype=String[])
+    
+for df in groupby(rawToDf_f(df), [:genotype, :time, :imagingPower])
+    time = df[1,:time]
+    imagingPower = df[1,:imagingPower]
+    if imagingPower==140
+        imagingPower = "10mW"
+    elseif imagingPower==125
+        imagingPower = "8mW"
+    end
+    genotype = df[1,:genotype]
+    df_fs = df.df_f
+    the_mean = mean(df_fs)
+    ymin = percentile(df_fs,2.5)
+    ymax = percentile(df_fs,97.5)
+    push!(df_f, (mean=the_mean, imagingPower=imagingPower, time=time,
+        ymin=ymin, ymax=ymax, genotype=genotype))
+end
 ##
 
 line = plot(df_f, x=:time,
     xgroup=:imagingPower,
-    y=:df_f,
-    # ymin=:ymin,
-    # ymax=:ymax,
+    y=:mean,
+    ymin=:ymin,
+    ymax=:ymax,
+    color=:genotype,
     Geom.subplot_grid(Geom.line, Geom.ribbon))
+
+Gadfly.draw(PNG(joinpath("/mnt/deissero/users/tyler/plots/","2021-02-23_forebrain_cross-stim-rs-wt-control.png"), 9inch, 5inch), line)
