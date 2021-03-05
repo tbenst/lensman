@@ -849,6 +849,7 @@ export read_microns_per_pixel,
     printMatKeys,
     getImagingPockels,
     parseXML,
-    createMarkPointElement
+    createMarkPointElement,
+    medianfilt
     # , segment_nuclei
 end

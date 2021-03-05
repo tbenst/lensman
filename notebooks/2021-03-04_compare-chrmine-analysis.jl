@@ -17,7 +17,8 @@ h33r2 = h33r2_path*"_cells_fluorescence.arrow"
 rs1_path = joinpath(tseriesRootDir, "2021-01-26_rsChRmine_6f_7dpf/fish1/TSeries-31concurrent-168trial-3rep-4power-043")
 rs1_cells = rs1_path*"_cellsDF.arrow"
 rs1 = rs1_path*"_cells_fluorescence.arrow"
-wt1_path = "$tseriesRootDir/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043"
+# wt1_path = "$tseriesRootDir/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043"
+wt1_path = "$tseriesRootDir/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-10zplane-077"
 wt1_cells = wt1_path*"_cellsDF.arrow"
 wt1 = wt1_path*"_cells_fluorescence.arrow"
 # tseriesDir = joinpath(tseriesRootDir, "2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2/TSeries-128cell-4concurrent-3power-skip7-044")
@@ -44,21 +45,28 @@ rs1.cellID .+= 20000
 
 wt1 = copy(Arrow.Table(wt1) |> DataFrame);
 insertcols!(wt1, 1+size(wt1,2), :genotype => "ChRmine")
-insertcols!(wt1, :stimFreq =>
-    [wt1_cells[findall(wt1_cells.stimStart .== start)[1],:stimFreq] for start in wt1.stimStart])
-insertcols!(wt1, :laserPower =>
-    [wt1_cells[findall(wt1_cells.stimStart .== start)[1],:laserPower] for start in wt1.stimStart])
+# insertcols!(wt1, :stimFreq =>
+#     [wt1_cells[findall(wt1_cells.stimStart .== start)[1],:stimFreq] for start in wt1.stimStart])
+# insertcols!(wt1, :laserPower =>
+#     [wt1_cells[findall(wt1_cells.stimStart .== start)[1],:laserPower] for start in wt1.stimStart])
 
 
 fluor = vcat(h33r2, rs1, wt1);
+plotDir = "$tseriesRootDir/../plots"
 
 ##
 
-function rawToDf_f(fluor::DataFrame, before=before)
+function rawToDf_f(fluor::DataFrame)
     fluorDF = []
     # operate over each cell's trace...
+    @warn "hack hardcoded `before`"
     for df in groupby(fluor, [:cellID, :stimStart])
-        kalmanFilt = imageJkalmanFilter(medianfilter(df.f,3))
+        if df.genotype[1] == "h33r-ChRmine"
+            before = 60 # 2 seconds
+        else
+            before = 6
+        end
+        kalmanFilt = imageJkalmanFilter(medianfilt(df.f,3))
         f0 = mean(kalmanFilt[1:before])
         df = copy(df)
         df_f = @. (kalmanFilt - f0) / (f0 + 10)
@@ -70,41 +78,68 @@ function rawToDf_f(fluor::DataFrame, before=before)
 end
 
 fluorDF = rawToDf_f(fluor)
-insertcols!(fluorDF, :nConcurrent => 8)
-meanTimeDf = combine(groupby(fluorDF, [:cellID, :time, :nConcurrent]), :df_f => mean)
-
-
-## 32 concurrent vs 8 concurrent
-# idxs = map(c->c in cellIDrankings[1:nplots], meanTimeDf[meanTimeDf.cellID)
-plots = Gadfly.Plot[]
-cellIDs = unique(cells8.cellID)
-nCells = length(cellIDs)
-for cellID in cellIDs[randperm(nCells)[1:nplots]]
-    idxs = meanTimeDf.cellID .== cellID
-    push!(plots, Gadfly.plot(meanTimeDf[idxs,:], x=:time, y=:df_f_mean, color=:nConcurrent,
-        Gadfly.Geom.line, ))
-end
-
-p_nConcurrent = gridstack(reshape(plots, 8,5))
-plotPath = joinpath(plotDir, "$(expName)_nConcurrent_shuffle_3.png")
-img = PNG(plotPath, 32inch, 16inch)
-Gadfly.draw(img, p_nConcurrent)
-@show plotPath
-p_nConcurrent
+meanTimeDf = combine(groupby(fluorDF, [:cellID, :time, :stimFreq, :laserPower, :genotype]), :df_f => mean)
 
 ##
-plots = Gadfly.Plot[]
-for cellID in cellIDs[randperm(nCells)[1:nplots]]
-    idxs = fluorDF.cellID .== cellID
-    push!(plots, Gadfly.plot(fluorDF[idxs,:], x=:time, y=:df_f, color=:stimFreq,
-        Gadfly.Geom.line, ))
+df_fs = DataFrame(cellID=UInt32[], stimFreq=Int64[], laserPower=Float64[],
+    genotype=String[], df_f=Float64[])
+for df in groupby(meanTimeDf, [:laserPower, :stimFreq, :cellID])
+    cellID, stimFreq, laserPower, genotype = df[1,[:cellID, :stimFreq, :laserPower, :genotype]]
+    idxs = (df.time .> 1.1) .& (df.time .<= 3.1)
+    push!(df_fs, (cellID=cellID, stimFreq=stimFreq, laserPower=laserPower,
+        genotype=genotype, df_f=mean(df.df_f_mean[idxs])))
 end
 
-p_nConcurrent = gridstack(reshape(plots, 8,5))
-plotPath = joinpath(plotDir, "$(expName)_stimFreq.png")
-img = PNG(plotPath, 32inch, 16inch)
+Gadfly.plot(df_fs, x=:df_f, ygroup=:genotype,
+    Gadfly.Geom.subplot_grid(Gadfly.Geom.histogram()))
+
+##
+nplots = 40
+genotypes = unique(fluorDF.genotype)
+@show genotypes
+plots = Gadfly.Plot[]
+for gen in unique(fluor.genotype[[3]])
+    cellIDs = unique(fluorDF[fluorDF.genotype .== gen,:cellID])
+    nCells = length(cellIDs)
+    # idxs = cellIDs[randperm(nCells)[1:nplots]]
+    # idxs = df_fs[(df_fs.df_f .>= 0.50) .& (df_fs.genotype .== gen), :cellID]
+    idxs = df_fs[(df_fs.df_f .>= 0.75) .& (df_fs.genotype .== gen), :cellID]
+    idxs = idxs[randperm(length(idxs))[1:nplots]]
+    for cellID in idxs
+        idxs = meanTimeDf.cellID .== cellID
+        push!(plots, Gadfly.plot(meanTimeDf[idxs,:], x=:time, y=:df_f_mean, color=:laserPower,
+            Gadfly.Geom.line, Gadfly.Guide.title("cellID $cellID")))
+    end
+end
+
+p_nConcurrent = gridstack(reshape(plots[nplots*2+1:nplots*3], 8,5))
+plotPath = joinpath(plotDir, "debug.png")
+img = SVG(plotPath, 32inch, 16inch)
 Gadfly.draw(img, p_nConcurrent)
 @show plotPath
 p_nConcurrent
 
-## TODO: fit/calculate tau off & plot across population...
+
+h33r_good_idxs = UInt32[10078, 10087, 10184, 10089, 10216, 10077, 10083, 10124, 10200, 10120, 10192, 10226]
+@assert length(unique(h33r_good_idxs)) == 12
+##
+
+idxs = map(i->i in h33r_good_idxs, meanTimeDf.cellID)
+theMean = combine(groupby(meanTimeDf[idxs,:], :time), :df_f_mean => mean)
+time = theMean[:,1]
+ts = time .< 15
+time = time[ts]
+theMean = theMean[ts,2]
+theMax = combine(groupby(meanTimeDf[idxs,:], :time), :df_f_mean => (p->percentile(p,95)))[ts,2]
+theMin = combine(groupby(meanTimeDf[idxs,:], :time), :df_f_mean => (p->percentile(p,5)))[ts,2]
+# p = Gadfly.plot(meanTimeDf[idxs,:], x=:time, y=:df_f_mean,
+#     color=:cellID, Gadfly.Geom.line, Gadfly.Guide.title("H33R-ChRmine"))
+p = Gadfly.plot(x=time, y=theMean, ymin=theMin, ymax=theMax,
+    Gadfly.Geom.line, Gadfly.Geom.ribbon, Gadfly.Guide.title("H33R-ChRmine (12 cells; 95% CI)"),
+    Gadfly.Guide.xlabel("time (s)"), Gadfly.Guide.ylabel("Δf/f"))
+
+plotPath = joinpath(plotDir, "H33R.svg")
+img = SVG(plotPath, 8inch, 4inch)
+Gadfly.draw(img, p)
+@show plotPath
+p
