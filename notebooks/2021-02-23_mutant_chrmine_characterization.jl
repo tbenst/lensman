@@ -22,6 +22,7 @@ tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 # tseriesDir = joinpath(tseriesRootDir, "2021-01-26_rsChRmine_6f_7dpf/fish1/TSeries-31concurrent-168trial-3rep-4power-043")
 tseriesDir = joinpath(tseriesRootDir, "2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2/TSeries-128cell-4concurrent-3power-skip7-044")
 tseriesDir = "$tseriesRootDir/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043"
+tseriesDir = "$tseriesRootDir/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-10zplane-077"
 
 # possibly compare to...
 # 2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/ (4power)
@@ -41,8 +42,8 @@ end
 
 fishDir = joinpath(splitpath(tseriesDir)[1:end-1]...)
 expName = splitpath(tseriesDir)[end]
-# tylerSLMDir = joinpath(fishDir, "slm")
-tylerSLMDir = fishDir
+tylerSLMDir = joinpath(fishDir, "slm")
+# tylerSLMDir = fishDir
 
 tseries = loadTseries(tseriesDir);
 # tyh5
@@ -78,7 +79,7 @@ volRate = frameRate / Z
 slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
 trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
 
-# read power
+## read power
 @assert length(glob("*.txt", tylerSLMDir)) == 1 # if not, need to be careful to choose
 slmTxtFile = glob("*.txt", tylerSLMDir)[1]
 stimGroupDF = CSV.File(open(read, slmTxtFile), header=["filepath", "powerFraction"]) |> DataFrame
@@ -210,10 +211,7 @@ open(tseriesDir*"_cellsDF.arrow", "w") do io
     Arrow.write(io, tempDF)
 end
 
-
-
-##
-histogram(cellsDF.df_f)
+# histogram(cellsDF.df_f)
 
 ##
 # volRate = 30
@@ -251,7 +249,7 @@ p_df_map
 
 ## extract and save traces for easy plotting later...
 fluor = DataFrame(time=Float64[], f=Float64[], cellID=UInt32[], stimStart=UInt32[],
-    laserPower=UInt32[], stimFreq=Float64[])
+    laserPower=Float64[], stimFreq=Float64[])
 
 # TODO also compare on target vs off-target traces...? Number of off-target change
 # as function of # of cell stim?
@@ -268,7 +266,7 @@ for cell in eachrow(cells)
     fluorescentTrace = extractTrace(tseries[:,:,:,plotRange], roiM)
     for (t,f) in zip(timeRange, fluorescentTrace)
         push!(fluor, (time=t, f=f, cellID=cellID, stimStart=stimStart,
-            stimFreq=stimFreq, laserPower=laserPower))
+            stimFreq=stimFreq, laserPower=laserPower ./ 1mW))
     end
 end
 first(fluor,5)
