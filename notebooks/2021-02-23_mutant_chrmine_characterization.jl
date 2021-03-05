@@ -3,9 +3,10 @@
 using Sockets, Observables, Statistics, Images, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
-    Compose, ImageMagick, Random, PyCall, Arrow, ProgressMeter
+    Compose, ImageMagick, Random, PyCall, Arrow, ProgressMeter,
+    RollingFunctions
 import Gadfly
-using Unitful: μm, m, s
+using Unitful: μm, m, s, mW
 
 ##
 # offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
@@ -15,9 +16,9 @@ tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055"
 # can't fit in memory on lensman, so use deis
-# tseriesDir = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051")
+tseriesDir = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051")
 # tseriesDir = joinpath(tseriesRootDir, "2021-01-26_rsChRmine_6f_7dpf/fish1/TSeries-31concurrent-168trial-3rep-4power-043")
-tseriesDir = joinpath(tseriesRootDir, "2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2/TSeries-128cell-4concurrent-3power-skip7-044")
+# tseriesDir = joinpath(tseriesRootDir, "2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2/TSeries-128cell-4concurrent-3power-skip7-044")
 
 # possibly compare to...
 # 2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/ (4power)
@@ -30,10 +31,15 @@ if tseriesDir[end] == "/"
     tseriesDir = tseriesDir[1:end-1]
 end
 
+if occursin("freq", tseriesDir)
+    exp_param = :stimFreq
+elseif occursin("power", tseriesDir)
+    exp_param = :laserPower
+end
 
 fishDir = joinpath(splitpath(tseriesDir)[1:end-1]...)
 expName = splitpath(tseriesDir)[end]
-
+tylerSLMDir = joinpath(fishDir, "slm")
 tseries = loadTseries(tseriesDir);
 # tyh5
 
@@ -68,12 +74,38 @@ volRate = frameRate / Z
 slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
 trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
 
+# read power
+@assert length(glob("*.txt", tylerSLMDir)) == 1 # if not, need to be careful to choose
+slmTxtFile = glob("*.txt", tylerSLMDir)[1]
+stimGroupDF = CSV.File(open(read, slmTxtFile), header=["filepath", "powerFraction"]) |> DataFrame
+stimGroupDF = stimGroupDF[trialOrder,:]
+
+
+getMatStimFreq(mat) = sum((~).(sum.(mat["cfg"]["exp"]["targets"]) .≈ 0.0))*5
+getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0,0) ? 1 : 2
+
+mat = matread.(findMatGroups(slmExpDir)[1])
+slmNum = getSLMnum(mat)
+
+##
 @warn "hardcoded laser power"
 firstTargetGroup = matread.(findMatGroups(slmExpDir)[1])
 powerPerCell = firstTargetGroup["cfg"]["mode"]["BHV001"]["FOV"]["PowerPerCell"]
-# slm1Power = 850
-# slm1powerPerCell = slm1Power * powerPerCell / 1000
-
+if expDate < Date("2021-02-24")
+    slm1Power = 570mW
+    slm2Power = 380mW
+elseif expDate <= Date("2021-03-01")
+    slm1Power = 450mW
+    slm2Power = 375mW
+else
+    slm1Power = 377mW
+    slm2Power = 305mW
+end
+if slmNum == 1
+    slmpowerPerCell = slm1Power * powerPerCell / 1000
+elseif slmNum == 2
+    slmpowerPerCell = slm2Power * powerPerCell / 1000
+end
 
 stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFile, Z)
 allWithin(diff(stimStartIdx),0.05)
@@ -116,6 +148,7 @@ is1024=is1024, zOffset=zOffset)
 # trialOrder = trialOrder[7:end]
 cells = makeCellsDF(targetsWithPlaneIndex, stimStartIdx, stimEndIdx, trialOrder)
 cells[!, :stimFreq] = map(g->group_stim_freq[trialOrder][g], cells.stimGroup)
+cells[!, :laserPower] = round.(typeof(1.0mW), map(g->stimGroupDF.powerFraction[g], cells.stimGroup) .* slmpowerPerCell, digits=1)
 
 stimLocs = map(CartesianIndex ∘ Tuple, eachrow(cells[:,[2,1]]))
 
@@ -167,7 +200,9 @@ numNaN = sum(isnan.(cellsDF.df_f))
 # @show first(cellsDF[rankings[numNaN+1:end],:],50)
 
 open(tseriesDir*"_cellsDF.arrow", "w") do io
-    Arrow.write(io, cellsDF)
+    tempDF = copy(cellsDF)
+    tempDF[!, :laserPower] ./= 1mW
+    Arrow.write(io, tempDF)
 end
 
 
@@ -188,11 +223,11 @@ nplots = 40
 # for idx in 1:nplots
 @showprogress for cellID in cellIDrankings[1:nplots]
     indices = findall(cellsDF.cellID .== cellID)
-    push!(plots, plotStim(tseries,roiMask,cells,indices, volRate, before=before, after=after, colorBy=:stimFreq))
+    push!(plots, plotStim(tseries,roiMask,cells,indices, volRate, before=before, after=after, colorBy=exp_param))
 end
 p = plot(plots..., layout=(8,5), legend=true, size=(1024*4,1024*2))
-savefig(p, joinpath(plotDir,"$(expName)_top40_traces.png"))
-savefig(p, joinpath(plotDir,"$(expName)_top40_traces.svg"))
+savefig(p, joinpath(plotDir,"$(expName)_top40_traces_rollmedian.png"))
+savefig(p, joinpath(plotDir,"$(expName)_top40_traces_rollmedian.svg"))
 p
 ##
 
@@ -210,7 +245,9 @@ Gadfly.draw(img, p_df_map)
 p_df_map
 
 ## extract and save traces for easy plotting later...
-fluor = DataFrame(time=Float64[], f=Float64[], cellID=UInt32[], stimStart=UInt32[])
+fluor = DataFrame(time=Float64[], f=Float64[], cellID=UInt32[], stimStart=UInt32[],
+    laserPower=UInt32[], stimFreq=Float64[])
+
 
 # TODO also compare on target vs off-target traces...? Number of off-target change
 # as function of # of cell stim?
@@ -218,15 +255,15 @@ fluor = DataFrame(time=Float64[], f=Float64[], cellID=UInt32[], stimStart=UInt32
 nTime = before + maximum(cells.stimStop - cells.stimStart) + after
 
 for cell in eachrow(cells)
-    x, y, z, stimStart, stimStop, stimFreq, cellID = cell[[:x, :y, :z, :stimStart, :stimStop, :stimFreq, :cellID]]
-    roiM = roiMask[cellID]
+    x, y, z, stimStart, stimStop, laserPower, stimFreq, cellID = cell[[:x, :y, :z, :stimStart, :stimStop, :laserPower, :stimFreq, :cellID]]    roiM = roiMask[cellID]
     theEnd = minimum([stimStop+after, size(tseries, ndims(tseries))])
     theStart = maximum([stimStart-before, 1])
     plotRange = theStart:theEnd
     timeRange = (plotRange .- stimStart) ./ volRate
     fluorescentTrace = extractTrace(tseries[:,:,:,plotRange], roiM)
     for (t,f) in zip(timeRange, fluorescentTrace)
-        push!(fluor, (time=t, f=f, cellID=cellID, stimStart=stimStart))
+        push!(fluor, (time=t, f=f, cellID=cellID, stimStart=stimStart,
+            stimFreq=stimFreq, laserPower=laserPower))
     end
 end
 first(fluor,5)

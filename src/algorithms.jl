@@ -380,3 +380,9 @@ function entangledInfluenceMaps(cells::DataFrame, tseries;
     
     entangledImaps
 end
+
+"Median filter, return same length vector."
+function medianfilt(x, window=3)
+    filtered = rollmedian(x, window)
+    vcat([x[1]], filtered, [x[end]])
+end

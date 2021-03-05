@@ -28,62 +28,37 @@ wt1_cells = copy(Arrow.Table(wt1_cells) |> DataFrame);
 # h33r1 = copy(Arrow.Table(h33r1) |> DataFrame);
 h33r2 = copy(Arrow.Table(h33r2) |> DataFrame);
 insertcols!(h33r2, 1+size(h33r2,2), :genotype => "h33r-ChRmine")
+insertcols!(h33r2, :stimFreq =>
+    [h33r2_cells[findall(h33r2_cells.stimStart .== start)[1],:stimFreq] for start in h33r2.stimStart])
+insertcols!(h33r2, :laserPower =>
+    [h33r2_cells[findall(h33r2_cells.stimStart .== start)[1],:laserPower] for start in h33r2.stimStart])
 h33r2.cellID .+= 10000 # ensure unique
+
 rs1 = copy(Arrow.Table(rs1) |> DataFrame);
 insertcols!(rs1, 1+size(rs1,2), :genotype => "rsChRmine")
+insertcols!(rs1, :stimFreq =>
+    [rs1_cells[findall(rs1_cells.stimStart .== start)[1],:stimFreq] for start in rs1.stimStart])
+insertcols!(rs1, :laserPower =>
+    [rs1_cells[findall(rs1_cells.stimStart .== start)[1],:laserPower] for start in rs1.stimStart])
 rs1.cellID .+= 20000
+
 wt1 = copy(Arrow.Table(wt1) |> DataFrame);
 insertcols!(wt1, 1+size(wt1,2), :genotype => "ChRmine")
-
-
+insertcols!(wt1, :stimFreq =>
+    [wt1_cells[findall(wt1_cells.stimStart .== start)[1],:stimFreq] for start in wt1.stimStart])
+insertcols!(wt1, :laserPower =>
+    [wt1_cells[findall(wt1_cells.stimStart .== start)[1],:laserPower] for start in wt1.stimStart])
 
 
 fluor = vcat(h33r2, rs1, wt1);
 
-## plot next-time-step df histogram
-diffs = Float64[]
-for df in groupby(fluor, [:cellID, :stimStart])
-    diffs = vcat(diffs,diff(df.f))
-end
-histogram(diffs, yaxis=:log)
-## cellID is not matched in two experiments :/
-# need to match by (x,y)
-xyToCellID = Dict()
-for cell in eachrow(cells32)
-    x, y, cellID = cell[[:x,:y,:cellID]]
-    xyToCellID[(x,y)] = cellID
-end
-length(xyToCellID)
-
-cellIDmap = Dict()
-for i in 1:size(cells8,1)
-    x, y, cellID = cells8[i,[:x,:y,:cellID]]
-    newID = xyToCellID[(x,y)]
-    cellIDmap[cellID] = newID
-    cells8[i,:cellID] = newID
-end
-
-for i in 1:size(fluor8,1)
-    fluor8[i,:cellID] = cellIDmap[fluor8[i,:cellID]]
-end
-
-## add stim freq to fluor...
-
-insertcols!(fluor8, :stimFreq =>
-    [cells8[findall(cells8.stimStart .== start)[1],:stimFreq] for start in fluor8.stimStart])
-insertcols!(fluor32, :stimFreq =>
-    [cells32[findall(cells32.stimStart .== start)[1],:stimFreq] for start in fluor32.stimStart])
 ##
-
-function medianfilter(trace, window=3)
-    mapwindow(median, trace, (3,))
-end
 
 function rawToDf_f(fluor::DataFrame, before=before)
     fluorDF = []
     # operate over each cell's trace...
     for df in groupby(fluor, [:cellID, :stimStart])
-        kalmanFilt = imageJkalmanFilter(rollmedian(df.f,3))
+        kalmanFilt = imageJkalmanFilter(medianfilter(df.f,3))
         f0 = mean(kalmanFilt[1:before])
         df = copy(df)
         df_f = @. (kalmanFilt - f0) / (f0 + 10)
