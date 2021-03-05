@@ -1,6 +1,4 @@
 {
     "python.pythonPath": "/home/tyler/.conda/bin/python",
-    "julia.executablePath": "julia",
-    "julia.NumThreads": 36,
     "nixEnvSelector.nixFile": "NOT_MODIFIED_ENV"
 }

@@ -1,9 +1,9 @@
-## compare 
 # ENV["DISPLAY"] = "localhost:11.0"
 using Sockets, Observables, Statistics, Images, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
     Compose, ImageMagick, Random, PyCall, Arrow, ProgressMeter
+# using ImageView
 import Gadfly
 using Unitful: μm, m, s
 
@@ -14,12 +14,16 @@ zOffset = offset * 1e6
 tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055"
-tseriesDir = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051") # can't fit in memory :/
+# tseriesDir = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051") # can't fit in memory :/
+
 
 # possibly compare to...
 # 2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/ (4power)
 # 2021-02-15_wt_chrmine_gc6f/fish1/TSeries-1024cell-4freq-skip-first-066 (4freq; too large for memory on lensman)
 
+# tseriesDir = "/data/dlab/b115/2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051"
+# tseriesDir = "/oak/stanford/groups/deissero/users/tyler/b115/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043"
+# tseriesDir = "/oak/stanford/groups/deissero/users/tyler/b115/2021-01-25_rsChrmine_6f_6dpf/fish3/TSeries-1024cell-32concurrent-4power-046" # looks bad
 
 # tyh5Path = tseriesDir
 
@@ -31,17 +35,17 @@ end
 fishDir = joinpath(splitpath(tseriesDir)[1:end-1]...)
 expName = splitpath(tseriesDir)[end]
 
-tseries = loadTseries(tseriesDir);
+# tseries = loadTseries(tseriesDir);
+
 # tyh5
+tyh5Path = glob("*.ty.h5", fishDir)
+@assert length(tyh5Path)==1
+tyh5Path = tyh5Path[1]
 
-# fishDir = joinpath(splitpath(tyh5Path)[1:end-1]...)
-# expName = replace(splitpath(tyh5Path)[end], ".ty.h5" => "")
-# tseriesDir = joinpath(fishDir, expName)
-
-# tseries = h5read(tyh5Path, "/imaging/raw")
-# @assert size(tseries,4)==1
-# tseries = permutedims(tseries, (2,1,3,4,5))
-# tseries = tseries[:,:,:,1,:];
+tseries = h5read(tyh5Path, "/imaging/raw")
+@assert size(tseries,4)==1
+tseries = permutedims(tseries, (2,1,3,4,5))
+tseries = tseries[:,:,:,1,:];
 
 ##
 (H, W, Z, T) = size(tseries)

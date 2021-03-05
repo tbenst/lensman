@@ -329,6 +329,9 @@ end
 function loadTseries(tifdir)
     H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir)
     tseries = Array{UInt16}(undef, H, W, Z, T)
+    memory_size_bytes = prod(size(tseries)) * 2
+    memory_size_gb = round(memory_size_bytes / 1024^3, digits=1)
+    println("estimated memory usage: $memory_size_gb")
     p = Progress(T, 1, "Load Tseries: ")
 
     @threads for t in 1:T

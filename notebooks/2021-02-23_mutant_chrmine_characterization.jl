@@ -1,6 +1,6 @@
 ## compare 
 # ENV["DISPLAY"] = "localhost:11.0"
-using Sockets, Observables, Statistics, Images, ImageView, Lensman,
+using Sockets, Observables, Statistics, Images, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
     Compose, ImageMagick, Random, PyCall, Arrow, ProgressMeter
@@ -11,10 +11,10 @@ using Unitful: μm, m, s
 # offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
 offset = float(uconvert(m, 0μm)) / m # when using SLM2 since 2020-02-?
 zOffset = offset * 1e6
-
+tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055"
-# tseriesDir = "/data/dlab/b115/2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051" # can't fit in memory :/
+tseriesDir = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051") # can't fit in memory :/
 
 # possibly compare to...
 # 2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/ (4power)
@@ -46,7 +46,8 @@ tseries = loadTseries(tseriesDir);
 ##
 (H, W, Z, T) = size(tseries)
 @show (H, W, Z, T)
-slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
+# slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
+slmDir = "/oak/stanford/groups/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment/"
 plotDir = joinpath(fishDir, "plots")
 if ~isdir(plotDir)
     mkdir(plotDir)
@@ -96,7 +97,7 @@ end
 
 # group_stim_freq = [getMatStimFreq(mat) for mat in matread.(findMatGroups(slmExpDir))]
 
-##
+## TODO: very memory inefficient!  eats 90GB of RAM beyond tseries?!?
 nStimuli = maximum(trialOrder)
 nTrials = size(trialOrder,1)
 nTrialsPerStimulus = Int(size(trialOrder,1) / nStimuli)
@@ -199,7 +200,8 @@ p_df_map = Gadfly.with_theme(:dark) do
         Gadfly.Coord.cartesian(yflip=true, fixed=true))
 end
 
-img = PNG(joinpath(plotDir, "$(expName)_df_f_map.png"), 6inch, 5inch)
+# img = PNG(joinpath(plotDir, "$(expName)_df_f_map.png"), 6inch, 5inch)
+img = SVG(joinpath(plotDir, "$(expName)_df_f_map.svg"), 6inch, 5inch)
 Gadfly.draw(img, p_df_map)
 p_df_map
 
@@ -229,99 +231,12 @@ open(tseriesDir*"_cells_fluorescence.arrow", "w") do io
     Arrow.write(io, fluor)
 end
 
-## compare 8cell vs 32cell concurrent!
-concurrent32Table = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054_cells_fluorescence.arrow"
-fluor32 = copy(Arrow.Table(concurrent32Table) |> DataFrame);
-concurrent8Table = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055_cells_fluorescence.arrow"
-fluor8 = copy(Arrow.Table(concurrent8Table) |> DataFrame;)
 
-cells32 = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054_cellsDF.arrow"
-cells32 = copy(Arrow.Table(cells32) |> DataFrame);
-cells8 = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055_cellsDF.arrow"
-cells8 = copy(Arrow.Table(cells8) |> DataFrame;)
-## cellID is not matched in two experiments :/
-# need to match by (x,y)
-xyToCellID = Dict()
-for cell in eachrow(cells32)
-    x, y, cellID = cell[[:x,:y,:cellID]]
-    xyToCellID[(x,y)] = cellID
-end
-length(xyToCellID)
-
-cellIDmap = Dict()
-for i in 1:size(cells8,1)
-    x, y, cellID = cells8[i,[:x,:y,:cellID]]
-    newID = xyToCellID[(x,y)]
-    cellIDmap[cellID] = newID
-    cells8[i,:cellID] = newID
-end
-
-for i in 1:size(fluor8,1)
-    fluor8[i,:cellID] = cellIDmap[fluor8[i,:cellID]]
-end
-
-## add stim freq to fluor...
-
-insertcols!(fluor8, :stimFreq =>
-    [cells8[findall(cells8.stimStart .== start)[1],:stimFreq] for start in fluor8.stimStart])
-insertcols!(fluor32, :stimFreq =>
-    [cells32[findall(cells32.stimStart .== start)[1],:stimFreq] for start in fluor32.stimStart])
-##
-
-function rawToDf_f(fluor::DataFrame, before=before)
-    fluorDF = []
-    # operate over each cell's trace...
-    for df in groupby(fluor, [:cellID, :stimStart])
-        kalmanFilt = imageJkalmanFilter(df.f)
-        f0 = mean(kalmanFilt[1:before])
-        df = copy(df)
-        df_f = @. (kalmanFilt - f0) / (f0 + 10)
-        insertcols!(df, size(df,2), :df_f => df_f)
-        select!(df, Not(:f))
-        push!(fluorDF, df)
-    end
-    fluorDF = vcat(fluorDF...)
-end
-
-fluorDF = rawToDf_f(fluor8)
-insertcols!(fluorDF, :nConcurrent => 8)
-fluorDF32 = rawToDf_f(fluor32)
-insertcols!(fluorDF32, :nConcurrent => 32)
-fluorDF = vcat(fluorDF, fluorDF32)
-meanTimeDf = combine(groupby(fluorDF, [:cellID, :time, :nConcurrent]), :df_f => mean)
+## 
 
 
-## 32 concurrent vs 8 concurrent
-# idxs = map(c->c in cellIDrankings[1:nplots], meanTimeDf[meanTimeDf.cellID)
-plots = Gadfly.Plot[]
-cellIDs = unique(cells8.cellID)
-nCells = length(cellIDs)
-for cellID in cellIDs[randperm(nCells)[1:nplots]]
-    idxs = meanTimeDf.cellID .== cellID
-    push!(plots, Gadfly.plot(meanTimeDf[idxs,:], x=:time, y=:df_f_mean, color=:nConcurrent,
-        Gadfly.Geom.line, ))
-end
 
-p_nConcurrent = gridstack(reshape(plots, 8,5))
-plotPath = joinpath(plotDir, "$(expName)_nConcurrent_shuffle_3.png")
-img = PNG(plotPath, 32inch, 16inch)
-Gadfly.draw(img, p_nConcurrent)
-@show plotPath
-p_nConcurrent
 
-##
-plots = Gadfly.Plot[]
-for cellID in cellIDs[randperm(nCells)[1:nplots]]
-    idxs = fluorDF.cellID .== cellID
-    push!(plots, Gadfly.plot(fluorDF[idxs,:], x=:time, y=:df_f, color=:stimFreq,
-        Gadfly.Geom.line, ))
-end
 
-p_nConcurrent = gridstack(reshape(plots, 8,5))
-plotPath = joinpath(plotDir, "$(expName)_stimFreq.png")
-img = PNG(plotPath, 32inch, 16inch)
-Gadfly.draw(img, p_nConcurrent)
-@show plotPath
-p_nConcurrent
-
-## TODO: fit/calculate tau off & plot across population...
+## TODO: use 8vs32cell concurrent notebook as boilerplate to make WT vs rs vs H33R vs control plot...
+# 8cell vs 32cell concurrent!
