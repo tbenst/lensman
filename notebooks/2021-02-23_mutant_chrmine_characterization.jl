@@ -17,15 +17,11 @@ zOffset = offset * 1e6
 tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055"
-<<<<<<< HEAD
-# tseriesDir = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051") # can't fit in memory :/
-tseriesDir = joinpath(tseriesRootDir, "2021-01-26_rsChRmine_6f_7dpf/fish1/TSeries-31concurrent-168trial-3rep-4power-043")
-=======
 # can't fit in memory on lensman, so use deis
 # tseriesDir = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051")
 # tseriesDir = joinpath(tseriesRootDir, "2021-01-26_rsChRmine_6f_7dpf/fish1/TSeries-31concurrent-168trial-3rep-4power-043")
 tseriesDir = joinpath(tseriesRootDir, "2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2/TSeries-128cell-4concurrent-3power-skip7-044")
->>>>>>> 68be8df8edfa3c3735d2c9f9ce90c8e96457ba7f
+tseriesDir = "$tseriesRootDir/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043"
 
 # possibly compare to...
 # 2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/ (4power)
@@ -89,6 +85,12 @@ stimGroupDF = CSV.File(open(read, slmTxtFile), header=["filepath", "powerFractio
 stimGroupDF = stimGroupDF[trialOrder,:]
 
 
+getMatStimFreq(mat) = sum((~).(sum.(mat["cfg"]["exp"]["targets"]) .≈ 0.0))*5
+getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0,0) ? 1 : 2
+
+mat = matread.(findMatGroups(slmExpDir)[1])
+slmNum = getSLMnum(mat)
+
 @warn "hardcoded laser power"
 firstTargetGroup = matread.(findMatGroups(slmExpDir)[1])
 powerPerCell = firstTargetGroup["cfg"]["mode"]["BHV001"]["FOV"]["PowerPerCell"]
@@ -121,11 +123,7 @@ avgStimDuration = mean(stimEndIdx .- stimStartIdx)
 
 # Assumes no sequence of stim
 # for 5Hz clock
-getMatStimFreq(mat) = sum((~).(sum.(mat["cfg"]["exp"]["targets"]) .≈ 0.0))*5
-getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0,0) ? 1 : 2
 
-mat = matread.(findMatGroups(slmExpDir)[1])
-slmNum = getSLMnum(mat)
 
 target_groups = []
 group_stim_freq = []
