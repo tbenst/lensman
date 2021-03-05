@@ -12,17 +12,20 @@ using Unitful: μm, m, s, mW
 # offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
 offset = float(uconvert(m, 0μm)) / m # when using SLM2 since 2020-02-?
 zOffset = offset * 1e6
-# tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
+tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
 # tseriesRootDir = "/data/dlab/b115"
-tseriesRootDir = "/mnt/deissero/users/tyler/b115"
+# tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055"
 # can't fit in memory on lensman, so use deis
-# tseriesDir = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051")
+tseriesDir = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051")
 # tseriesDir = joinpath(tseriesRootDir, "2021-01-26_rsChRmine_6f_7dpf/fish1/TSeries-31concurrent-168trial-3rep-4power-043")
 tseriesDir = joinpath(tseriesRootDir, "2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2/TSeries-128cell-4concurrent-3power-skip7-044")
 tseriesDir = "$tseriesRootDir/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043"
+tseriesDir = "$tseriesRootDir/2021-01-26_rsChRmine_6f_7dpf/fish2/TSeries-32concurrent-256trial-2rep-4power-045" # only one stim...?
 tseriesDir = "$tseriesRootDir/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-10zplane-077"
+tseriesDir = "$tseriesRootDir/2021-02-02_f1_h33r_GC6f_6dpf/fish2/TSeries-1024cell-32concurrent-5power-060"
+
 
 # possibly compare to...
 # 2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/ (4power)
@@ -60,8 +63,8 @@ tseries = loadTseries(tseriesDir);
 ##
 (H, W, Z, T) = size(tseries)
 @show (H, W, Z, T)
-slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
-# slmDir = "/oak/stanford/groups/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment/"
+# slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
+slmDir = "/oak/stanford/groups/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment/"
 plotDir = joinpath(fishDir, "plots")
 if ~isdir(plotDir)
     mkdir(plotDir)
@@ -91,7 +94,7 @@ getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0,0) ? 1 : 2
 
 mat = matread.(findMatGroups(slmExpDir)[1])
 slmNum = getSLMnum(mat)
-
+##
 @warn "hardcoded laser power"
 firstTargetGroup = matread.(findMatGroups(slmExpDir)[1])
 powerPerCell = firstTargetGroup["cfg"]["mode"]["BHV001"]["FOV"]["PowerPerCell"]
@@ -110,7 +113,6 @@ if slmNum == 1
 elseif slmNum == 2
     slmpowerPerCell = slm2Power * powerPerCell / 1000
 end
-
 
 stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFile, Z)
 allWithin(diff(stimStartIdx),0.05)
