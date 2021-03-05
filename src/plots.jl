@@ -8,7 +8,7 @@ function plotStim(tseries,roiMask,cells, idx::Int, volRate; before=30, after=60,
     theStart = maximum([stimStart-before, 1])
     plotRange = theStart:theEnd
     fluorescentTrace = extractTrace(tseries[:,:,:,plotRange], roiM)
-    fluorescentTrace = imageJkalmanFilter(fluorescentTrace)
+    fluorescentTrace = imageJkalmanFilter(medianfilt(fluorescentTrace))
     p = plot(plotRange/volRate, fluorescentTrace, left_margin=50px,
                 ylims=(0,500))
         # xlabel="time (s)", ylabel="fluorescence")
@@ -39,7 +39,7 @@ function plotStim(tseries,roiMask,cells, indices::Array{Int,1}, volRate; before=
         plotRange = theStart:theEnd
         timeRange = (plotRange .- stimStart) ./ volRate
         fluorescentTrace = extractTrace(tseries[:,:,:,plotRange], roiM)
-        fluorescentTrace = imageJkalmanFilter(fluorescentTrace)
+        fluorescentTrace = imageJkalmanFilter(medianfilt(fluorescentTrace))
         f0 = mean(fluorescentTrace[1:before])
         fluorescentTrace .-= f0
         fluorescentTrace ./= (f0 + 10)
@@ -86,7 +86,7 @@ function plotStim(tseries,roiMask,cells, indices::Array{Int,1}, volRate, trial::
         plotRange = theStart:theEnd
         timeRange = (plotRange .- stimStart) ./ volRate
         fluorescentTrace = extractTrace(tseries[:,:,plotRange, trialNum], roiM)
-        fluorescentTrace = imageJkalmanFilter(fluorescentTrace)
+        fluorescentTrace = imageJkalmanFilter(medianfilt(fluorescentTrace))
         if colorBy == :laserPower
             color = color / mW
         end

@@ -12,24 +12,22 @@ using Unitful: μm, m, s, mW
 # offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
 offset = float(uconvert(m, 0μm)) / m # when using SLM2 since 2020-02-?
 zOffset = offset * 1e6
-tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
+# tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
+# tseriesRootDir = "/data/dlab/b115"
+tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055"
 # can't fit in memory on lensman, so use deis
 tseriesDir = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051")
 # tseriesDir = joinpath(tseriesRootDir, "2021-01-26_rsChRmine_6f_7dpf/fish1/TSeries-31concurrent-168trial-3rep-4power-043")
-# tseriesDir = joinpath(tseriesRootDir, "2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2/TSeries-128cell-4concurrent-3power-skip7-044")
+tseriesDir = joinpath(tseriesRootDir, "2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2/TSeries-128cell-4concurrent-3power-skip7-044")
+tseriesDir = "$tseriesRootDir/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043"
 
 # possibly compare to...
 # 2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/ (4power)
 # 2021-02-15_wt_chrmine_gc6f/fish1/TSeries-1024cell-4freq-skip-first-066 (4freq; too large for memory on lensman)
 
-
 # tyh5Path = tseriesDir
-
-if tseriesDir[end] == "/"
-    tseriesDir = tseriesDir[1:end-1]
-end
 
 if occursin("freq", tseriesDir)
     exp_param = :stimFreq
@@ -37,9 +35,15 @@ elseif occursin("power", tseriesDir)
     exp_param = :laserPower
 end
 
+if tseriesDir[end] == "/"
+    tseriesDir = tseriesDir[1:end-1]
+end
+
 fishDir = joinpath(splitpath(tseriesDir)[1:end-1]...)
 expName = splitpath(tseriesDir)[end]
 tylerSLMDir = joinpath(fishDir, "slm")
+# tylerSLMDir = fishDir
+
 tseries = loadTseries(tseriesDir);
 # tyh5
 
@@ -55,8 +59,8 @@ tseries = loadTseries(tseriesDir);
 ##
 (H, W, Z, T) = size(tseries)
 @show (H, W, Z, T)
-# slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
-slmDir = "/oak/stanford/groups/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment/"
+slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
+# slmDir = "/oak/stanford/groups/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment/"
 plotDir = joinpath(fishDir, "plots")
 if ~isdir(plotDir)
     mkdir(plotDir)
@@ -87,7 +91,6 @@ getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0,0) ? 1 : 2
 mat = matread.(findMatGroups(slmExpDir)[1])
 slmNum = getSLMnum(mat)
 
-##
 @warn "hardcoded laser power"
 firstTargetGroup = matread.(findMatGroups(slmExpDir)[1])
 powerPerCell = firstTargetGroup["cfg"]["mode"]["BHV001"]["FOV"]["PowerPerCell"]
@@ -119,7 +122,8 @@ avgStimDuration = mean(stimEndIdx .- stimStartIdx)
 
 # Assumes no sequence of stim
 # for 5Hz clock
-getMatStimFreq(mat) = sum((~).(sum.(mat["cfg"]["exp"]["targets"]) .≈ 0.0))*5
+
+
 target_groups = []
 group_stim_freq = []
 for mat in matread.(findMatGroups(slmExpDir))
@@ -248,14 +252,14 @@ p_df_map
 fluor = DataFrame(time=Float64[], f=Float64[], cellID=UInt32[], stimStart=UInt32[],
     laserPower=UInt32[], stimFreq=Float64[])
 
-
 # TODO also compare on target vs off-target traces...? Number of off-target change
 # as function of # of cell stim?
 
 nTime = before + maximum(cells.stimStop - cells.stimStart) + after
 
 for cell in eachrow(cells)
-    x, y, z, stimStart, stimStop, laserPower, stimFreq, cellID = cell[[:x, :y, :z, :stimStart, :stimStop, :laserPower, :stimFreq, :cellID]]    roiM = roiMask[cellID]
+    x, y, z, stimStart, stimStop, laserPower, stimFreq, cellID = cell[[:x, :y, :z, :stimStart, :stimStop, :laserPower, :stimFreq, :cellID]]
+    roiM = roiMask[cellID]
     theEnd = minimum([stimStop+after, size(tseries, ndims(tseries))])
     theStart = maximum([stimStart-before, 1])
     plotRange = theStart:theEnd
