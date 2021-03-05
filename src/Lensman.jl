@@ -3,7 +3,7 @@ module Lensman
 using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     ImageDraw, ImageFiltering, PyCall, MAT, Dates, DataStructures,
     Statistics, SharedArrays, CSV, DataFrames, Suppressor, Plots,
-    LinearAlgebra, LibExpat, LightXML
+    LinearAlgebra, LibExpat, LightXML, RollingFunctions
 import Base.Threads.@threads
 using Distributed
 import Unitful: μm
