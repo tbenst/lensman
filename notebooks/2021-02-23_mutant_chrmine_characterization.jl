@@ -12,9 +12,9 @@ using Unitful: μm, m, s, mW
 # offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
 offset = float(uconvert(m, 0μm)) / m # when using SLM2 since 2020-02-?
 zOffset = offset * 1e6
-tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
+# tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
 # tseriesRootDir = "/data/dlab/b115"
-# tseriesRootDir = "/mnt/deissero/users/tyler/b115"
+tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055"
 # can't fit in memory on lensman, so use deis
@@ -25,13 +25,34 @@ tseriesDir = "$tseriesRootDir/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSe
 tseriesDir = "$tseriesRootDir/2021-01-26_rsChRmine_6f_7dpf/fish2/TSeries-32concurrent-256trial-2rep-4power-045" # only one stim...?
 tseriesDir = "$tseriesRootDir/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-10zplane-077"
 tseriesDir = "$tseriesRootDir/2021-02-02_f1_h33r_GC6f_6dpf/fish2/TSeries-1024cell-32concurrent-5power-060"
+tseriesDir = "$tseriesRootDir/2021-02-02_f1_h33r_GC6f_6dpf/fish2/TSeries-1024cell-32concurrent-5power-060"
+tseriesDir = "$tseriesRootDir/2021-01-26_rsChRmine_6f_7dpf/fish2/TSeries-1024cell-32concurrent-048"
+tseriesDir = "$tseriesRootDir/2021-03-09_wt-chrmine-gc6f/fish1/TSeries-32cell-8concurrent-10MHz-8rep-065"
+tseriesDir = "$tseriesRootDir/2021-03-09_wt-chrmine-gc6f/fish1/TSeries-32cell-8concurrent-10MHz-8rep-065"
 
+##
+# tseriesDir = "$tseriesRootDir/2021-03-16"
+# gcampDir = "/scratch/b115/2021-03-16_h2b6s/fish1"
+# h33rDir = "/scratch/b115/2021-03-16_h33r-chrmine_h2b6s/fish4"
+# rsDir = "/scratch/b115/2021-03-16_rschrmine_h2b6s/fish3/"
+# wtDir = "/scratch/b115/2021-03-16_wt-chrmine_h2b6s/fish2/"
 
 # possibly compare to...
 # 2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/ (4power)
 # 2021-02-15_wt_chrmine_gc6f/fish1/TSeries-1024cell-4freq-skip-first-066 (4freq; too large for memory on lensman)
 
 # tyh5Path = tseriesDir
+
+if occursin("freq", tseriesDir)
+    exp_param = :stimFreq
+elseif occursin("power", tseriesDir)
+    exp_param = :laserPower
+end
+
+if tseriesDir[end] == "/"
+    tseriesDir = tseriesDir[1:end-1]
+end
+
 
 if occursin("freq", tseriesDir)
     exp_param = :stimFreq
@@ -63,8 +84,8 @@ tseries = loadTseries(tseriesDir);
 ##
 (H, W, Z, T) = size(tseries)
 @show (H, W, Z, T)
-# slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
-slmDir = "/oak/stanford/groups/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment/"
+slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
+# slmDir = "/oak/stanford/groups/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment/"
 plotDir = joinpath(fishDir, "plots")
 if ~isdir(plotDir)
     mkdir(plotDir)
@@ -84,6 +105,7 @@ trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
 
 ## read power
 @assert length(glob("*.txt", tylerSLMDir)) == 1 # if not, need to be careful to choose
+# glob("*.txt", tylerSLMDir)
 slmTxtFile = glob("*.txt", tylerSLMDir)[1]
 stimGroupDF = CSV.File(open(read, slmTxtFile), header=["filepath", "powerFraction"]) |> DataFrame
 stimGroupDF = stimGroupDF[trialOrder,:]
@@ -228,7 +250,8 @@ nplots = 40
 # for idx in 1:nplots
 @showprogress for cellID in cellIDrankings[1:nplots]
     indices = findall(cellsDF.cellID .== cellID)
-    push!(plots, plotStim(tseries,roiMask,cells,indices, volRate, before=before, after=after, colorBy=exp_param))
+    # push!(plots, plotStim(tseries,roiMask,cells,indices, volRate, before=before, after=after, colorBy=exp_param))
+    push!(plots, plotStim(tseries,roiMask,cells,indices, volRate, before=before, after=after))
 end
 p = plot(plots..., layout=(8,5), legend=true, size=(1024*4,1024*2))
 savefig(p, joinpath(plotDir,"$(expName)_top40_traces_rollmedian.png"))
@@ -257,7 +280,7 @@ fluor = DataFrame(time=Float64[], f=Float64[], cellID=UInt32[], stimStart=UInt32
 # as function of # of cell stim?
 
 nTime = before + maximum(cells.stimStop - cells.stimStart) + after
-
+# TODO add @threads ?
 for cell in eachrow(cells)
     x, y, z, stimStart, stimStop, laserPower, stimFreq, cellID = cell[[:x, :y, :z, :stimStart, :stimStop, :laserPower, :stimFreq, :cellID]]
     roiM = roiMask[cellID]
@@ -276,7 +299,6 @@ first(fluor,5)
 open(tseriesDir*"_cells_fluorescence.arrow", "w") do io
     Arrow.write(io, fluor)
 end
-
 
 ## 
 
