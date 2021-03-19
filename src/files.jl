@@ -126,7 +126,10 @@ end
 powers: fractional power for that iteration. length > 1 means repeat all
 frequencies: must be multiple of 5Hz. length > 1 means repeat all
 
-Perform cartesian product of powers and frequencies."""
+Perform cartesian product of powers and frequencies.
+
+TODO: this assumes a 5Hz clock for sean's code...but sometimes this is set
+to eg 10Hz instead..."""
 function create_slm_stim(target_groups, outname::String; slmNum=1,
         localToRemote = matpath -> "O:\\" * replace(matpath[14:end], "/" => "\\"),
         powers=[1], frequencies=[5])
@@ -282,4 +285,39 @@ function createMarkPointElement(xSeriesRoot, point::Int; numSpirals=10,
     set_attribute(gpe, "AllPointsAtOnce", "False")
     set_attribute(gpe, "Points", "Point $point")
     set_attribute(gpe, "Indices", "$point" )
+end
+
+
+""""Read Prairie View markpoints gpl list.
+
+To measure, create markpoints at (1,1) and (1024,1024), export to .gpl, and view.
+
+empirical measurements
+zoom    X               Y
+1       4.17170481      4.636140912
+1.3     3.209      3.566
+1.5     2.78113654      3.090760608
+"""
+function read_gpl(gpl_path; zoom=1., width=1024, height=1024,
+                  maxX=4.17170481, maxY=4.636140912)
+    gpl_xml = open(gpl_path, "r") do io
+        gpl_xml = read(io, String)
+        xp_parse(gpl_xml)
+    end
+    pvgp = gpl_xml[xpath"/PVGalvoPointList/PVGalvoPoint"]
+    x = parse.(Float64, map(x->x.attr["X"], pvgp))
+    y = parse.(Float64, map(x->x.attr["Y"], pvgp))
+    maxX /= zoom
+    maxY /= zoom
+    x .+= maxX
+    x ./= 2*maxX
+    x .*= width
+    x .= width .- x
+    y .+= maxY
+    y ./= 2*maxY
+    y .*= height
+    y .= height .- y
+    x = Int.(round.(x, digits=0))
+    y = Int.(round.(y, digits=0))
+    map(CartesianIndex ∘ Tuple, zip(y,x))
 end

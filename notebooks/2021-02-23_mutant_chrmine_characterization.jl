@@ -12,9 +12,9 @@ import Base.Threads.@threads
 # offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
 offset = float(uconvert(m, 0μm)) / m # when using SLM2 since 2020-02-?
 zOffset = offset * 1e6
-tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
+# tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
 # tseriesRootDir = "/data/dlab/b115"
-# tseriesRootDir = "/mnt/deissero/users/tyler/b115"
+tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055"
 # can't fit in memory on lensman, so use deis
@@ -32,7 +32,22 @@ tseriesDir = "$tseriesRootDir/2021-03-16_h33r-chrmine_h2b6s/fish4/TSeries_64cell
 # tseriesDir = "$tseriesRootDir/2021-03-16_h2b6s/fish1/TSeries_64cell_8concurrent_2power_8rep-207"
 # tseriesDir = "$tseriesRootDir/2021-03-16_wt-chrmine_h2b6s/fish2/TSeries_64cell_8concurrent_2power_8rep-221"
 
+# tseriesDir = joinpath(tseriesRootDir, "2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2/TSeries-128cell-4concurrent-3power-skip7-044")
+# tseriesDir = "$tseriesRootDir/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043"
+# tseriesDir = "$tseriesRootDir/2021-01-26_rsChRmine_6f_7dpf/fish2/TSeries-32concurrent-256trial-2rep-4power-045" # only one stim...?
+# tseriesDir = "$tseriesRootDir/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-10zplane-077"
+# tseriesDir = "$tseriesRootDir/2021-02-02_f1_h33r_GC6f_6dpf/fish2/TSeries-1024cell-32concurrent-5power-060"
+# tseriesDir = "$tseriesRootDir/2021-02-02_f1_h33r_GC6f_6dpf/fish2/TSeries-1024cell-32concurrent-5power-060"
+# tseriesDir = "$tseriesRootDir/2021-01-26_rsChRmine_6f_7dpf/fish2/TSeries-1024cell-32concurrent-048"
+# tseriesDir = "$tseriesRootDir/2021-03-09_wt-chrmine-gc6f/fish1/TSeries-32cell-8concurrent-10MHz-8rep-065"
+# tseriesDir = "$tseriesRootDir/2021-03-09_wt-chrmine-gc6f/fish1/TSeries-32cell-8concurrent-10MHz-8rep-065"
 
+##
+# tseriesDir = "$tseriesRootDir/2021-03-16"
+# gcampDir = "/scratch/b115/2021-03-16_h2b6s/fish1"
+# h33rDir = "/scratch/b115/2021-03-16_h33r-chrmine_h2b6s/fish4"
+# rsDir = "/scratch/b115/2021-03-16_rschrmine_h2b6s/fish3/"
+# wtDir = "/scratch/b115/2021-03-16_wt-chrmine_h2b6s/fish2/"
 
 # tseriesDir = "$tseriesRootDir/2021-02-02_f1_h33r_GC6f_6dpf/fish2/TSeries-1024cell-32concurrent-5power-060"
 # possibly compare to...
@@ -40,6 +55,17 @@ tseriesDir = "$tseriesRootDir/2021-03-16_h33r-chrmine_h2b6s/fish4/TSeries_64cell
 # 2021-02-15_wt_chrmine_gc6f/fish1/TSeries-1024cell-4freq-skip-first-066 (4freq; too large for memory on lensman)
 
 tyh5Path = tseriesDir * ".ty.h5"
+
+if occursin("freq", tseriesDir)
+    exp_param = :stimFreq
+elseif occursin("power", tseriesDir)
+    exp_param = :laserPower
+end
+
+if tseriesDir[end] == "/"
+    tseriesDir = tseriesDir[1:end-1]
+end
+
 
 if occursin("freq", tseriesDir)
     exp_param = :stimFreq
@@ -94,6 +120,7 @@ trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
 
 ## read power
 @assert length(glob("*.txt", tylerSLMDir)) == 1 # if not, need to be careful to choose
+# glob("*.txt", tylerSLMDir)
 slmTxtFile = glob("*.txt", tylerSLMDir)[1]
 stimGroupDF = CSV.File(open(read, slmTxtFile), header=["filepath", "powerFraction"]) |> DataFrame
 stimGroupDF = stimGroupDF[trialOrder,:]
@@ -281,8 +308,7 @@ fluor = DataFrame(time=Float64[], f=Float64[], cellID=UInt32[], stimStart=UInt32
 # as function of # of cell stim?
 
 nTime = before + maximum(cells.stimStop - cells.stimStart) + after
-
-# can we use @threads? 
+# TODO add @threads ?
 for cell in eachrow(cells)
     x, y, z, stimStart, stimStop, laserPower, stimFreq, cellID = cell[[:x, :y, :z, :stimStart, :stimStop, :laserPower, :stimFreq, :cellID]]
     roiM = roiMask[cellID]
@@ -293,7 +319,7 @@ for cell in eachrow(cells)
     fluorescentTrace = extractTrace(tseries[:,:,:,plotRange], roiM)
     for (t,f) in zip(timeRange, fluorescentTrace)
         push!(fluor, (time=t, f=f, cellID=cellID, stimStart=stimStart,
-            stimFreq=stimFreq, laserPower=laserPower/1mW))
+            stimFreq=stimFreq, laserPower=laserPower ./ 1mW))
     end
 end
 first(fluor,5)
@@ -301,7 +327,6 @@ first(fluor,5)
 open(tseriesDir*"_cells_fluorescence.arrow", "w") do io
     Arrow.write(io, fluor)
 end
-
 
 ## 
 
