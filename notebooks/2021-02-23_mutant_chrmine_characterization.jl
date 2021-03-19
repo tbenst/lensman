@@ -7,7 +7,7 @@ using Sockets, Observables, Statistics, Images, Lensman,
     RollingFunctions
 import Gadfly
 using Unitful: μm, m, s, mW
-
+import Base.Threads.@threads
 ##
 # offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
 offset = float(uconvert(m, 0μm)) / m # when using SLM2 since 2020-02-?
@@ -18,20 +18,28 @@ tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055"
 # can't fit in memory on lensman, so use deis
-tseriesDir = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051")
+# tseriesDir = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051")
 # tseriesDir = joinpath(tseriesRootDir, "2021-01-26_rsChRmine_6f_7dpf/fish1/TSeries-31concurrent-168trial-3rep-4power-043")
-tseriesDir = joinpath(tseriesRootDir, "2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2/TSeries-128cell-4concurrent-3power-skip7-044")
-tseriesDir = "$tseriesRootDir/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043"
-tseriesDir = "$tseriesRootDir/2021-01-26_rsChRmine_6f_7dpf/fish2/TSeries-32concurrent-256trial-2rep-4power-045" # only one stim...?
-tseriesDir = "$tseriesRootDir/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-10zplane-077"
-tseriesDir = "$tseriesRootDir/2021-02-02_f1_h33r_GC6f_6dpf/fish2/TSeries-1024cell-32concurrent-5power-060"
+# tseriesDir = joinpath(tseriesRootDir, "2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2/TSeries-128cell-4concurrent-3power-skip7-044")
+# tseriesDir = "$tseriesRootDir/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043"
+# tseriesDir = "$tseriesRootDir/2021-01-26_rsChRmine_6f_7dpf/fish2/TSeries-32concurrent-256trial-2rep-4power-045" # only one stim...?
+# tseriesDir = "$tseriesRootDir/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-10zplane-077"
+# tseriesDir = "$tseriesRootDir/2021-02-02_f1_h33r_GC6f_6dpf/fish2/TSeries-1024cell-32concurrent-5power-060"
+
+tseriesDir = "$tseriesRootDir/2021-03-16_h33r-chrmine_h2b6s/fish4/TSeries_64cell_8concurrent_2power_8rep-607"
+
+# tseriesDir = "$tseriesRootDir/2021-03-16_rschrmine_h2b6s/fish3/TSeries_64cell_8concurrent_2power_8rep-407"
+# tseriesDir = "$tseriesRootDir/2021-03-16_h2b6s/fish1/TSeries_64cell_8concurrent_2power_8rep-207"
+# tseriesDir = "$tseriesRootDir/2021-03-16_wt-chrmine_h2b6s/fish2/TSeries_64cell_8concurrent_2power_8rep-221"
 
 
+
+# tseriesDir = "$tseriesRootDir/2021-02-02_f1_h33r_GC6f_6dpf/fish2/TSeries-1024cell-32concurrent-5power-060"
 # possibly compare to...
 # 2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/ (4power)
 # 2021-02-15_wt_chrmine_gc6f/fish1/TSeries-1024cell-4freq-skip-first-066 (4freq; too large for memory on lensman)
 
-# tyh5Path = tseriesDir
+tyh5Path = tseriesDir * ".ty.h5"
 
 if occursin("freq", tseriesDir)
     exp_param = :stimFreq
@@ -45,26 +53,28 @@ end
 
 fishDir = joinpath(splitpath(tseriesDir)[1:end-1]...)
 expName = splitpath(tseriesDir)[end]
-# tylerSLMDir = joinpath(fishDir, "slm")
-tylerSLMDir = fishDir
+tylerSLMDir = joinpath(fishDir, "slm")
+# tylerSLMDir = fishDir
 
-tseries = loadTseries(tseriesDir);
+# tif
+# tseries = loadTseries(tseriesDir);
+
 # tyh5
 
-# fishDir = joinpath(splitpath(tyh5Path)[1:end-1]...)
-# expName = replace(splitpath(tyh5Path)[end], ".ty.h5" => "")
-# tseriesDir = joinpath(fishDir, expName)
+fishDir = joinpath(splitpath(tyh5Path)[1:end-1]...)
+expName = replace(splitpath(tyh5Path)[end], ".ty.h5" => "")
+tseriesDir = joinpath(fishDir, expName)
 
-# tseries = h5read(tyh5Path, "/imaging/raw")
-# @assert size(tseries,4)==1
-# tseries = permutedims(tseries, (2,1,3,4,5))
-# tseries = tseries[:,:,:,1,:];
+tseries = h5read(tyh5Path, "/imaging/raw")
+@assert size(tseries,4)==1
+tseries = permutedims(tseries, (2,1,3,4,5))
+tseries = tseries[:,:,:,1,:];
 
 ##
 (H, W, Z, T) = size(tseries)
 @show (H, W, Z, T)
 # slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
-slmDir = "/oak/stanford/groups/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment/"
+slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
 plotDir = joinpath(fishDir, "plots")
 if ~isdir(plotDir)
     mkdir(plotDir)
@@ -105,8 +115,10 @@ elseif expDate <= Date("2021-03-01")
     slm1Power = 450mW
     slm2Power = 375mW
 else
-    slm1Power = 377mW
-    slm2Power = 305mW
+    # slm1Power = 377mW
+    # slm2Power = 305mW
+    slm1Power = 450mW
+    slm2Power = 450mW
 end
 if slmNum == 1
     slmpowerPerCell = slm1Power * powerPerCell / 1000
@@ -216,7 +228,11 @@ end
 
 
 ##
-histogram(cellsDF.df_f)
+# histogram(cellsDF.df_f)
+p = histogram(combine(groupby(cellsDF, [:cellID, :laserPower]), :df_f => mean).df_f_mean)
+savefig(p, joinpath(plotDir,"$(expName)_df_histogram.svg"))
+p
+# groupbycellsDF
 
 ##
 # volRate = 30
@@ -224,25 +240,30 @@ before = Int(ceil(volRate*10))
 after = Int(ceil(volRate*20))
 # best
 plots = []
-nplots = 40
+nplots = 64
 
 # nplots = 8
 # for idx in rankings[end:-1:end-nplots+1]
 # for idx in 1:nplots
+# plots = Array{Int}(undef, length(cellIDrankings))
+# can we @threads Array{Int}(undef, length(cellIDrankings))
 @showprogress for cellID in cellIDrankings[1:nplots]
+# @threads for (i,cellID) in enumerate(cellIDrankings)
     indices = findall(cellsDF.cellID .== cellID)
     push!(plots, plotStim(tseries,roiMask,cells,indices, volRate, before=before, after=after, colorBy=exp_param))
+    # plots[i] = plotStim(tseries,roiMask,cells,indices, volRate, before=before, after=after, colorBy=exp_param)
 end
-p = plot(plots..., layout=(8,5), legend=true, size=(1024*4,1024*2))
-savefig(p, joinpath(plotDir,"$(expName)_top40_traces_rollmedian.png"))
-savefig(p, joinpath(plotDir,"$(expName)_top40_traces_rollmedian.svg"))
+##
+p = plot(plots..., layout=(8,8), legend=true, size=(1024*4,1024*4))
+# savefig(p, joinpath(plotDir,"$(expName)_top40_traces_rollmedian.png"))
+savefig(p, joinpath(plotDir,"$(expName)_top64_traces.svg"))
 p
 ##
 
-# TODO: why do we have NaN values...?
-cmax = maximum(abs.(cellsDF.df_f[(~).(isnan.(cellsDF.df_f))]))
+cells_meanDF = combine(groupby(cellsDF, [:cellID, :x, :y]), :df_f => mean)
+cmax = maximum(abs.(cells_meanDF.df_f_mean[(~).(isnan.(cells_meanDF.df_f_mean))]))
 p_df_map = Gadfly.with_theme(:dark) do
-    Gadfly.plot(cellsDF[(~).(isnan.(cellsDF.df_f)), :], x=:x, y=:y, Gadfly.Geom.point, size=[targetSizePx], color=:df_f,
+    Gadfly.plot(cells_meanDF[(~).(isnan.(cells_meanDF.df_f_mean)), :], x=:x, y=:y, Gadfly.Geom.point, size=[targetSizePx], color=:df_f_mean,
         Gadfly.Scale.color_continuous(minvalue=-1, maxvalue=1),
         Gadfly.Coord.cartesian(yflip=true, fixed=true))
 end
@@ -254,13 +275,14 @@ p_df_map
 
 ## extract and save traces for easy plotting later...
 fluor = DataFrame(time=Float64[], f=Float64[], cellID=UInt32[], stimStart=UInt32[],
-    laserPower=UInt32[], stimFreq=Float64[])
+    laserPower=Float64[], stimFreq=Float64[])
 
 # TODO also compare on target vs off-target traces...? Number of off-target change
 # as function of # of cell stim?
 
 nTime = before + maximum(cells.stimStop - cells.stimStart) + after
 
+# can we use @threads? 
 for cell in eachrow(cells)
     x, y, z, stimStart, stimStop, laserPower, stimFreq, cellID = cell[[:x, :y, :z, :stimStart, :stimStop, :laserPower, :stimFreq, :cellID]]
     roiM = roiMask[cellID]
@@ -271,7 +293,7 @@ for cell in eachrow(cells)
     fluorescentTrace = extractTrace(tseries[:,:,:,plotRange], roiM)
     for (t,f) in zip(timeRange, fluorescentTrace)
         push!(fluor, (time=t, f=f, cellID=cellID, stimStart=stimStart,
-            stimFreq=stimFreq, laserPower=laserPower))
+            stimFreq=stimFreq, laserPower=laserPower/1mW))
     end
 end
 first(fluor,5)
