@@ -411,8 +411,7 @@ function get_slm_stim_masks(tif_dir, slm_dir, z_offset)
     target_groups = [mat["cfg"]["maskS"]["targets"][1]
         for mat in matread.(findMatGroups(slm_exp_dir))]
         
-    @assert length(target_groups) == n_stimuli,
-        "trialOrder has max of $n_stimuli, but target_groups is length $(length(target_groups))"
+    @assert length(target_groups) == n_stimuli "trialOrder has max of $n_stimuli, but target_groups is length $(length(target_groups))"
     ## Array of matrices indicating x, y z (or was it y, x, z..?)
     targets_with_plane_index = mapTargetGroupsToPlane(target_groups, etl_vals,
         is1024=is_1024, zOffset=z_offset)
@@ -421,7 +420,7 @@ function get_slm_stim_masks(tif_dir, slm_dir, z_offset)
 
     for (stim_idx, target_group) in enumerate(targets_with_plane_index)
         for (x, y, z) in eachrow(target_group)
-            draw!(view(stim_masks, stim_idx, z, :, :), Ellipse(CirclePointRadius(x, y, target_size_px)))
+            draw!(view(stim_masks, stim_idx, z, :, :), Ellipse(CirclePointRadius(x, y, target_radius_px)))
         end
     end
     stim_masks = convert(Array{Bool}, stim_masks)
