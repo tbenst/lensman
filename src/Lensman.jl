@@ -326,8 +326,8 @@ function getTrialOrder(slmExpDir, expDate)
     trialOrder[1,:], joinpath(splitpath(trialOrderTxt)[1:end - 1]...)
 end
 
-function loadTseries(tifdir)
-    H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir)
+function loadTseries(tifdir, containsStr="Ch3")
+    H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir, containsStr)
     tseries = Array{UInt16}(undef, H, W, Z, T)
     memory_size_bytes = prod(size(tseries)) * 2
     memory_size_gb = round(memory_size_bytes / 1024^3, digits=1)
