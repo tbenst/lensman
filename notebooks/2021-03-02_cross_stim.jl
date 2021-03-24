@@ -16,9 +16,15 @@ slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 # fishDir = "/mnt/deissero/users/tyler/b115/2021-02-22_h2b6s/fish2/" # habenula shows cross stimulation
 # fishDir = "/mnt/deissero/users/tyler/b115/2021-02-22_h2b6s_wt-chrmine/fish1/" # most are hab, but 4th may be forebrain...?
 
-fishDir = "/mnt/deissero/users/tyler/b115/2021-02-22_h2b6s_wt-chrmine/fish3/"
+# fishDir = "/mnt/deissero/users/tyler/b115/2021-02-22_h2b6s_wt-chrmine/fish3/"
 # fishDir = "/mnt/deissero/users/tyler/b115/2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2"
 # fishDir = "/mnt/deissero/users/tyler/b115/2021-02-23_h2b6s/fish1"
+
+# matched...
+# fishDir = "/mnt/deissero/users/tyler/b115/2021-03-16_h2b6s/fish1"
+fishDir = "/mnt/deissero/users/tyler/b115/2021-03-16_h33r-chrmine_h2b6s/fish4"
+# fishDir = "/mnt/deissero/users/tyler/b115/2021-03-16_rschrmine_h2b6s/fish3/"
+# fishDir = "/mnt/deissero/users/tyler/b115/2021-03-16_wt-chrmine_h2b6s/fish2/"
 
 tseriesDirs = glob("TSeries-cross-stim*", fishDir)
 # tseriesDirs = glob("TSeries-cross-stim*", fishDir)[end-1:end]
