@@ -8,8 +8,8 @@ import Gadfly
 using Unitful: μm, m, s
 
 ## compare ChRmine: WT, RS & H33R
-# tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
-tseriesRootDir = "/mnt/deissero/users/tyler/b115"
+tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
+# tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 # tseriesRootDir = "/scratch/b115"
 # h33r1 = "$tseriesRootDir/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055"
 # h33r1 = h33r1*"_cells_fluorescence.arrow"
