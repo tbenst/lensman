@@ -1,14 +1,15 @@
 # need X11 forwarding for ssh, `ssh -X osprey`, then `echo $DISPLAY`, and fill below
 ENV["DISPLAY"] = "localhost:13"
 # ENV["DISPLAY"] = ":0"
-using FileIO, NRRD, ImageView, HDF5, MAT, Images,
+using FileIO, NRRD, HDF5, MAT, Images,
     Unitful, AxisArrays, StaticArrays, CoordinateTransformations,
-    ImageView, TestImages, NRRD, LinearAlgebra, ImageMagick,
+    TestImages, NRRD, LinearAlgebra, ImageMagick,
     LibExpat, Glob, ANTsRegistration, ImageSegmentation, PyCall,
-    NIfTI, ImageContrastAdjustment, ImageView, Images, ImageView,
+    NIfTI, ImageContrastAdjustment, Images, #ImageView,
     ImageSegmentation, ImageMagick, Random, StatsBase,
-    ImageDraw, ImageFiltering, Glob, HDF5,
+    ImageDraw, ImageFiltering, Glob, HDF5, Arrow,
     Dates, Distributed, SharedArrays, CSV, DataFrames, Statistics, Lensman
+using Gadfly
 import Plots
 import PyPlot
 plt = PyPlot
@@ -16,33 +17,21 @@ matplotlib = plt.matplotlib
 using Base.Iterators: peel
 import Unitful: μm
 ##
-# can set in Julia extension settings for vscode, search "num threads"
-# stim1Dir = "/scratch/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
-# stim2Dir = "/mnt/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab-raphe-20trial-part2-047/"
+tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
 
-# VoltageRecording stopped short :/
-# stim1Dir = "/mnt/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2          .1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-039"
+plotDir = "/oak/stanford/groups/deissero/users/tyler/plots/2021_chrmine-structure"
+if ~isdir(plotDir)
+    mkdir(plotDir)
+end
 
-# stim1Dir = "/mnt/deissero/users/tyler/b115/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries-lrhab_raphe_stim-40trial-038"
-# next one TO-RUN
-# stim2Dir = "/mnt/deissero/users/tyler/b115/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries_lrhab_raphe_40trial_part_2-040"
 
-# stim1Dir = "/mnt/deissero/users/tyler/b115/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044"
-# stim2Dir = "/mnt/deissero/users/tyler/b115/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial_part_2-046/"
+# tseriesRootDir = "/mnt/deissero/users/tyler/b115"
+# tseriesRootDir = "/scratch/b115"
+tifDir = "$tseriesRootDir/2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-lrhab-raphe-control-129trial-052/"
 
-# TO-RUN
-# stim1Dir = "/oak/stanford/groups/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-039"
-# tifDir = stim2Dir
-# tifDir = stim1Dir
-
-# gc6f control vs WT ChRmine
-# tifDir = "/mnt/deissero/users/tyler/b115/2021-02-09_gcamp6f_7dpf/fish2/TSeries-lrhab-raphe-balanced-transitions-137"
-# tifDir = "/mnt/deissero/users/tyler/b115/2021-02-02_wt_chrmine_GC6f/fish4/TSeries-stim-3region-1control-045"
-tifDir = "/data/dlab/b115/2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-lrhab-raphe-control-129trial-052/"
-
-# TODO: copy slmExpDir (see below) to, say,  `/scratch/SLM_files/`, so no dependency on network
-slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
-# slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"
+# slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
+# slmDir = "$tseriesRootDir/tyler/b115/SLM_files/"
+slmDir = "/oak/stanford/groups/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment"
 
 
 expName = splitpath(tifDir)[end]
@@ -57,7 +46,7 @@ stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFile, Z)
 # @assert length(stimStartIdx) == 120
 
 ## single stim example
-imshow(imadjustintensity(tseries[:,:,:,stimStartIdx[1]-1:stimEndIdx[1]+1]))
+# imshow(imadjustintensity(tseries[:,:,:,stimStartIdx[1]-1:stimEndIdx[1]+1]))
 
 ## read slm stim files
 dataFolders = splitpath(tifDir)
@@ -71,7 +60,7 @@ volRate = frameRate / Z
 
 #
 slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
-trialOrder, _ = getTrialOrder(slmExpDir, expDate)
+trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
 
 
 nStimuli = maximum(trialOrder)
@@ -83,12 +72,79 @@ target_groups = [mat["cfg"]["maskS"]["targets"][1]
     for mat in matread.(findMatGroups(slmExpDir))]
 
 # Array of matrices indicating x, y z (or was it y, x, z..?)
-groupLocs = mapTargetGroupsToPlane(target_groups, etlVals)
+groupLocs = mapTargetGroupsToPlane(target_groups, etlVals, is1024=false)
+groupLocs = map(x->Int.(round.(x)), groupLocs)
 
 # stimDuration = Int(ceil(2*volRate))
 pre = Int(ceil(5*volRate))
 post = Int(ceil(5*volRate))
+##
+microscope_units = (0.6299544139175637μm, 0.6299544139175637μm, 2.0μm)
+targetSizePx = (7μm * 14.4/25) / microscope_units[1]
+regionMasks = constructGroupMasks(groupLocs, H, W, Z, targetSizePx=targetSizePx);
 
+@assert all(sum(regionMasks,dims=[1,2,3]) .> 0)
+
+## acquire in-region stim traces
+winSize = Int(ceil(volRate*2))
+before = Int(ceil(volRate*5))
+after = Int(ceil(volRate*14))
+region_trace_df = DataFrame(region=Int[], time=Float64[], df_f=Float64[], stimIdx=Int64[])
+for (i, stim_start, stim_stop, stim) in zip(1:length(trialOrder), stimStartIdx, stimEndIdx, trialOrder)
+    s = stim_start-before
+    e = stim_stop+after
+    time = collect(s:e) .- stim_start * 1.0
+    time ./= volRate
+    region_trace = extractTrace(tseries[:,:,:,s:e], regionMasks[:,:,:,stim])
+    region_trace = imageJkalmanFilter(region_trace)
+    
+    f0 = mean(region_trace[1:winSize])
+    df_f = @. (region_trace - f0) / (f0 + 10)
+    region_trace_df = vcat(region_trace_df,
+        DataFrame(region=stim, time=time, df_f = df_f, stimIdx=i))
+end
+region_trace_df
+open(joinpath(fishDir, "expName_fluorescence.arrow"), "w") do io
+    Arrow.write(io, region_trace_df)
+end
+
+
+## plot the traces!
+
+chrmine_paper = Gadfly.Theme(
+    line_width=1mm,
+    minor_label_font="Arial",
+    major_label_font="Arial",
+    key_title_font="Arial",
+    key_label_font="Arial",
+    major_label_font_size=10pt,
+    minor_label_font_size=10pt,
+    key_title_font_size=10pt,
+    key_label_font_size=10pt
+)
+
+meanDF = combine(groupby(region_trace_df, ["time", "region"]),
+    :df_f => mean, :df_f => maximum, :df_f => minimum)
+    # :df_f => mean, :df_f => max_95ci, :df_f => min_95ci)
+
+joinpath(fishDir,expName*"_avgStim.h5")
+
+##
+
+line = plot(meanDF, x=:time,
+    xgroup=:region,
+    y="df_f_mean",
+    # ymin="df_f_minimum",
+    # ymax="df_f_maximum",
+    # ymin="df_f_min_95ci",
+    # ymax="df_f_max_95ci",
+    chrmine_paper,
+    # Geom.subplot_grid(Geom.line, Geom.ribbon))
+    Geom.subplot_grid(Geom.line))
+path = joinpath(plotDir,"$(expName)_region_trace.svg")
+Gadfly.draw(SVG(path, 12cm, 6cm), line)
+@show path
+line
 ## avg stim effect
 
 # warmup JIT
@@ -110,6 +166,7 @@ window = Int(ceil(3*volRate))
 cmax = 2
 cmin = -0.5
 cnorm = matplotlib.colors.TwoSlopeNorm(vmin=cmin,vcenter=0,vmax=cmax)
+# cnorm = matplotlib.colors.DivergingNorm(vmin=cmin,vcenter=0,vmax=cmax)
 
 for stimNum in 1:nStimuli
     f = mean(avgStim[:,:,:,stimNum,end-window+1:end],dims=4)[:,:,:,1]

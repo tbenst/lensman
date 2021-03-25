@@ -1,4 +1,5 @@
 using Plots, Plots.PlotMeasures
+# import Gadfly
 import Unitful: mW
 function plotStim(tseries,roiMask,cells, idx::Int, volRate; before=30, after=60,
         colorBy=:laserPower)
@@ -105,3 +106,23 @@ function plotStim(tseries,roiMask,cells, indices::Array{Int,1}, volRate, trial::
         0,0), opacity=.5, label="stim")
     p
 end
+
+function max_95ci(x)
+    confint(OneSampleTTest(x))[2]
+end
+
+function min_95ci(x)
+    confint(OneSampleTTest(x))[1]
+end
+
+# chrmine_paper = Gadfly.Theme(
+#     line_width=1mm,
+#     minor_label_font="Arial",
+#     major_label_font="Arial",
+#     key_title_font="Arial",
+#     key_label_font="Arial",
+#     major_label_font_size=10pt,
+#     minor_label_font_size=10pt,
+#     key_title_font_size=10pt,
+#     key_label_font_size=10pt
+# )

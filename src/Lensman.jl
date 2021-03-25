@@ -3,7 +3,7 @@ module Lensman
 using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     ImageDraw, ImageFiltering, PyCall, MAT, Dates, DataStructures,
     Statistics, SharedArrays, CSV, DataFrames, Suppressor, Plots,
-    LinearAlgebra, LibExpat, LightXML, RollingFunctions
+    LinearAlgebra, LibExpat, LightXML, RollingFunctions, HypothesisTests
 import Base.Threads.@threads
 using Distributed
 import Unitful: μm
@@ -850,6 +850,8 @@ export read_microns_per_pixel,
     parseXML,
     createMarkPointElement,
     medianfilt,
-    read_gpl
+    read_gpl,
+    max_95ci,
+    min_95ci
     # , segment_nuclei
 end
