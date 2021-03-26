@@ -14,6 +14,15 @@ import Plots
 import PyPlot
 plt = PyPlot
 matplotlib = plt.matplotlib
+# matplotlib.use("Agg")
+
+font = Dict("family" => "Arial",
+        "weight" => "normal",
+        "size"   => 10)
+
+matplotlib.rc("font", family="Arial", weight="normal", size=10)
+matplotlib.rcParams["figure.dpi"] = 600
+
 using Base.Iterators: peel
 import Unitful: μm
 ##
@@ -172,6 +181,10 @@ end
 # avgStim = h5read(joinpath(fishDir,expName*"_avgStim.h5"), "/block1");
 (H, W, Z, nStim) = size(avgStim)
 ## STA
+
+figB = 1.7
+figW,figH = (figB*6, figB)
+
 window = Int(ceil(3*volRate))
 @assert (window < post) & (window < pre)
 cmax = 2
@@ -187,17 +200,24 @@ for stimNum in 1:nStimuli
 
     # cmax = percentile(df_f[:],99.9)
     # cmin = percentile(df_f[:],0.1)
-    global fig = plt.figure(figsize=(50,10))
+    # global fig = plt.figure(figsize=(figW,figH))
+    global fig, axes = plt.subplots(Z, 1, figsize=(figW,figH))
     plt.axis("off")
+    for (z,ax) in enumerate(axes)
+        ax.imshow(df_f[:,:,z], cmap="RdBu_r",
+            norm=cnorm)
+        ax.set_title("$(Int(round(etlVals[z],digits=0)))μm")
+    end
     # cmax = percentile(abs.(df_f[:,:,1][:]),99.9)
-    plt.imshow(hcat([df_f[:,:,z] for z in 1:Z]...), cmap="RdBu_r",
-        norm=cnorm)
+    # plt.imshow(hcat([df_f[:,:,z] for z in 1:Z]...), cmap="RdBu_r",
+    #     norm=cnorm)
     if ~isdir(joinpath(fishDir, "plots"))
         mkdir(joinpath(fishDir, "plots"))
     end
-    fig.savefig(joinpath(fishDir, "plots",expName*"_stim$stimNum.png"))
+    # cbar = plt.colorbar()
+    # fig.savefig(joinpath(fishDir, "plots",expName*"_stim$stimNum.png"))
 end
-fig
+# fig # will error on sherlock / not display
 ## use this plot for cropping colorbar
 fig = plt.figure(figsize=(3,6), dpi=300)
 plt.imshow(vcat([df_f[:,:,z] for z in 1:3]...), cmap="RdBu_r",
