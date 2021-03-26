@@ -1,5 +1,5 @@
 # need X11 forwarding for ssh, `ssh -X osprey`, then `echo $DISPLAY`, and fill below
-ENV["DISPLAY"] = "localhost:11"
+# ENV["DISPLAY"] = "localhost:11"
 # ENV["DISPLAY"] = ":0"
 using FileIO, NRRD, HDF5, MAT, Images,
     Unitful, AxisArrays, StaticArrays, CoordinateTransformations,
@@ -17,37 +17,44 @@ matplotlib = plt.matplotlib
 using Base.Iterators: peel
 import Unitful: μm
 ##
-# tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
-tseriesRootDir = "/mnt/deissero/users/tyler/b115"
+tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
+# tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 # tseriesRootDir = "/data/dlab/b115"
 
-# plotDir = "/oak/stanford/groups/deissero/users/tyler/plots/2021_chrmine-structure"
-plotDir = "/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure"
-if ~isdir(plotDir)
-    mkdir(plotDir)
-end
 
 
 # tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 # tseriesRootDir = "/scratch/b115"
 tifDir = "$tseriesRootDir/2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-lrhab-raphe-control-129trial-052/"
-tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-039/"
+# tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-039/"
+tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
 
-slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
+# slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 # slmDir = "$tseriesRootDir/tyler/b115/SLM_files/"
 # slmDir = "/oak/stanford/groups/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment"
+# slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/slm"
+slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
+
 
 
 expName = splitpath(tifDir)[end]
 fishDir = joinpath(splitpath(tifDir)[1:end-1]...)
+
+# plotDir = "/oak/stanford/groups/deissero/users/tyler/plots/2021_chrmine-structure"
+# plotDir = "/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure"
+plotDir = joinpath(fishDir, "plots")
+if ~isdir(plotDir)
+    mkdir(plotDir)
+end
+plotDir
 ##
 tseries = loadTseries(tifDir);
 (H, W, Z, T) = size(tseries)
 ##
 voltageFile = glob("*VoltageRecording*.csv", tifDir)[1]
 stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFile, Z)
-@assert length(stimStartIdx) == 129
-# @assert length(stimStartIdx) == 120
+# @assert length(stimStartIdx) == 129
+@assert length(stimStartIdx) == 120
 
 ## single stim example
 # imshow(imadjustintensity(tseries[:,:,:,stimStartIdx[1]-1:stimEndIdx[1]+1]))
