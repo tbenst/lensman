@@ -21,37 +21,54 @@ font = Dict("family" => "Arial",
         "size"   => 10)
 
 matplotlib.rc("font", family="Arial", weight="normal", size=10)
+
+SMALL_SIZE = 10
+matplotlib.rc("font", size=SMALL_SIZE)          # controls default text sizes
+matplotlib.rc("axes", titlesize=SMALL_SIZE)     # fontsize of the axes title
+matplotlib.rc("axes", labelsize=SMALL_SIZE)    # fontsize of the x and y labels
+matplotlib.rc("xtick", labelsize=SMALL_SIZE)    # fontsize of the tick labels
+matplotlib.rc("ytick", labelsize=SMALL_SIZE)    # fontsize of the tick labels
+matplotlib.rc("legend", fontsize=SMALL_SIZE)    # legend fontsize
+matplotlib.rc("figure", titlesize=SMALL_SIZE)  # fontsize of the figure title
+
 matplotlib.rcParams["figure.dpi"] = 600
+matplotlib.rcParams["savefig.dpi"] = 600
 
 using Base.Iterators: peel
 import Unitful: μm
 ##
-tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
-# tseriesRootDir = "/mnt/deissero/users/tyler/b115"
+# tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
+tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 # tseriesRootDir = "/data/dlab/b115"
 
 
 
 # tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 # tseriesRootDir = "/scratch/b115"
-tifDir = "$tseriesRootDir/2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-lrhab-raphe-control-129trial-052/"
+# tifDir = "$tseriesRootDir/2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-lrhab-raphe-control-129trial-052/"
 # tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-039/"
-tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
+# tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
+# tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-040/"
+tifDir = "$tseriesRootDir/2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish1/TSeries-lrhab_raphe_40trial-023"
+Z = 5
+
+# tifDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries-lrhab_raphe_stim-40trial-038"
 
 # slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 # slmDir = "$tseriesRootDir/tyler/b115/SLM_files/"
 # slmDir = "/oak/stanford/groups/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment"
 # slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/slm"
-slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
-
-
+# slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
+slmDir = "$tseriesRootDir/SLM_files/"
 
 expName = splitpath(tifDir)[end]
 fishDir = joinpath(splitpath(tifDir)[1:end-1]...)
+recording_folder = splitpath(tifDir)[end-2]
+fish_name = splitpath(tifDir)[end-1]
 
 # plotDir = "/oak/stanford/groups/deissero/users/tyler/plots/2021_chrmine-structure"
-# plotDir = "/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure"
-plotDir = joinpath(fishDir, "plots")
+plotDir = "/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure"
+# plotDir = joinpath(fishDir, "plots")
 if ~isdir(plotDir)
     mkdir(plotDir)
 end
@@ -60,7 +77,11 @@ plotDir
 tseries = loadTseries(tifDir);
 (H, W, Z, T) = size(tseries)
 ##
-voltageFile = glob("*VoltageRecording*.csv", tifDir)[1]
+voltageFile = joinpath(tifDir, expName*"_Cycle00001_VoltageRecording_001.csv")
+if ~isfile(voltageFile)
+    # avoid scanning list of many files...
+    voltageFile = glob("*VoltageRecording*.csv", tifDir)[1]
+end
 stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFile, Z)
 # @assert length(stimStartIdx) == 129
 @assert length(stimStartIdx) == 120
@@ -73,6 +94,9 @@ dataFolders = splitpath(tifDir)
 xmlPath = joinpath(dataFolders..., dataFolders[end] * ".xml")
 expDate, frameRate, etlVals = getExpData(xmlPath)
 volRate = frameRate / Z
+
+pre = Int(ceil(5*volRate))
+post = Int(ceil(5*volRate))
 
 # if imaging many planes, may need to read another xml file since didn't get all planes in first file
 @assert length(etlVals) == Z
@@ -96,8 +120,7 @@ groupLocs = mapTargetGroupsToPlane(target_groups, etlVals, is1024=false)
 groupLocs = map(x->Int.(round.(x)), groupLocs)
 
 # stimDuration = Int(ceil(2*volRate))
-pre = Int(ceil(5*volRate))
-post = Int(ceil(5*volRate))
+
 ##
 microscope_units = (0.6299544139175637μm, 0.6299544139175637μm, 2.0μm)
 targetSizePx = (7μm * 14.4/25) / microscope_units[1]
@@ -178,17 +201,19 @@ try
 catch
 end
 ##
-# avgStim = h5read(joinpath(fishDir,expName*"_avgStim.h5"), "/block1");
+avgStim = h5read(joinpath(fishDir,expName*"_avgStim.h5"), "/block1");
 (H, W, Z, nStim) = size(avgStim)
 ## STA
 
-figB = 1.7
-figW,figH = (figB*6, figB)
+figB = 1.6
+figW,figH = (figB*5, figB)
 
 window = Int(ceil(3*volRate))
 @assert (window < post) & (window < pre)
-cmax = 2
-cmin = -0.5
+# cmax = 2.5
+# cmin = -0.5
+cmax = 4
+cmin = -0.75
 cnorm = matplotlib.colors.TwoSlopeNorm(vmin=cmin,vcenter=0,vmax=cmax)
 # cnorm = matplotlib.colors.DivergingNorm(vmin=cmin,vcenter=0,vmax=cmax)
 
@@ -201,23 +226,26 @@ for stimNum in 1:nStimuli
     # cmax = percentile(df_f[:],99.9)
     # cmin = percentile(df_f[:],0.1)
     # global fig = plt.figure(figsize=(figW,figH))
-    global fig, axes = plt.subplots(Z, 1, figsize=(figW,figH))
-    plt.axis("off")
+    global fig, axes = plt.subplots(1,Z, figsize=(figW,figH))
     for (z,ax) in enumerate(axes)
-        ax.imshow(df_f[:,:,z], cmap="RdBu_r",
+        # plt.axis("off")
+        global cim = ax.imshow(df_f[:,:,z], cmap="RdBu_r",
             norm=cnorm)
+        ax.set_axis_off()
         ax.set_title("$(Int(round(etlVals[z],digits=0)))μm")
     end
     # cmax = percentile(abs.(df_f[:,:,1][:]),99.9)
     # plt.imshow(hcat([df_f[:,:,z] for z in 1:Z]...), cmap="RdBu_r",
     #     norm=cnorm)
-    if ~isdir(joinpath(fishDir, "plots"))
-        mkdir(joinpath(fishDir, "plots"))
-    end
-    # cbar = plt.colorbar()
-    # fig.savefig(joinpath(fishDir, "plots",expName*"_stim$stimNum.png"))
+    fig.subplots_adjust(right=0.96)
+    cbar_ax = fig.add_axes([0.97, 0.15, 0.0075, 0.7])
+    # cbar = fig.colorbar(cim, ticks=[0,1,2], cax=cbar_ax)
+    cbar = fig.colorbar(cim, cax=cbar_ax)
+    path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_stim$stimNum.svg")
+    @show path
+    fig.savefig(path, dpi=600)
 end
-# fig # will error on sherlock / not display
+fig # will error on sherlock / not display
 ## use this plot for cropping colorbar
 fig = plt.figure(figsize=(3,6), dpi=300)
 plt.imshow(vcat([df_f[:,:,z] for z in 1:3]...), cmap="RdBu_r",
