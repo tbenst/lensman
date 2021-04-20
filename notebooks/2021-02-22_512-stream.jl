@@ -41,12 +41,122 @@ C, Z, H, W = Int64.(reinterpret(Int16,bSize))
 
 println("writing to host")
 write(pv, "Tseries")
-samples = []
 
-push!(samples, read(pv))
+samples = []
+n = 500000
 @async while isopen(pv)
-    push!(samples, read(pv))
+    bArray = read(pv, sizeof(Int16)*n)
+    arr = reinterpret(Int16, bArray)
+    push!(samples, arr)
 end
+
+## 1-plane 1024
+expected_Z = 1
+expected_W = 1024
+expected_H = 1024
+expected_C = 2
+expected_rate = 15
+expected_time = 30 # sec
+# num_reps = expected_rate * expected_time
+num_reps = 451
+samples_per_rep = expected_W * expected_H * expected_Z * expected_C
+expected = samples_per_rep * num_reps
+actual = length(samples) * n
+@show expected_Z, expected_W, expected_H, expected_C, expected_rate, expected_time, expected, actual 
+print("fraction of expected samples: $(actual/expected)")
+print("expected reps: $num_reps, actual reps: $(actual/samples_per_rep)")
+# 1.004
+
+## 10-plane 1024
+expected_Z = 10
+expected_W = 1024
+expected_H = 1024
+expected_C = 2
+expected_rate = 1/0.666666
+expected_time = 30 # sec
+samples_per_rep = expected_W * expected_H * expected_Z * expected_C
+# num_reps = expected_rate * expected_time
+num_reps = 46
+expected = samples_per_rep * num_reps
+actual = length(samples) * n
+@show expected_Z, expected_W, expected_H, expected_C, expected_rate, expected_time, expected, actual 
+print("fraction of expected samples: $(actual/expected)")
+print("expected reps: $num_reps, actual reps: $(actual/samples_per_rep)")
+# 1.004
+
+
+## 1-plane 512x512
+expected_Z = 1
+expected_W = 512
+expected_H = 512
+expected_C = 2
+expected_rate = 30
+expected_time = 30 # sec
+samples_per_rep = expected_W * expected_H * expected_Z * expected_C
+# num_reps = expected_rate * expected_time
+num_reps = 89
+expected = samples_per_rep * num_reps
+actual = length(samples) * n
+@show expected_Z, expected_W, expected_H, expected_C, expected_rate, expected_time, expected, actual 
+print("fraction of expected samples: $(actual/expected)")
+print("expected reps: $num_reps, actual reps: $(actual/samples_per_rep)")
+
+## 10-plane 512x512
+expected_Z = 10
+expected_W = 512
+expected_H = 512
+expected_C = 2
+expected_rate = 0.3333
+expected_time = 30 # sec
+samples_per_rep = expected_W * expected_H * expected_Z * expected_C
+# num_reps = expected_rate * expected_time
+num_reps = 89
+expected = samples_per_rep * num_reps
+actual = length(samples) * n
+@show expected_Z, expected_W, expected_H, expected_C, expected_rate, expected_time, expected, actual 
+print("fraction of expected samples: $(actual/expected)")
+print("expected reps: $num_reps, actual reps: $(actual/samples_per_rep)")
+
+## 1-plane 256x256
+expected_Z = 10
+expected_W = 256
+expected_H = 256
+expected_C = 2
+expected_rate = 1/0.17
+expected_time = 30 # sec
+samples_per_rep = expected_W * expected_H * expected_Z * expected_C
+# num_reps = expected_rate * expected_time
+num_reps = 174
+expected = samples_per_rep * num_reps
+actual = length(samples) * n
+@show expected_Z, expected_W, expected_H, expected_C, expected_rate, expected_time, expected, actual 
+print("fraction of expected samples: $(actual/expected)")
+print("expected reps: $num_reps, actual reps: $(actual/samples_per_rep)")
+
+## 10-plane
+# expected_Z = 10
+# expected_W = 512
+# expected_H = 512
+# expected_C = 2
+# expected_rate = 3
+# expected_time = 30 # sec
+# expected = expected_W * expected_H * expected_Z * expected_C * expected_rate * expected_time
+# actual = length(samples) * n
+# print("fraction of expected samples: $(actual/expected)")
+##
+
+
+
+
+##  10-plane reshaping test
+array1d = vcat(samples...)[1:expected]
+expected / (C * H * W * Z)
+ims = reshape(array1d, C, W, H, Z, num_reps)
+# ims = permutedims(ims, [1,2,1,4,5])
+# ims = mean(ims, dims=5)
+imshow(ims[:,:,1,:,:])
+
+
 ##
 
 currentVolume = Observable(zeros(Int16,C,H,W,Z))
@@ -80,8 +190,8 @@ _ = read(pv, sizeof(Int16)*C*H*W)
     for z in 1:Z
         bArray = read(pv, sizeof(Int16)*C*H*W)
         println("read z $z")
-        # we have to reassign currentVolume to trigger observable listener...
         arr = permutedims(reshape(reinterpret(Int16, bArray),C,W,H),[1,3,2])
+        # we have to reassign currentVolume to trigger observable listener...
         tmpVol[:,:,:,z] .= arr
     end
     currentVolume[] = copy(tmpVol)

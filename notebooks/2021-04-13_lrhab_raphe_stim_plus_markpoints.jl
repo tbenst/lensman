@@ -333,7 +333,7 @@ imshow(im[:,:,implanes])
 
 
 ## SAVE
-slmOutName = "$(outname)_lrhab_raphe_3groups"
+slmOutName = "$(outname)_lrhab_raphe_control"
 if isfile(slmOutName*".txt")
     error("file already exists! refusing to clobber")
 end

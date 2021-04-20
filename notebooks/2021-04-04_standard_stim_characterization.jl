@@ -1,5 +1,5 @@
 ## compare 
-ENV["DISPLAY"] = "localhost:10.0"
+ENV["DISPLAY"] = "localhost:13.0"
 using Sockets, Observables, Statistics, Images, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
@@ -14,13 +14,23 @@ plt = PyPlot
 matplotlib = plt.matplotlib
 
 ##
-# offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
-offset = float(uconvert(m, 0μm)) / m # when using SLM2 since 2020-02-?
-zOffset = offset * 1e6
 # tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
-tseriesRootDir = "/data/dlab/b115"
+# tseriesRootDir = "/data/dlab/b115"
 tseriesRootDir = "/scratch/b115"
 # tseriesRootDir = "/mnt/deissero/users/tyler/b115"
+
+
+# newer
+# slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
+# slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
+# slmDir = "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment"
+slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
+# older
+# slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"
+# slmDir = "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
+
+
+
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055"
 # can't fit in memory on lensman, so use deis
@@ -36,7 +46,7 @@ tseriesRootDir = "/scratch/b115"
 # tseriesDir = "$tseriesRootDir/2021-03-16_h33r-chrmine_h2b6s/fish4/TSeries_64cell_8concurrent_2power_8rep-607"
 # tseriesDir = "$tseriesRootDir/2021-03-16_rschrmine_h2b6s/fish3/TSeries_64cell_8concurrent_2power_8rep-407"
 # tseriesDir = "$tseriesRootDir/2021-03-16_h2b6s/fish1/TSeries_64cell_8concurrent_2power_8rep-207"
-tseriesDir = "$tseriesRootDir/2021-03-16_wt-chrmine_h2b6s/fish2/TSeries_64cell_8concurrent_2power_8rep-221"
+# tseriesDir = "$tseriesRootDir/2021-03-16_wt-chrmine_h2b6s/fish2/TSeries_64cell_8concurrent_2power_8rep-221"
 
 # tseriesDir = joinpath(tseriesRootDir, "2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2/TSeries-128cell-4concurrent-3power-skip7-044")
 # tseriesDir = "$tseriesRootDir/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043"
@@ -47,6 +57,19 @@ tseriesDir = "$tseriesRootDir/2021-03-16_wt-chrmine_h2b6s/fish2/TSeries_64cell_8
 # tseriesDir = "$tseriesRootDir/2021-01-26_rsChRmine_6f_7dpf/fish2/TSeries-1024cell-32concurrent-048"
 # tseriesDir = "$tseriesRootDir/2021-03-09_wt-chrmine-gc6f/fish1/TSeries-32cell-8concurrent-10MHz-8rep-065"
 # tseriesDir = "$tseriesRootDir/2021-03-09_wt-chrmine-gc6f/fish1/TSeries-32cell-8concurrent-10MHz-8rep-065"
+
+
+# compare to old 1024 stim experiment with 90% of cells responding (but some plateaus...)
+# tseriesDir = "$tseriesRootDir/2020-12-15_h2b6s_chrmine_kv2.1_5dpf/fish2/TSeries-1024cell-32concurrent-038"
+# tseriesDir = "$tseriesRootDir/2020-12-17_h2b6s_chrmine-kv2.1_7dpf/fish1/TSeries_n64_b2_r8-044"
+# tseriesDir = "$tseriesRootDir/2020-11-30_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish1/fov1-tectum/TSeries-64groups-4cell-stim-069"
+
+# tseriesDir = "$tseriesRootDir/2021-03-30_wt-chrmine_6dpf_h2b6s/fish1/TSeries-28cell-1concurrent-2power-10trial-052"
+tseriesDir = "$tseriesRootDir/2021-04-13_wt-chrmine_6dpf_h2b6s/fish1/TSeries-16cell-50rep-actually-stim-147"
+# tseriesDir = "$tseriesRootDir/2021-04-19_wt-chrmine_5dpf_6f/fish1/TSeries-15cell-5concurrent-5rep-actual-trigger-005"
+
+# debug by looking at 3region..?
+# tseriesDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044/"
 
 ##
 # tseriesDir = "$tseriesRootDir/2021-03-16"
@@ -108,16 +131,13 @@ tseries = loadTseries(tseriesDir);
 ##
 (H, W, Z, T) = size(tseries)
 @show (H, W, Z, T)
-slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
-# slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
-# slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
-# slmDir = "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment"
 plotDir = joinpath(fishDir, "plots")
 if ~isdir(plotDir)
     mkdir(plotDir)
 end
 
 # TODO: wrap more of cell in function to reduce inline code..?
+# for 2021-03-16, can read from oak...
 voltageFile = glob("*VoltageRecording*.csv", tseriesDir)[1]
 
 # read slm stim files
@@ -131,33 +151,22 @@ trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
 
 ## read power
 @assert length(glob("*.txt", tylerSLMDir)) == 1 # if not, need to be careful to choose
-# glob("*.txt", tylerSLMDir)
 slmTxtFile = glob("*.txt", tylerSLMDir)[1]
+# slmTxtFile = glob("*.txt", fishDir)[1]
+
+# slmTxtFile = "/mnt/deissero/users/tyler/b115/2020-12-15_h2b6s_chrmine_kv2.1_5dpf/fish2/1024cell-32concurrent.txt"
+# slmTxtFile = "/mnt/deissero/users/tyler/slm/masks/2020-11-30/fish1-256-cell.txt"
+
 stimGroupDF = CSV.File(open(read, slmTxtFile), header=["filepath", "powerFraction"]) |> DataFrame
 stimGroupDF = stimGroupDF[trialOrder,:]
 
-
-getMatStimFreq(mat) = sum((~).(sum.(mat["cfg"]["exp"]["targets"]) .≈ 0.0))*5
-getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0,0) ? 1 : 2
-
 mat = matread.(findMatGroups(slmExpDir)[1])
 slmNum = getSLMnum(mat)
+zOffset = getzoffset(expDate, slmNum)
 ##
-@warn "hardcoded laser power"
 firstTargetGroup = matread.(findMatGroups(slmExpDir)[1])
 powerPerCell = firstTargetGroup["cfg"]["mode"]["BHV001"]["FOV"]["PowerPerCell"]
-if expDate < Date("2021-02-24")
-    slm1Power = 570mW
-    slm2Power = 380mW
-elseif expDate <= Date("2021-03-01")
-    slm1Power = 450mW
-    slm2Power = 375mW
-else
-    # slm1Power = 377mW
-    # slm2Power = 305mW
-    slm1Power = 450mW
-    slm2Power = 450mW
-end
+slm1Power, slm2Power = slmpower(expDate)
 if slmNum == 1
     slmpowerPerCell = slm1Power * powerPerCell / 1000
 elseif slmNum == 2
@@ -177,14 +186,20 @@ avgStimDuration = mean(stimEndIdx .- stimStartIdx)
 # Assumes no sequence of stim
 # for 5Hz clock
 
-
 target_groups = []
 group_stim_freq = []
 for mat in matread.(findMatGroups(slmExpDir))
     push!(target_groups, mat["cfg"]["maskS"]["targets"][1])
     push!(group_stim_freq, getMatStimFreq(mat))
 end
-
+## use from Tyler's files, rather than sean's....
+# target_groups_debug = []
+# for mat in matread.(glob("*.mat", tylerSLMDir))
+#     push!(target_groups_debug, mat["experimentS"]["targets"][1])
+# end
+# # since 2 powers...
+# target_groups_debug = vcat(target_groups_debug, target_groups_debug)
+##
 # target_groups = [mat["cfg"]["maskS"]["targets"][1]
 #     for mat in matread.(findMatGroups(slmExpDir))]
 
@@ -199,7 +214,21 @@ nTrialsPerStimulus = Int(size(trialOrder,1) / nStimuli)
 is1024 = size(tseries,1)==1024
 targetsWithPlaneIndex = mapTargetGroupsToPlane(target_groups, etlVals,
 is1024=is1024, zOffset=zOffset)
+targetsWithPlaneIndex = map(x->Int.(round.(x, digits=0)), targetsWithPlaneIndex)
 
+# targetsWithPlaneIndex_debug = mapTargetGroupsToPlane(target_groups_debug, etlVals,
+# is1024=is1024, zOffset=zOffset)
+# targetsWithPlaneIndex_debug = map(x->Int.(round.(x, digits=0)), targetsWithPlaneIndex_debug)
+
+# @warn "debug use tyler slm folder..."
+# target_groups = target_groups_debug
+# targetsWithPlaneIndex = targetsWithPlaneIndex_debug
+
+
+# @warn "Hardcode plane 'fix' for 2020-12-16"
+# targetsWithPlaneIndex = map(x-> x .- [0 0 4], targetsWithPlaneIndex)
+
+##
 # @warn "only using first 32... (also why only 63 stimuli??"
 # cells = makeCellsDF(targetsWithPlaneIndex, stimStartIdx[1:32], stimEndIdx[1:32], trialOrder[1:32])
 # cells2 = makeCellsDF(targetsWithPlaneIndex, stimStartIdx[33:63], stimEndIdx[33:63], trialOrder[33:63])
@@ -208,6 +237,7 @@ cells = makeCellsDF(targetsWithPlaneIndex, stimStartIdx, stimEndIdx, trialOrder)
 cells[!, :stimFreq] = map(g->group_stim_freq[trialOrder][g], cells.stimGroup)
 cells[!, :laserPower] = round.(typeof(1.0mW),
     map(g->stimGroupDF.powerFraction[g], cells.stimNum) .* slmpowerPerCell, digits=1)
+# cells[!, :laserPower] .= slmpowerPerCell
 
 stimLocs = map(CartesianIndex ∘ Tuple, eachrow(cells[:,[2,1]]))
 
@@ -217,16 +247,10 @@ avgImageAdj = adjust_gamma(imadjustintensity(avgImage), 0.5)
 avgImageAdj = RGB.(avgImageAdj)
 channelview(avgImageAdj)[[1,3],:,:,:] .= 0
 
-if size(tseries,1)==512
-    microscope_units = (2* 0.6299544139175637μm, 2* 0.6299544139175637μm, 2.0μm)
-elseif size(tseries,1)==1024
-    microscope_units = (0.6299544139175637μm, 0.6299544139175637μm, 2.0μm)
-else
-    @error "unknown microscope units"
-end
+lateral_unit = microscope_lateral_unit(W)
+targetSizePx = spiral_size(expDate, lateral_unit)
 
-# As of 2021-03-09, now actually 7um for 25x
-targetSizePx = 7μm / microscope_units[1]
+
 avgImgWithTargets = addTargetsToImage(copy(avgImageAdj), cartIdx2Array(stimLocs),
     targetSize=targetSizePx)
 save(joinpath(plotDir,"$(expName)_avgImgWithTargets.png"), avgImgWithTargets)
@@ -267,7 +291,8 @@ if ~isfile(cellsdf_arrow_path)
 end
 
 ## sanity check that stim mask looks right
-avg_image = mean(tseries[:,:,:,1:5000], dims=4)[:,:,1,1];
+maxT = minimum([5000, size(tseries,4)])
+avg_image = mean(tseries[:,:,:,1:maxT], dims=4)[:,:,1,1];
 avg_image = imadjustintensity(adjust_gamma(avg_image,0.2))
 
 
@@ -275,8 +300,7 @@ stim_masks = constructGroupMasks(targetsWithPlaneIndex, H, W, Z)
 Gray.(imadjustintensity(sum(stim_masks, dims=4)[:,:,1,1]))
 imshow(stim_masks)
 
-addTargetsToImage(avg_image, stimLocs)
-
+avgImgWithTargets
 ##
 # histogram(cellsDF.df_f)
 p = histogram(combine(groupby(cellsDF, [:cellID, :laserPower]), :df_f => mean).df_f_mean)
@@ -309,8 +333,9 @@ p = plot(plots..., layout=(8,8), legend=true, size=(1024*4,1024*4))
 savefig(p, joinpath(plotDir,"$(expName)_top64_traces.svg"))
 p
 ##
-
-cells_meanDF = combine(groupby(cellsDF, [:cellID, :x, :y]), :df_f => mean)
+max_laser = maximum(cellsDF.laserPower)
+cells_meanDF = combine(groupby(cellsDF[cellsDF.laserPower .== max_laser,:],
+    [:cellID, :x, :y]), :df_f => mean)
 cmax = maximum(abs.(cells_meanDF.df_f_mean[(~).(isnan.(cells_meanDF.df_f_mean))]))
 p_df_map = Gadfly.with_theme(:dark) do
     Gadfly.plot(cells_meanDF[(~).(isnan.(cells_meanDF.df_f_mean)), :], x=:x, y=:y, Gadfly.Geom.point, size=[targetSizePx], color=:df_f_mean,
@@ -354,19 +379,25 @@ if ~isfile(fluor_arrow_path)
     end
 end
 ## influence maps
-pre = Int(ceil(3*volRate))+1
-post = Int(ceil(3*volRate))+1
+if volRate > 10
+    nseconds = 3
+else
+    nseconds = 5
+end
+pre = Int(ceil(nseconds*volRate))+1
+post = Int(ceil(nseconds*volRate))+1
 
 avgStim = trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder;
     pre=pre, post=post);
 ##
 figB = 1.6
 # 2 for extra stim mask
-figW,figH = (figB*2, figB)
+# figW,figH = (figB*1.1, figB)
+figW,figH = (figB*Z, figB)
 
 window = Int(ceil(3*volRate))
 @assert (window < post) & (window < pre)
-@assert Z == 1
+# @assert Z == 1
 # cmax = 2.5
 # cmin = -0.5
 cmax = 4
@@ -381,22 +412,37 @@ for stimNum in 1:nStimuli
     z = 1
     # cmax = percentile(df_f[:],99.9)
     # cmin = percentile(df_f[:],0.1)
-    # global fig = plt.figure(figsize=(figW,figH))
-    fig, axs = plt.subplots(1,2, figsize=(figW,figH))
-    ax = axs[2]
-    cim = ax.imshow(df_f[:,:,z], cmap="RdBu_r",
-        norm=cnorm)
-    ax.set_axis_off()
-    ax.set_title("$(Int(round(etlVals[z],digits=0)))μm")
-    # this will make extra circles (1 extra per repetition...)
-    for (x,y,z) in eachrow(unique(cells[cells.stimNum .== stimNum,[:x,:y,:z]]))
-        @assert z == 1
-        circle = matplotlib.patches.Circle((x,y), targetSizePx, color="k",
-            fill=false, ls="--", lw=0.5)
-        ax.add_patch(circle)
+    global fig = plt.figure(figsize=(figW,figH))
+    fig, axs = plt.subplots(1,Z, figsize=(figW,figH))
+    if Z==1
+        axs = [axs]
+    end
+    # ax = axs[2]
+    # ax = axs
+    for z in 1:Z
+        ax = axs[z]
+        global cim = ax.imshow(df_f[:,:,z], cmap="RdBu_r",
+            norm=cnorm)
+        ax.set_axis_off()
+        ax.set_title("$(Int(round(etlVals[z],digits=0)))μm")
+        # this will make extra circles (1 extra per repetition...)
+        for (x,y,targetZ) in eachrow(unique(cells[cells.stimNum .== stimNum,[:x,:y,:z]]))
+            if z == targetZ
+                circle = matplotlib.patches.Circle((x,y), targetSizePx, color="k",
+                    fill=false, lw=0.5, alpha=0.3)
+                ax.add_patch(circle)
+            end
+        end
+        # previous (but not this stim) targets
+        # for (x,y,z) in eachrow(unique(cells[cells.stimNum .!= stimNum,[:x,:y,:z]]))
+        #     @assert z == 1
+        #     circle = matplotlib.patches.Circle((x,y), targetSizePx, color="k",
+        #         fill=false, lw=0.5, alpha=0.5)
+        #     ax.add_patch(circle)
+        # end
     end
 
-    axs[1].imshow(stim_masks[:, :,z,stimNum], cmap="gray")
+    # axs[1].imshow(stim_masks[:, :,z,stimNum], cmap="gray")
 
     # cmax = percentile(abs.(df_f[:,:,1][:]),99.9)
     # plt.imshow(hcat([df_f[:,:,z] for z in 1:Z]...), cmap="RdBu_r",

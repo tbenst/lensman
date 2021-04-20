@@ -49,13 +49,15 @@ tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
 # tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-039/"
 # tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
 # tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-040/"
+<<<<<<< HEAD
 
 # tifDir = "$tseriesRootDir/2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish1/TSeries-lrhab_raphe_40trial-023"
 tifDir = "$tseriesRootDir/2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish2/TSeries-lrhab_raphe_stim-40trial-proper-zoffset-034"
 Z = 5
 
 # tifDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries-lrhab_raphe_stim-40trial-038"
-# tifDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries-lrhab_raphe_stim-40trial-038"
+# tifDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries_lrhab_raphe_40trial_part_2-040"
+# tifDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044/"
 
 # slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 # slmDir = "$tseriesRootDir/tyler/b115/SLM_files/"
@@ -246,7 +248,11 @@ for stimNum in 1:nStimuli
     cbar_ax = fig.add_axes([0.97, 0.15, 0.0075, 0.7])
     # cbar = fig.colorbar(cim, ticks=[0,1,2], cax=cbar_ax)
     cbar = fig.colorbar(cim, cax=cbar_ax)
+<<<<<<< HEAD
     path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)__stim$stimNum.svg")
+=======
+    path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)_stim$stimNum.svg")
+>>>>>>> 56fd75518c56a7e7f718057b57a8a9e37db5fb67
     @show path
     fig.savefig(path, dpi=600)
 end
