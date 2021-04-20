@@ -12,7 +12,9 @@ using Unitful: μm, m, s, mW
 # fishDir = "/mnt/deissero/users/tyler/b115/2021-03-16_h2b6s/fish1"
 # fishDir = "/mnt/deissero/users/tyler/b115/2021-03-16_wt-chrmine_h2b6s/fish2"
 # fishDir = "/mnt/deissero/users/tyler/b115/2021-03-16_rschrmine_h2b6s/fish3"
-fishDir = "/mnt/deissero/users/tyler/b115/2021-03-16_h33r-chrmine_h2b6s/fish4"
+# fishDir = "/mnt/deissero/users/tyler/b115/2021-03-16_h33r-chrmine_h2b6s/fish4"
+# fishDir = "/mnt/deissero/users/tyler/b115/2021-03-30_wt-chrmine_6dpf_h2b6s/fish1"
+fishDir = "/mnt/deissero/users/tyler/b115/2021-04-19_wt-chrmine_5dpf_6f/fish1"
 # fishDir = "/scratch/b115/2021-03-09_h2b6s/fish2"
 useRed = false
 
@@ -60,16 +62,40 @@ end
 targetSizePx = 7μm * (14.4/25) / microscope_units[1]
 imshow(addTargetsToImage(copy(rgb840), cartIdx2Array(neuron_locs),
     targetSize=targetSizePx))
+##
+"pan galvo for best stim quality with SLM."
+function ideal_galvo_for_target(x, y)
+    retX = 0.
+    if x < 256
+        retX = x + 50.
+    else
+        retX = x - 50.
+    end
+    retY = 0.
+    if y < 256
+        retY = y + 50.
+    else
+        retY = y - 50.
+    end
+    [retX, retY]
+end
+
 
 ## k neurons per stim
-k = 8
+k = 5
+# we reverse to get (x,y)
+targets_center_list = map(target->ideal_galvo_for_target(reverse(Tuple(target))...), neuron_locs)
+if H == 1024
+    targets_center_list ./= 2
+end
+
 target_groups = [vcat(cartIdxFunc.(locs, fill(offset, length(locs)))...)
     for locs in Iterators.partition(neuron_locs,k)]
 @show size.(target_groups)
 
 N = length(neuron_locs)
 ## Save files for SLM stim
-powers = [1,0.5]
+powers = [1]
 nPowers = length(powers)
 frequencies = repeat([5], nPowers)
 name = "$(N)cell-$(k)concurrent-zoffset_$(zOffset)_$(nPowers)power"
@@ -90,6 +116,7 @@ create_slm_stim(target_groups, outname,
     # 9 is path "/scratch/" includes trailing
     # localToRemote = matpath -> "T:" * replace(matpath[9:end], "/" => "\\"),
     powers=powers, frequencies=frequencies, slmNum=slmNum)
+    # targets_center_list=targets_center_list)
 
-powerPerCell = 33
-println("Powers for power per cell of $powerPerCell: $(powerPerCell ./ 1000 .* 450mW)")
+powerPerCell = 18
+println("Powers for power per cell of $powerPerCell: $(powerPerCell ./ 1000 .* 395mW)")

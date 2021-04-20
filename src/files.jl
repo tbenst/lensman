@@ -6,7 +6,8 @@ for Y shared: localToRemote = matpath -> "Y:\\" * replace(matpath[14:end], "/" =
 """
 # ::Array{Float64,2}
 function create_targets_mat(targets, outname::String; slmNum=1, frequency=5,
-        localToRemote = matpath -> "O:\\" * replace(matpath[14:end], "/" => "\\"))
+        localToRemote = matpath -> "O:\\" * replace(matpath[14:end], "/" => "\\"),
+        targets_center = nothing)
 
     @assert frequency % 5 == 0 # sean SLM operates on 200ms clock
     @assert frequency <= 250 # max new stim every 4ms (on one SLM)
@@ -42,6 +43,7 @@ function create_targets_mat(targets, outname::String; slmNum=1, frequency=5,
     # targetsGroup alternates between SLM1&2 (eg Float32(N,3) and zeros(0,0)) and each one is 2ms apart (4ms between first two SLM1 patterns)
     # maximum (200ms of time effectively)
     # @assert numGroups <= 99
+    @warn "frequency is only accurate for 5Hz base clock"
     if frequency == 5
         numGroups = 4
     elseif frequency == 10
@@ -69,6 +71,13 @@ function create_targets_mat(targets, outname::String; slmNum=1, frequency=5,
 
     for i in stimIndices
         out_mat["targetsGroup"][i] = copy(targets)
+    end
+
+    if ~isnothing(targets_center)
+        out_mat["targetsCenter"] = Array{Any}(nothing,1,numGroups)
+        for i in 1:numGroups
+            out_mat["targetsCenter"][i] = targets_center
+        end
     end
 
     # println("construct 10Hz pattern ")
@@ -132,17 +141,21 @@ TODO: this assumes a 5Hz clock for sean's code...but sometimes this is set
 to eg 10Hz instead..."""
 function create_slm_stim(target_groups, outname::String; slmNum=1,
         localToRemote = matpath -> "O:\\" * replace(matpath[14:end], "/" => "\\"),
-        powers=[1], frequencies=[5])
+        powers=[1], frequencies=[5], targets_center_list=nothing)
     @assert length(powers) == length(frequencies)
+    if isnothing(targets_center_list)
+        # for easy enumeration
+        targets_center_list = [nothing for i in 1:length(target_groups)]
+    end
     # create mat files; save windows path
     groupPowers = []
     targetsMats = []
     for (freq,power) in zip(frequencies, powers)
-        @showprogress for (i, targets) in enumerate(target_groups)
+        @showprogress for (i, (targets, tc)) in enumerate(zip(target_groups, targets_center_list))
             name = "$(outname)_group_$(i)_freq_$(freq)"
             targetsMatPath = create_targets_mat(targets, name,
                 slmNum=slmNum, localToRemote=localToRemote,
-                frequency=freq)
+                frequency=freq, targets_center=tc)
             push!(targetsMats, targetsMatPath)
             push!(groupPowers,power)
         end
@@ -321,3 +334,6 @@ function read_gpl(gpl_path; zoom=1., width=1024, height=1024,
     y = Int.(round.(y, digits=0))
     map(CartesianIndex ∘ Tuple, zip(y,x))
 end
+
+getMatStimFreq(mat) = sum((~).(sum.(mat["cfg"]["exp"]["targets"]) .≈ 0.0))*5
+getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0,0) ? 2 : 1

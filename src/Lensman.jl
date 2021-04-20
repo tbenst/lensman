@@ -12,6 +12,7 @@ import Unitful: μm
 include("algorithms.jl")
 include("files.jl")
 include("plots.jl")
+include("magic_numbers.jl")
 
 peak_local_max = PyNULL()
 disk = PyNULL()
@@ -80,7 +81,8 @@ function antsApplyTransforms(fixedPath::String, movingPath::String, transformPat
 end
 
 function antsApplyTransforms(fixedPath::String, movingPath::String, transformPath::String, maskoutname::String)
-    run(`antsApplyTransforms --float -d 3 -i $movingPath -r $fixedPath -t $transformPath -o $maskoutname`)
+    run(`/home/tyler/.nix-profile/bin/antsApplyTransforms --float -d 3 -i $movingPath -r $fixedPath -t $transformPath -o $maskoutname`)
+    # run(`antsApplyTransforms --float -d 3 -i $movingPath -r $fixedPath -t $transformPath -o $maskoutname`)
     niread(maskoutname)
 end
 
@@ -344,7 +346,6 @@ function loadTseries(tifdir, containsStr="Ch3")
     tseries
 end
 
-
 function get_slm_stim_masks(tif_dir, slm_dir, z_offset)
     """
     # Arguments
@@ -356,6 +357,7 @@ function get_slm_stim_masks(tif_dir, slm_dir, z_offset)
     - This function is currently only valid for use with the 25x objective and NOT with
       the 16x (14.4x) objective
     """
+    @error "this appears to give the wrong results... -Tyler"
     # we avoid using tseries since so slow to read in, and don't want to error on
     # directory not mounted, etc.
     H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tif_dir)
@@ -499,7 +501,7 @@ function constructGroupMasks(groupLocs, H, W, Z;
 end
 
 
-    function init_workers(nprocs=36)
+function init_workers(nprocs=36)
     addprocs(nprocs)
     exp = quote
         @everywhere begin
@@ -538,7 +540,7 @@ end
 "Create DataFrame with row per individual cell stimulated."
 function makeCellsDF(target_groups, stimStartIdx, stimEndIdx, trialOrder)
     cells = DataFrame(x=Int64[], y=Int64[], z=Int64[], stimGroup=Int64[],
-        stimStart=Int64[], stimStop=Int64[], cellID=Int64[])
+        stimStart=Int64[], stimStop=Int64[], cellID=Int64[], stimNum=Int64[])
     cellIDs = Dict()
     for (i, g) in enumerate(trialOrder)
         group = target_groups[g]
@@ -552,7 +554,7 @@ function makeCellsDF(target_groups, stimStartIdx, stimEndIdx, trialOrder)
                 cellIDs[(x,y,z)] = cellID
             end
             xR, yR = Int(round(x, digits=0)), Int(round(y, digits=0))
-            push!(cells, (xR, yR, z, i, start, endT, cellID))
+            push!(cells, (xR, yR, z, i, start, endT, cellID, g))
         end
     end
     cells
@@ -561,7 +563,7 @@ end
 
 """Create DataFrame with row per individual cell stimulated.
 
-Used recordings with many trials.
+Used for recordings with many trials in Prarie View.
 """
 function makeCellsDF(target_groups, stimStartIdx::Int, stimEndIdx::Int, trialOrder)
     cells = DataFrame(x=Int64[], y=Int64[], z=Int64[], trialNum=Int64[],
@@ -629,6 +631,7 @@ function makeCellsDF(tseries, cells, roiMask, trials::Bool; winSize=15, delay=0)
     # for (i, (x,y,z,trialNum,stimStart,stimStop)) in enumerate(eachrow(cells))
     @threads for i in 1:size(cells,1)
         (x,y,z,trialNum,stimStart,stimStop) = cells[i,:]
+        @error "need to update to index by cellID"
         mask = roiMask[i] 
         neuronTrace = extractTrace(tseries[:,:,:,trialNum], mask)
         neuronTrace = imageJkalmanFilter(neuronTrace)
@@ -852,6 +855,11 @@ export read_microns_per_pixel,
     medianfilt,
     read_gpl,
     max_95ci,
-    min_95ci
-    # , segment_nuclei
+    min_95ci,
+    getzoffset,
+    spiral_size,
+    microscope_lateral_unit,
+    getMatStimFreq,
+    getSLMnum,
+    slmpower
 end

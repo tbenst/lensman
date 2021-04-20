@@ -49,10 +49,12 @@ tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 # tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-039/"
 # tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
 # tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-040/"
-tifDir = "$tseriesRootDir/2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish1/TSeries-lrhab_raphe_40trial-023"
+# tifDir = "$tseriesRootDir/2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish1/TSeries-lrhab_raphe_40trial-023"
 Z = 5
 
 # tifDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries-lrhab_raphe_stim-40trial-038"
+# tifDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries_lrhab_raphe_40trial_part_2-040"
+tifDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044/"
 
 # slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 # slmDir = "$tseriesRootDir/tyler/b115/SLM_files/"
@@ -226,8 +228,8 @@ for stimNum in 1:nStimuli
     # cmax = percentile(df_f[:],99.9)
     # cmin = percentile(df_f[:],0.1)
     # global fig = plt.figure(figsize=(figW,figH))
-    global fig, axes = plt.subplots(1,Z, figsize=(figW,figH))
-    for (z,ax) in enumerate(axes)
+    global fig, axs = plt.subplots(1,Z, figsize=(figW,figH))
+    for (z,ax) in enumerate(axs)
         # plt.axis("off")
         global cim = ax.imshow(df_f[:,:,z], cmap="RdBu_r",
             norm=cnorm)
@@ -241,7 +243,7 @@ for stimNum in 1:nStimuli
     cbar_ax = fig.add_axes([0.97, 0.15, 0.0075, 0.7])
     # cbar = fig.colorbar(cim, ticks=[0,1,2], cax=cbar_ax)
     cbar = fig.colorbar(cim, cax=cbar_ax)
-    path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_stim$stimNum.svg")
+    path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)_stim$stimNum.svg")
     @show path
     fig.savefig(path, dpi=600)
 end
