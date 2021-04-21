@@ -337,3 +337,46 @@ end
 
 getMatStimFreq(mat) = sum((~).(sum.(mat["cfg"]["exp"]["targets"]) .≈ 0.0))*5
 getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0,0) ? 2 : 1
+
+
+
+
+"""Write prairie view markpoints (galvo) xml file.
+
+neuron_locs is array of (x,y)."""
+function write_markpoints(neuron_locs::Vector{CartesianIndex{2}}, filepath;
+        W=512, magicX=7.6, magicY=8.3)
+    # create an empty XML document
+    xmlGpl = XMLDocument()
+    # create & attach a root node
+    xGplRoot = create_root(xmlGpl, "PVGalvoPointList")
+    for (i,ci) in enumerate(neuron_locs)
+        x,y = Tuple(ci)
+        # empirically, X ∈ [-7.6, 7.6], Y ∈ [8.3, -8.3]
+        # where "(1,1)" is (-7.6,8.3)
+        # and "(512,512)" is (7.6,-8.3)
+        # and "(1,74)" meaning row 1 col 74 is (-5.37,8.3) 
+        # and "(256,256)" is (0,0)
+        x = (x-W/2)/(W/2) # map to (-1,1)
+        x *= magicX
+        y = (y-W/2)/(W/2)
+        y *= magicY
+        
+        gplList = new_child(xGplRoot, "PVGalvoPoint")
+        # todo use Dict or named argument instead..?
+        set_attribute(gplList, "X", "$x")
+        set_attribute(gplList, "Y", "$y")
+        set_attribute(gplList, "Name", "Point $i")
+        set_attribute(gplList, "Index", "$(i-1)")
+        set_attribute(gplList, "ActivityType", "MarkPoints")
+        set_attribute(gplList, "UncagingLaser", "Uncaging")
+        set_attribute(gplList, "UncagingLaserPower", "0.76")
+        set_attribute(gplList, "Duration", "2")
+        set_attribute(gplList, "IsSpiral", "True")
+        set_attribute(gplList, "SpiralSize", "0.220801205703228") # 7μm
+        set_attribute(gplList, "SpiralRevolutions", "5")
+        set_attribute(gplList, "Z", "0")
+    end
+
+    save_file(xmlGpl, filepath)
+end

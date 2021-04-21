@@ -861,5 +861,6 @@ export read_microns_per_pixel,
     microscope_lateral_unit,
     getMatStimFreq,
     getSLMnum,
-    slmpower
+    slmpower,
+    write_markpoints
 end
