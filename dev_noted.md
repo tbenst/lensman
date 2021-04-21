@@ -121,3 +121,7 @@ sudo mount -t cifs -o username=mslm_cnc115,cruid=$USER,uid=$(id -u),gid=$(id -g)
 ## rsync
 name="2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/TSeries-1024cell-32concurrent-047"
 rsync -avP sher:'/oak/stanford/groups/deissero/users/tyler/b115/2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/*.ty.h5' /data/dlab/b115/2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/
+
+## Sherlock julia versions
+/home/groups/deissero/tyler/opt/julia/latest/bin/julia
+/share/software/user/open/julia/1.5.1/bin/julia

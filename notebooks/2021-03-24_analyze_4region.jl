@@ -37,8 +37,8 @@ matplotlib.rcParams["savefig.dpi"] = 600
 using Base.Iterators: peel
 import Unitful: μm
 ##
-# tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
-tseriesRootDir = "/mnt/deissero/users/tyler/b115"
+tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
+# tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 # tseriesRootDir = "/data/dlab/b115"
 
 
@@ -49,27 +49,29 @@ tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 # tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-039/"
 # tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
 # tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-040/"
+<<<<<<< HEAD
+
 # tifDir = "$tseriesRootDir/2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish1/TSeries-lrhab_raphe_40trial-023"
+tifDir = "$tseriesRootDir/2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish2/TSeries-lrhab_raphe_stim-40trial-proper-zoffset-034"
 Z = 5
 
 # tifDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries-lrhab_raphe_stim-40trial-038"
 # tifDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries_lrhab_raphe_40trial_part_2-040"
-tifDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044/"
+# tifDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044/"
 
 # slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 # slmDir = "$tseriesRootDir/tyler/b115/SLM_files/"
 # slmDir = "/oak/stanford/groups/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment"
-# slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/slm"
-# slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
-slmDir = "$tseriesRootDir/SLM_files/"
+slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
+# slmDir = "$tseriesRootDir/SLM_files/"
 
 expName = splitpath(tifDir)[end]
 fishDir = joinpath(splitpath(tifDir)[1:end-1]...)
 recording_folder = splitpath(tifDir)[end-2]
 fish_name = splitpath(tifDir)[end-1]
 
-# plotDir = "/oak/stanford/groups/deissero/users/tyler/plots/2021_chrmine-structure"
-plotDir = "/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure"
+plotDir = "/oak/stanford/groups/deissero/users/tyler/plots/2021_chrmine-structure"
+# plotDir = "/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure"
 # plotDir = joinpath(fishDir, "plots")
 if ~isdir(plotDir)
     mkdir(plotDir)
@@ -86,7 +88,7 @@ if ~isfile(voltageFile)
 end
 stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFile, Z)
 # @assert length(stimStartIdx) == 129
-@assert length(stimStartIdx) == 120
+@assert length(stimStartIdx) == 120 "found only $(length(stimStartIdx)) stimuli"
 
 ## single stim example
 # imshow(imadjustintensity(tseries[:,:,:,stimStartIdx[1]-1:stimEndIdx[1]+1]))
@@ -101,6 +103,7 @@ pre = Int(ceil(5*volRate))
 post = Int(ceil(5*volRate))
 
 # if imaging many planes, may need to read another xml file since didn't get all planes in first file
+# etlVals = etlVals[1:end-1]
 @assert length(etlVals) == Z
 @info "assume imaging from top-down"
 
@@ -125,6 +128,10 @@ groupLocs = map(x->Int.(round.(x)), groupLocs)
 
 ##
 microscope_units = (0.6299544139175637μm, 0.6299544139175637μm, 2.0μm)
+if W == 1024
+    microscope_units = microscope_units ./ 2
+end
+
 targetSizePx = (7μm * 14.4/25) / microscope_units[1]
 regionMasks = constructGroupMasks(groupLocs, H, W, Z, targetSizePx=targetSizePx);
 
@@ -149,11 +156,11 @@ for (i, stim_start, stim_stop, stim) in zip(1:length(trialOrder), stimStartIdx, 
         DataFrame(region=stim, time=time, df_f = df_f, stimIdx=i))
 end
 region_trace_df
-open(joinpath(fishDir, "expName_fluorescence.arrow"), "w") do io
+open(joinpath(fishDir, "$(expName)_fluorescence.arrow"), "w") do io
     Arrow.write(io, region_trace_df)
 end
 
-
+"wrote fluorescence arrow!"
 ## plot the traces!
 
 chrmine_paper = Gadfly.Theme(
@@ -171,8 +178,6 @@ chrmine_paper = Gadfly.Theme(
 meanDF = combine(groupby(region_trace_df, ["time", "region"]),
     :df_f => mean, :df_f => maximum, :df_f => minimum)
     # :df_f => mean, :df_f => max_95ci, :df_f => min_95ci)
-
-joinpath(fishDir,expName*"_avgStim.h5")
 
 ##
 
@@ -203,7 +208,7 @@ try
 catch
 end
 ##
-avgStim = h5read(joinpath(fishDir,expName*"_avgStim.h5"), "/block1");
+# avgStim = h5read(joinpath(fishDir,expName*"_avgStim.h5"), "/block1");
 (H, W, Z, nStim) = size(avgStim)
 ## STA
 
@@ -243,104 +248,12 @@ for stimNum in 1:nStimuli
     cbar_ax = fig.add_axes([0.97, 0.15, 0.0075, 0.7])
     # cbar = fig.colorbar(cim, ticks=[0,1,2], cax=cbar_ax)
     cbar = fig.colorbar(cim, cax=cbar_ax)
+<<<<<<< HEAD
+    path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)__stim$stimNum.svg")
+=======
     path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)_stim$stimNum.svg")
+>>>>>>> 56fd75518c56a7e7f718057b57a8a9e37db5fb67
     @show path
     fig.savefig(path, dpi=600)
 end
-fig # will error on sherlock / not display
-## use this plot for cropping colorbar
-fig = plt.figure(figsize=(3,6), dpi=300)
-plt.imshow(vcat([df_f[:,:,z] for z in 1:3]...), cmap="RdBu_r",
-    norm=cnorm)
-cbar = plt.colorbar()
-cbar.ax.set_ylabel("df/f")
-fig.savefig(joinpath(fishDir, "plots",expName*"_colorbar.png"))
 fig
-
-##
-imshow(avgStim[:,:,:,1,:]) # trial type 1 (left hab)
-imshow(avgStim[:,:,:,2,:]) # right hab
-imshow(avgStim[:,:,:,3,:]) # raphe
-
-## construct region masks
-@info "hardcoded microscope units / targetSize"
-microscope_units = (0.6299544139175637μm, 0.6299544139175637μm, 2.0μm)
-targetSizePx = (7μm * 14.4/25) / microscope_units[1]
-
-# imshow(regionMasks)
-regionMasks = constructGroupMasks(groupLocs, H, W, Z, targetSizePx=targetSizePx);
-
-## clear stim tseries...
-## does not free memory
-tseries = zeros(1024,1024,5,2000)
-tseries = nothing
-GC.gc()
-sleep(5)
-GC.gc()
-
-## Two cells: does free memory
-tseries = zeros(1024,1024,5,2000)
-tseries = nothing
-GC.gc()
-##
-GC.gc()
-##
-
-## need to run cell twice for some reason (sleep not sufficient)
-GC.gc()
-##
-# restingPreDir = "/mnt/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-resting-pre-043"
-# restingMidDir = "/mnt/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-resting-mid-046/"
-# restingPostDir = "/mnt/deissero/users/tyler/b115/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-resting-post-048"
-
-# restingPreDir = "/mnt/deissero/users/tyler/b115/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_resting_pre-042"
-# restingMidDir = "/mnt/deissero/users/tyler/b115/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_resting_mid-045"
-# restingPostDir = "/mnt/deissero/users/tyler/b115/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_resting_post-047"
-
-restingPreDir = "/mnt/deissero/users/tyler/b115/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSe"
-restingMidDir = "/mnt/deissero/users/tyler/b115/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries"
-restingPostDir = "/mnt/deissero/users/tyler/b115/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries"
-
-restingPreDir = "/mnt/deissero/users/tyler/b115/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries-resting-pre-037"
-# restingMidDir = "/mnt/deissero/users/tyler/b115/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries-resting-mid-039"
-# restingPostDir = "/mnt/deissero/users/tyler/b115/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries_resting_post-041"
-
-# tifDir = restingMidDir
-tifDir = restingPreDir
-expName = splitpath(tifDir)[end]
-fishDir = joinpath(splitpath(tifDir)[1:end-1]...)
-tseries = loadTseries(tifDir)
-(H, W, Z, T) = size(tseries)
-
-
-## noise correlation
-cmax = 0.1
-lag = 0
-for stimNum in 1:3
-    global imageCorr = imageCorrWithMask(tseries[:,:,:,:],
-        regionMasks[:,:,:,stimNum], lag=lag);
-    # h5write(joinpath(fishDir,expName, "_imageCorr.h5"), "/imageCorr", imageCorr)
-    global fig = plt.figure(figsize=(50,10))
-    plt.axis("off")
-    plt.imshow(hcat([imageCorr[:,:,z] for z in 1:Z]...), cmap="RdBu_r")
-    plt.imshow(hcat([imageCorr[:,:,z] for z in 1:Z]...), cmap="RdBu_r",
-        clim=(-cmax, cmax))
-    fig.savefig(joinpath(fishDir, "plots",expName*"_midCorr_$(lag)idx-lag_region$(stimNum)_cmax$(cmax).png"))
-end
-fig
-## colorbar
-fig = plt.figure(figsize=(4,6), dpi=300)
-plt.imshow(vcat([tseries[:,:,z,1] for z in 1:3]...), cmap="RdBu_r",
-    clim=(-cmax, cmax))
-cbar = plt.colorbar()
-cbar.ax.set_ylabel("correlation")
-fig.savefig(joinpath(fishDir, "plots",expName*"_midCorr_colorbar.png"),
-    bbox_inches="tight")
-fig
-
-##
-trace = extractTrace(tseries, regionMasks[:,:,:,2]);
-
-Plots.plot(trace)
-##
-# imshow(imageCorr)
