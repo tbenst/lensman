@@ -26,7 +26,8 @@ machinery = PyNULL()
 
 # TODO: should we auto-install python dependencies via `tables = pyimport_conda("tables", "pytables")` or similar?
 function __init__()
-    pyimport("skimage")
+    pyimport_conda("skimage", "skimage")
+    # pyimport("skimage")
     copy!(peak_local_max, pyimport("skimage.feature").peak_local_max)
     copy!(disk, pyimport("skimage.morphology").disk)
     copy!(match_template, pyimport("skimage.feature").match_template)
