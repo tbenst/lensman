@@ -14,6 +14,7 @@ pkg>activate .
 pkg>instantiate
 ```
 
+For Julia 1.6, need to use this workaround for MKL: https://github.com/JuliaLinearAlgebra/MKL.jl/issues/60#issuecomment-808329869
 ### auto activate environment
 for convenience, you can skip `activate .` by creating `$HOME/.julia/config/startup.jl`:
 ```julia

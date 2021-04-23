@@ -7,14 +7,18 @@ using Sockets, Observables, Statistics, Images, ImageView, Lensman,
 import Gadfly
 using Unitful: μm, m, s, mW
 ##
-# fishDir = "/mnt/deissero/users/tyler/b115/2021-03-09_wt-chrmine-gc6f/fish1"
-# fishDir = "/mnt/deissero/users/tyler/b115/2021-03-15_wt-chrmine_h2b6s/fish1"
-# fishDir = "/mnt/deissero/users/tyler/b115/2021-03-16_h2b6s/fish1"
-# fishDir = "/mnt/deissero/users/tyler/b115/2021-03-16_wt-chrmine_h2b6s/fish2"
-# fishDir = "/mnt/deissero/users/tyler/b115/2021-03-16_rschrmine_h2b6s/fish3"
-# fishDir = "/mnt/deissero/users/tyler/b115/2021-03-16_h33r-chrmine_h2b6s/fish4"
-# fishDir = "/mnt/deissero/users/tyler/b115/2021-03-30_wt-chrmine_6dpf_h2b6s/fish1"
-fishDir = "/mnt/deissero/users/tyler/b115/2021-04-19_wt-chrmine_5dpf_6f/fish1"
+tseriesroot = "/scratch/b115"
+# tseriesroot = "/mnt/deissero/users/tyler/b115"
+# fishDir = "$tseriesroot/2021-03-09_wt-chrmine-gc6f/fish1"
+# fishDir = "$tseriesroot/2021-03-15_wt-chrmine_h2b6s/fish1"
+# fishDir = "$tseriesroot/2021-03-16_h2b6s/fish1"
+# fishDir = "$tseriesroot/2021-03-16_wt-chrmine_h2b6s/fish2"
+# fishDir = "$tseriesroot/2021-03-16_rschrmine_h2b6s/fish3"
+# fishDir = "$tseriesroot/2021-03-16_h33r-chrmine_h2b6s/fish4"
+# fishDir = "$tseriesroot/2021-03-30_wt-chrmine_6dpf_h2b6s/fish1"
+# fishDir = "$tseriesroot/2021-04-19_wt-chrmine_5dpf_6f/fish1"
+# fishDir = "$tseriesroot/2021-04-20_wt-chrmine_6dpf_6f/fish1"
+fishDir = "$tseriesroot/2021-04-20_h33r-chrmine_6dpf_6f/fish2"
 # fishDir = "/scratch/b115/2021-03-09_h2b6s/fish2"
 useRed = false
 
@@ -32,8 +36,8 @@ offset = float(uconvert(m, 0μm)) / m # no z offset for SLM2 as of 2021-02-15
 slmNum = 2
 zOffset = offset * 1e6
 expName = splitpath(greenpath)[end-1]
-im840 = ImageMagick.load(greenpath)
-rgb840 = RGB.(imadjustintensity(adjust_gamma(im840, 2)))
+imgreen = ImageMagick.load(greenpath)
+rgb840 = RGB.(imadjustintensity(adjust_gamma(imgreen, 2)))
 channelview(rgb840)[[1,3],:,:] .= 0
 
 if useRed
@@ -41,19 +45,21 @@ if useRed
     rgb1000 = RGB.(imadjustintensity(adjust_gamma(im1000, 3.)))
     channelview(rgb1000)[[2,3],:,:] .= 0;
 end
-(H, W) = size(im840)
+(H, W) = size(imgreen)
 ## read gpl targets
+@assert length(glob("*.gpl", fishDir)) == 1 (@show glob("*.gpl", fishDir))
+# gpl_path = glob("*.gpl", fishDir)[2]
 gpl_path = glob("*.gpl", fishDir)[1]
 
 neuron_locs = read_gpl(gpl_path, width=W, height=H, zoom=1)
 
 ##
 
-if size(im840,1)==512
-    microscope_units = (2* 0.6299544139175637μm, 2* 0.6299544139175637μm, 2.0μm)
+lateral_unit = microscope_lateral_unit(W)
+microscope_units = (lateral_unit, lateral_unit, 2.0μm)
+if W==512
     cartIdxFunc = cartIdx2SeanTarget512
-elseif size(im840,1)==1024
-    microscope_units = (0.6299544139175637μm, 0.6299544139175637μm, 2.0μm)
+elseif W==1024
     cartIdxFunc = cartIdx2SeanTarget
 else
     @error "unknown microscope units"
@@ -82,7 +88,7 @@ end
 
 
 ## k neurons per stim
-k = 5
+k = 1
 # we reverse to get (x,y)
 targets_center_list = map(target->ideal_galvo_for_target(reverse(Tuple(target))...), neuron_locs)
 if H == 1024
@@ -114,9 +120,15 @@ end
 
 create_slm_stim(target_groups, outname,
     # 9 is path "/scratch/" includes trailing
-    # localToRemote = matpath -> "T:" * replace(matpath[9:end], "/" => "\\"),
+    localToRemote = matpath -> "T:" * replace(matpath[9:end], "/" => "\\"),
     powers=powers, frequencies=frequencies, slmNum=slmNum)
     # targets_center_list=targets_center_list)
 
 powerPerCell = 18
 println("Powers for power per cell of $powerPerCell: $(powerPerCell ./ 1000 .* 395mW)")
+
+
+## trialOrder
+# shuffle each block so we never have a stimuli more than once per block
+trialOrder = vcat([randperm(length(target_groups)) for _ in 1:20]...)
+write_trial_order(trialOrder, outname)

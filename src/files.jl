@@ -305,7 +305,7 @@ end
 
 To measure, create markpoints at (1,1) and (1024,1024), export to .gpl, and view.
 
-empirical measurements
+empirical measurements (B115)
 zoom    X               Y
 1       4.17170481      4.636140912
 1.3     3.209      3.566
@@ -346,6 +346,7 @@ getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0,0) ? 2 : 1
 neuron_locs is array of (x,y)."""
 function write_markpoints(neuron_locs::Vector{CartesianIndex{2}}, filepath;
         W=512, magicX=7.6, magicY=8.3)
+    @warn "Not tested, values are wrong / for b113!!"
     # create an empty XML document
     xmlGpl = XMLDocument()
     # create & attach a root node
@@ -379,4 +380,11 @@ function write_markpoints(neuron_locs::Vector{CartesianIndex{2}}, filepath;
     end
 
     save_file(xmlGpl, filepath)
+end
+
+function write_trial_order(trial_order, outname)
+    trialOrderDF = DataFrame(copy(hcat(collect(1:length(trial_order)), trial_order)'))
+    CSV.write(outname*"_trialOrder.txt", trialOrderDF, header=false, delim="\t")
+    println("wrote $(outname*"_trialOrder.txt")")
+    println("be sure to modify mSLM/SetupFiles/Experiments/<TODAY>/trialOrder.txt")
 end

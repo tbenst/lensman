@@ -6,5 +6,5 @@ else
     tifDir = ARGS[1]
     tseries = loadTseries(tifDir);
     H, W, Z, T = size(tseries)
-   save(tifDir*"_time-avg.tif", mean(tseries, dims=4)[:,:,:,1])
+   save(tifDir*"_time-avg.tif", UInt16.(round.(mean(tseries, dims=4)[:,:,:,1], digits=0)))
 end

@@ -862,5 +862,6 @@ export read_microns_per_pixel,
     getMatStimFreq,
     getSLMnum,
     slmpower,
-    write_markpoints
+    # write_markpoints,
+    write_trial_order
 end
