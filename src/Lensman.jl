@@ -364,28 +364,21 @@ function get_slm_stim_masks(tif_dir, slm_dir, z_offset)
     H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tif_dir)
 
     # TODO(allan.raventos): really should get rid of this `is_1024`
-    if H == W == 512
+    if W == 512
         is_1024 = false
-    elseif H == W == 1024
+    elseif W == 1024
         is_1024 = true
     else
         error("Only supporting (H, W) in {(512, 512), (1024, 1024)}")
     end
 
-    @warn "This hard-coding is no good, putting at top of function for visibility"
-    # Physical distance per pixel for microscope (same for x and y)
-    microscope_units_xy = 0.6299544139175637μm
-    if is_1024
-        microscope_units_xy *= 2
-    end
-    # Assume that "7um" spiral galvo signal is calibrated for 16x, not 25x (16x is actually 14.4x)
-    # so that the spiral is smaller than 7um by a factor of 14.4 / 25
-    # divide by 2 for radius
-    target_radius_px = 7μm * (14.4 / 25) / microscope_units_xy / 2
+    @warn "lateral unit hard coded for B115 1x zoom"
+    lateral_unit = microscope_lateral_unit(W)
 
     # Parse stimulation start and end times from voltage recordings
-    voltage_file = glob("*VoltageRecording*.csv", tif_dir)[1]
+    voltageFile = glob("*VoltageRecording*.csv", tseriesDir)[1]
     stim_start_idx, stim_end_idx = getStimTimesFromVoltages(voltage_file, Z)
+    allWithin(diff(stim_start_idx),0.05)
 
     # If empty we have no stimulations so return nothing
     if length(stim_start_idx) == 0
@@ -405,28 +398,48 @@ function get_slm_stim_masks(tif_dir, slm_dir, z_offset)
 
     # Load SLM files (TODO: handle this constant path better)
     slm_exp_dir = joinpath(slm_dir, Dates.format(exp_date, "dd-u-Y"))
-    trial_order, _ = getTrialOrder(slm_exp_dir, exp_date)
+    trial_order, slm_exp_dir = getTrialOrder(slm_exp_dir, exp_date)
     n_stimuli = maximum(trial_order)
     n_trials = size(trial_order, 1)
     @assert n_trials == size(stim_start_idx, 1)
+    target_radius_px = spiral_size(exp_date, lateral_unit)
+
+
+    mat = matread.(findMatGroups(slmExpDir)[1])
+    max_targets_center = maximum(map(mat->maximum(maximum.(matread(mat)["cfg"]["exp"]["maskS"]["targetsCenter"])), findMatGroups(slmExpDir)))
+    @assert  max_targets_center < 512 "bad targets center value, don't trust results..."
+    slmNum = getSLMnum(mat)
+    zOffset = getzoffset(expDate, slmNum)
+
+    firstTargetGroup = matread.(findMatGroups(slmExpDir)[1])
+    powerPerCell = firstTargetGroup["cfg"]["mode"]["BHV001"]["FOV"]["PowerPerCell"]
+    slm1Power, slm2Power = slmpower(expDate)
+    if slmNum == 1
+        slmpowerPerCell = slm1Power * powerPerCell / 1000
+    elseif slmNum == 2
+        slmpowerPerCell = slm2Power * powerPerCell / 1000
+    end
+
+    
 
     # Load target groups
-    target_groups = [mat["cfg"]["maskS"]["targets"][1]
-        for mat in matread.(findMatGroups(slm_exp_dir))]
+    # Assumes no sequence of stim
+    # for 5Hz clock
+
+    target_groups = []
+    group_stim_freq = []
+    for mat in matread.(findMatGroups(slmExpDir))
+        push!(target_groups, mat["cfg"]["maskS"]["targets"][1])
+        push!(group_stim_freq, getMatStimFreq(mat))
+    end
         
     @assert length(target_groups) == n_stimuli "trialOrder has max of $n_stimuli, but target_groups is length $(length(target_groups))"
     ## Array of matrices indicating x, y z (or was it y, x, z..?)
     targets_with_plane_index = mapTargetGroupsToPlane(target_groups, etl_vals,
         is1024=is_1024, zOffset=z_offset)
+    targets_with_plane_index = map(x->Int.(round.(x, digits=0)), targets_with_plane_index)
     # Generate mask of targeted locations
-    stim_masks = Gray.(zeros(Bool, n_stimuli, Z, H, W))
-
-    for (stim_idx, target_group) in enumerate(targets_with_plane_index)
-        for (x, y, z) in eachrow(target_group)
-            draw!(view(stim_masks, stim_idx, z, :, :), Ellipse(CirclePointRadius(x, y, target_radius_px)))
-        end
-    end
-    stim_masks = convert(Array{Bool}, stim_masks)
+    stim_masks = constructGroupMasks(targets_with_plane_index, H, W, Z)
 
     # Create array holding at position i a 0 if no stim was begin applied at timestep i and
     # stim_mask_idx otherwise (meaning that `stim_masks[stim_mask_idx]` was used)
@@ -436,9 +449,7 @@ function get_slm_stim_masks(tif_dir, slm_dir, z_offset)
             stim_used_at_each_timestep[idx] = trial_stim_idx
         end
     end
-
     stim_masks, stim_used_at_each_timestep;
-
 end
 
 
