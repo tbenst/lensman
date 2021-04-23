@@ -34,20 +34,17 @@ zOffset = offset * 1e6
 # fishDir = "/mnt/b115_data/tyler/2021-02-02_wt_chrmine_GC6f/fish4"
 # fishDir = "/mnt/b115_data/tyler/2021-02-09_gcamp6f_7dpf/fish2"
 # fishDir = "/mnt/deissero/users/tyler/b115/2021-02-16_6f_h33r_f0_6dpf/fish2"
-fishDir = "/mnt/deissero/users/tyler/b115/2021-04-13_wt-chrmine_6dpf_h2b6s/fish1"
+# fishDir = "/mnt/deissero/users/tyler/b115/2021-04-13_wt-chrmine_6dpf_h2b6s/fish1"
+fishDir = "/scratch/b115/2021-04-20_wt-chrmine_6dpf_6f/fish1"
 
 zseriesDir = glob("ZSeries*", fishDir)[end]
 
 zseries = readZseriesTiffDir(zseriesDir)
 H, W, Z = size(zseries)
 
-if size(zseries,1)==512
-    microscope_units = (2* 0.6299544139175637μm, 2* 0.6299544139175637μm, 2.0μm)
-elseif size(zseries,1)==1024
-    microscope_units = (0.6299544139175637μm, 0.6299544139175637μm, 2.0μm)
-else
-    @error "unknown microscope units"
-end
+lateral_unit = microscope_lateral_unit(W)
+microscope_units = (lateral_unit, lateral_unit, 2.0μm)
+
 H, W, Z
 ##
 # zseries = centered(zseries) # need centered for qd registration
@@ -63,8 +60,8 @@ microscope_units
 #####
 @warn "update for H2B vs cytosolic!!"
 gcamp_zbrain = AxisArray(permutedims(
-        # h5read("$zbrain_dir/AnatomyLabelDatabase.hdf5", "Elavl3-GCaMP5G_6dpf_MeanImageOf7Fish"),
-        h5read("$zbrain_dir/AnatomyLabelDatabase.hdf5", "Elavl3-H2BRFP_6dpf_MeanImageOf10Fish"),
+        h5read("$zbrain_dir/AnatomyLabelDatabase.hdf5", "Elavl3-GCaMP5G_6dpf_MeanImageOf7Fish"),
+        # h5read("$zbrain_dir/AnatomyLabelDatabase.hdf5", "Elavl3-H2BRFP_6dpf_MeanImageOf10Fish"),
         (2,1,3)),
     (:y, :x, :z), zbrain_units)
 
@@ -164,7 +161,7 @@ hab_mask = getMaskNameIncludes(masks, "Habenula");
 hab_mask = reverse(hab_mask,dims=2); # face right
 hab_mask = reverse(hab_mask,dims=3); # top to bottom
 
-hab_mask = antsApplyTransforms(fixedname, hab_mask, affine_transform_path) .> 0
+hab_mask = antsApplyTransforms(fixedname, hab_mask, affine_transform_path) .> 0;
 
 ## neuron locations by plane, takes ~30 seconds
 neuronCenterMask = zeros(Bool, size(zseries)...)
@@ -330,7 +327,8 @@ imshow(im[:,:,implanes])
 # 46: 90
 # 62: 122
 # 78: 154
-
+##
+write_markpoints(left_hab_neuron_locs, "/tmp/test.gpl")
 
 ## SAVE
 slmOutName = "$(outname)_lrhab_raphe_control"
