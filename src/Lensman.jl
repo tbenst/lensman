@@ -3,7 +3,8 @@ module Lensman
 using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     ImageDraw, ImageFiltering, PyCall, MAT, Dates, DataStructures,
     Statistics, SharedArrays, CSV, DataFrames, Suppressor, Plots,
-    LinearAlgebra, LibExpat, LightXML, RollingFunctions, HypothesisTests
+    LinearAlgebra, LibExpat, LightXML, RollingFunctions, HypothesisTests,
+    EllipsisNotation
 import Base.Threads.@threads
 using Distributed
 import Unitful: μm
@@ -329,7 +330,7 @@ function getTrialOrder(slmExpDir, expDate)
     trialOrder[1,:], joinpath(splitpath(trialOrderTxt)[1:end - 1]...)
 end
 
-function loadTseries(tifdir, containsStr="Ch3")
+function loadTseries(tifdir, containsStr::String="Ch3")
     H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir, containsStr)
     tseries = Array{UInt16}(undef, H, W, Z, T)
     memory_size_bytes = prod(size(tseries)) * 2
@@ -347,7 +348,25 @@ function loadTseries(tifdir, containsStr="Ch3")
     tseries
 end
 
-function get_slm_stim_masks(tif_dir, slm_dir, z_offset)
+"Load brightness over time of mask"
+function loadBOT(tifdir; freduce=mean, containsStr::String="Ch3")
+    H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir, containsStr)
+    ex_im = ImageMagick.load(framePlane2tiffPath[1,1])
+    ex_reduced = freduce(ex_im)
+    tseries = Array{eltype(ex_reduced)}(undef, size(ex_reduced)..., Z, T)
+    p = Progress(T, 1, "Load Tseries: ")
+
+    @threads for t in 1:T
+        for z in 1:Z
+            tp = framePlane2tiffPath[t,z]
+            tseries[..,z,t] .= freduce(ImageMagick.load(tp))
+        end
+        next!(p)
+    end
+    tseries
+end
+
+function get_slm_stim_masks(tif_dir, slm_dir)
     """
     # Arguments
     - `tif_dir::String`: path to directory holding experiment data (<fish_dir>/<exp_name>)
@@ -359,6 +378,7 @@ function get_slm_stim_masks(tif_dir, slm_dir, z_offset)
       the 16x (14.4x) objective
     """
     @error "this appears to give the wrong results... -Tyler"
+    return (nothing, nothing)
     # we avoid using tseries since so slow to read in, and don't want to error on
     # directory not mounted, etc.
     H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tif_dir)
@@ -376,7 +396,7 @@ function get_slm_stim_masks(tif_dir, slm_dir, z_offset)
     lateral_unit = microscope_lateral_unit(W)
 
     # Parse stimulation start and end times from voltage recordings
-    voltageFile = glob("*VoltageRecording*.csv", tseriesDir)[1]
+    voltage_file = glob("*VoltageRecording*.csv", tif_dir)[1]
     stim_start_idx, stim_end_idx = getStimTimesFromVoltages(voltage_file, Z)
     allWithin(diff(stim_start_idx),0.05)
 
@@ -405,18 +425,18 @@ function get_slm_stim_masks(tif_dir, slm_dir, z_offset)
     target_radius_px = spiral_size(exp_date, lateral_unit)
 
 
-    mat = matread.(findMatGroups(slmExpDir)[1])
-    max_targets_center = maximum(map(mat->maximum(maximum.(matread(mat)["cfg"]["exp"]["maskS"]["targetsCenter"])), findMatGroups(slmExpDir)))
+    mat = matread.(findMatGroups(slm_exp_dir)[1])
+    max_targets_center = maximum(map(mat->maximum(maximum.(matread(mat)["cfg"]["exp"]["maskS"]["targetsCenter"])), findMatGroups(slm_exp_dir)))
     @assert  max_targets_center < 512 "bad targets center value, don't trust results..."
-    slmNum = getSLMnum(mat)
-    zOffset = getzoffset(expDate, slmNum)
+    slm_num = getSLMnum(mat)
+    z_offset = getzoffset(exp_date, slm_num)
 
-    firstTargetGroup = matread.(findMatGroups(slmExpDir)[1])
+    firstTargetGroup = matread.(findMatGroups(slm_exp_dir)[1])
     powerPerCell = firstTargetGroup["cfg"]["mode"]["BHV001"]["FOV"]["PowerPerCell"]
-    slm1Power, slm2Power = slmpower(expDate)
-    if slmNum == 1
+    slm1Power, slm2Power = slmpower(exp_date)
+    if slm_num == 1
         slmpowerPerCell = slm1Power * powerPerCell / 1000
-    elseif slmNum == 2
+    elseif slm_num == 2
         slmpowerPerCell = slm2Power * powerPerCell / 1000
     end
 
@@ -428,7 +448,7 @@ function get_slm_stim_masks(tif_dir, slm_dir, z_offset)
 
     target_groups = []
     group_stim_freq = []
-    for mat in matread.(findMatGroups(slmExpDir))
+    for mat in matread.(findMatGroups(slm_exp_dir))
         push!(target_groups, mat["cfg"]["maskS"]["targets"][1])
         push!(group_stim_freq, getMatStimFreq(mat))
     end
@@ -875,5 +895,7 @@ export read_microns_per_pixel,
     getSLMnum,
     slmpower,
     # write_markpoints,
-    write_trial_order
+    write_trial_order,
+    regex_glob,
+    loadBOT
 end

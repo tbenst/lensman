@@ -106,20 +106,21 @@ def write_experiment_to_tyh5(
     H, W, Z, T = tseries.shape
 
     # Check that `stim_masks` has the correct type and shape
-    if stim_masks is not None and stim_masks.dtype != np.bool:
-        raise TypeError('stim_masks does not have the expected type')
-    if len(stim_masks.shape) != 4 or stim_masks.shape[1:] != (Z, H, W):
-        raise ValueError('stim_masks does not have the expected dimensions')
+    if stim_masks is not None:
+        if stim_masks.dtype != np.bool:
+            raise TypeError('stim_masks does not have the expected type')
+        if len(stim_masks.shape) != 4 or stim_masks.shape[1:] != (Z, H, W):
+            raise ValueError('stim_masks does not have the expected dimensions')
 
-    # Hacky but seemingly necessary, h5py won't read the default pytables bool type
-    stim_masks = np.uint8(stim_masks)
-    assert set(np.unique(stim_masks)).issubset({0, 1})
+        # Hacky but seemingly necessary, h5py won't read the default pytables bool type
+        stim_masks = np.uint8(stim_masks)
+        assert set(np.unique(stim_masks)).issubset({0, 1})
 
-    # Check that `stim_used_at_each_timestep` has the correct type and shape
-    if stim_used_at_each_timestep is not None and stim_used_at_each_timestep.dtype != np.int64:
-        raise TypeError('stim_used_at_each_timestep does not have the expected type')
-    if stim_used_at_each_timestep.shape != (T, ):
-        raise ValueError('stim_used_at_each_timestep should be as long as tseries')
+        # Check that `stim_used_at_each_timestep` has the correct type and shape
+        if stim_used_at_each_timestep is not None and stim_used_at_each_timestep.dtype != np.int64:
+            raise TypeError('stim_used_at_each_timestep does not have the expected type')
+        if stim_used_at_each_timestep.shape != (T, ):
+            raise ValueError('stim_used_at_each_timestep should be as long as tseries')
 
     with tables.open_file(output_path, 'w') as tyh5:
 

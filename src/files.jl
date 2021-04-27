@@ -217,11 +217,33 @@ function tseriesTiffDirMetadata(tifdir, containsStr="Ch3")
 end
 
 
-""
+"From a single voltageFile"
 function getStimTimesFromVoltages(voltageFile, Z::Int)
     voltages = CSV.File(open(read, voltageFile)) |> DataFrame
     rename!(voltages, [c => stripLeadingSpace(c) for c in names(voltages)])
 
+    # plot(voltages["Time(ms)"][1:10000], voltages["frame starts"][1:10000])
+    frameStarted = diff(voltages[!,"frame starts"] .> std(voltages[!,"frame starts"]) .* 3)
+    frameStartIdx = findall(frameStarted .== 1) .+ 1
+
+    ttlStarts = findTTLStarts(voltages[!,"respir"])
+    stimDur = countPulsesMaxGap(ttlStarts)
+    stimStartIdx = ttlStarts[1:stimDur:end]
+    stimEndIdx = findTTLEnds(voltages[!,"respir"])[stimDur:stimDur:end]
+    stimStartFrameIdx = [Int.(floor.(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimStartIdx]
+    stimEndFrameIdx = [Int.(ceil(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimEndIdx]
+    stimStartFrameIdx, stimEndFrameIdx
+end
+
+"From a several voltageFiles (ie trial structure)"
+function getStimTimesFromVoltages(voltageFiles::Array{String,1}, Z::Int)
+    volts = DataFrame[]
+    for vf in voltageFiles
+        voltages = CSV.File(open(read, vf)) |> DataFrame
+        rename!(voltages, [c => stripLeadingSpace(c) for c in names(voltages)])
+        push!(volts, voltages)
+    end
+    voltages = vcat(volts...)
     # plot(voltages["Time(ms)"][1:10000], voltages["frame starts"][1:10000])
     frameStarted = diff(voltages[!,"frame starts"] .> std(voltages[!,"frame starts"]) .* 3)
     frameStartIdx = findall(frameStarted .== 1) .+ 1
@@ -300,6 +322,11 @@ function createMarkPointElement(xSeriesRoot, point::Int; numSpirals=10,
     set_attribute(gpe, "Indices", "$point" )
 end
 
+function regex_glob(pattern, directory)
+    file_names = readdir(directory)
+    mask = occursin.(pattern, file_names)
+    joinpath.(directory, file_names[mask])
+end
 
 """"Read Prairie View markpoints gpl list.
 

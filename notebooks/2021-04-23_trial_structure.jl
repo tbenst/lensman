@@ -1,3 +1,5 @@
+# analyze files that have many trials.... (eg 20 diff voltagefiles)
+
 ## compare 
 # ENV["DISPLAY"] = "localhost:13.0"
 using Sockets, Observables, Statistics, Images, Lensman,
@@ -31,44 +33,8 @@ slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 
 
 
-# tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
-# tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-256cell-8concurrent-4freq-055"
-# can't fit in memory on lensman, so use deis
-# tseriesDir = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051")
-# tseriesDir = joinpath(tseriesRootDir, "2021-01-26_rsChRmine_6f_7dpf/fish1/TSeries-31concurrent-168trial-3rep-4power-043")
-# tseriesDir = joinpath(tseriesRootDir, "2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2/TSeries-128cell-4concurrent-3power-skip7-044")
-# tseriesDir = "$tseriesRootDir/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043"
-# tseriesDir = "$tseriesRootDir/2021-01-26_rsChRmine_6f_7dpf/fish2/TSeries-32concurrent-256trial-2rep-4power-045" # only one stim...?
-# tseriesDir = "$tseriesRootDir/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-10zplane-077"
-# tseriesDir = "$tseriesRootDir/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-076"
-# tseriesDir = "$tseriesRootDir/2021-02-02_f1_h33r_GC6f_6dpf/fish2/TSeries-1024cell-32concurrent-5power-060"
-
-# tseriesDir = "$tseriesRootDir/2021-03-16_h33r-chrmine_h2b6s/fish4/TSeries_64cell_8concurrent_2power_8rep-607"
-# tseriesDir = "$tseriesRootDir/2021-03-16_rschrmine_h2b6s/fish3/TSeries_64cell_8concurrent_2power_8rep-407"
-# tseriesDir = "$tseriesRootDir/2021-03-16_h2b6s/fish1/TSeries_64cell_8concurrent_2power_8rep-207"
-# tseriesDir = "$tseriesRootDir/2021-03-16_wt-chrmine_h2b6s/fish2/TSeries_64cell_8concurrent_2power_8rep-221"
-
-# tseriesDir = joinpath(tseriesRootDir, "2021-02-23_rsChRmine_f0_h2b6s_6dpf/fish2/TSeries-128cell-4concurrent-3power-skip7-044")
-# tseriesDir = "$tseriesRootDir/2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-043"
-# tseriesDir = "$tseriesRootDir/2021-01-26_rsChRmine_6f_7dpf/fish2/TSeries-32concurrent-256trial-2rep-4power-045" # only one stim...?
-# tseriesDir = "$tseriesRootDir/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-10zplane-077"
-# tseriesDir = "$tseriesRootDir/2021-02-02_f1_h33r_GC6f_6dpf/fish2/TSeries-1024cell-32concurrent-5power-060"
-# tseriesDir = "$tseriesRootDir/2021-02-02_f1_h33r_GC6f_6dpf/fish2/TSeries-1024cell-32concurrent-5power-060"
-# tseriesDir = "$tseriesRootDir/2021-01-26_rsChRmine_6f_7dpf/fish2/TSeries-1024cell-32concurrent-048"
-# tseriesDir = "$tseriesRootDir/2021-03-09_wt-chrmine-gc6f/fish1/TSeries-32cell-8concurrent-10MHz-8rep-065"
-# tseriesDir = "$tseriesRootDir/2021-03-09_wt-chrmine-gc6f/fish1/TSeries-32cell-8concurrent-10MHz-8rep-065"
-
-
-# compare to old 1024 stim experiment with 90% of cells responding (but some plateaus...)
-# tseriesDir = "$tseriesRootDir/2020-12-15_h2b6s_chrmine_kv2.1_5dpf/fish2/TSeries-1024cell-32concurrent-038"
-# tseriesDir = "$tseriesRootDir/2020-12-17_h2b6s_chrmine-kv2.1_7dpf/fish1/TSeries_n64_b2_r8-044"
-# tseriesDir = "$tseriesRootDir/2020-11-30_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish1/fov1-tectum/TSeries-64groups-4cell-stim-069"
-
-# tseriesDir = "$tseriesRootDir/2021-03-30_wt-chrmine_6dpf_h2b6s/fish1/TSeries-28cell-1concurrent-2power-10trial-052"
-# tseriesDir = "$tseriesRootDir/2021-04-13_wt-chrmine_6dpf_h2b6s/fish1/TSeries-16cell-50rep-actually-stim-147"
-# tseriesDir = "$tseriesRootDir/2021-04-19_wt-chrmine_5dpf_6f/fish1/TSeries-15cell-5concurrent-5rep-actual-trigger-005"
-# tseriesDir = "$tseriesRootDir/2021-04-19_wt-chrmine_5dpf_6f/fish1/TSeries-15cell-5concurrent-5rep-actual-trigger-005"
-tseriesDir = "$tseriesRootDir/2021-04-20_h33r-chrmine_6dpf_6f/fish2/TSeries-20cell-1concurrent-20trial-047"
+# tseriesDir = "$tseriesRootDir/2021-04-20_h33r-chrmine_6dpf_6f/fish2/TSeries-20cell-1concurrent-20trial-047"
+tseriesDir = "$tseriesRootDir/2021-04-20_wt-chrmine_6dpf_6f/fish1/TSeries-20cell-1concurrent-20trial-046"
 
 # debug by looking at 3region..?
 # tseriesDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044/"
@@ -116,12 +82,7 @@ tylerSLMDir = joinpath(fishDir, "slm")
 
 # tylerSLMDir = fishDir
 
-# tif
-tseries = loadTseries(tseriesDir);
-
-# tyh5
-
-
+# tif or tyh5
 tyh5Path = tseriesDir*".ty.h5"
 if isfile(tyh5Path)
     tseries = h5read(tyh5Path, "/imaging/raw")
@@ -134,11 +95,11 @@ else
 end;
 
 ##
+(H, W, T, nRepeats) = size(tseries)
+tseries = reshape(tseries, H, W, 1, nRepeats*T);
+TperTrial = T
 (H, W, Z, T) = size(tseries)
-if Z > 1000
-    tseries = reshape(tseries, H, W, 1, Z*T);
-    (H, W, Z, T) = size(tseries)
-end
+
 @show (H, W, Z, T)
 plotDir = joinpath(fishDir, "plots")
 if ~isdir(plotDir)
@@ -147,6 +108,7 @@ end
 
 # TODO: wrap more of cell in function to reduce inline code..?
 # for 2021-03-16, can read from oak...
+@warn "assume same voltageFile for all repeats"
 # voltageFile = glob("*VoltageRecording*.csv", tseriesDir)[1]
 voltageFiles = glob("*VoltageRecording*.csv", tseriesDir)
 
@@ -158,6 +120,7 @@ Z = size(etlVals,1)
 volRate = frameRate / Z
 slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
 trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
+# trialOrder = trialOrder[1:400] # hack for 4-20 WT
 
 ## read power
 slmTxtFile = regex_glob(r".*(?<!trialOrder)\.txt$", tylerSLMDir)
@@ -186,8 +149,20 @@ elseif slmNum == 2
     slmpowerPerCell = slm2Power * powerPerCell / 1000
 end
 
-# stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFile, Z)
-stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFiles, Z)
+
+start_idx = 0
+stimStartIdx = Int64[]
+stimEndIdx = Int64[]
+for vf in voltageFiles
+    tempStartIdx, tempEndIdx = getStimTimesFromVoltages(vf, Z)
+    tempStartIdx .+= start_idx
+    tempEndIdx .+= start_idx
+    stimStartIdx = vcat(stimStartIdx, tempStartIdx)
+    stimEndIdx = vcat(stimEndIdx, tempEndIdx)
+    start_idx += TperTrial
+end
+    
+# stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFiles, Z)
 allWithin(diff(stimStartIdx),0.05)
 # adjust for expected number of stimuli....
 # @assert length(stimStartIdx) == 32

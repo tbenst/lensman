@@ -328,7 +328,7 @@ imshow(im[:,:,implanes])
 # 62: 122
 # 78: 154
 ##
-write_markpoints(left_hab_neuron_locs, "/tmp/test.gpl")
+write_markpoints(left_hab_neuron_locs, "$(outname)_left_hab.gpl")
 
 ## SAVE
 slmOutName = "$(outname)_lrhab_raphe_control"
