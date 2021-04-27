@@ -1,11 +1,11 @@
 ## compare 
-ENV["DISPLAY"] = "localhost:13.0"
+# ENV["DISPLAY"] = "localhost:13.0"
 using Sockets, Observables, Statistics, Images, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
     Compose, ImageMagick, Random, PyCall, Arrow, ProgressMeter,
     RollingFunctions
-using ImageView
+# using ImageView
 import Gadfly
 using Unitful: μm, m, s, mW
 import Base.Threads.@threads
@@ -14,17 +14,17 @@ plt = PyPlot
 matplotlib = plt.matplotlib
 
 ##
-# tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
+tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
 # tseriesRootDir = "/data/dlab/b115"
-tseriesRootDir = "/scratch/b115"
+# tseriesRootDir = "/scratch/b115"
 # tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 
 
 # newer
 # slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
-# slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
+slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
 # slmDir = "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment"
-slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
+# slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 # older
 # slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"
 # slmDir = "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
@@ -115,7 +115,7 @@ tylerSLMDir = joinpath(fishDir, "slm")
 # tylerSLMDir = fishDir
 
 # tif
-tseries = loadTseries(tseriesDir);
+# tseries = loadTseries(tseriesDir);
 
 # tyh5
 
@@ -123,10 +123,11 @@ tseries = loadTseries(tseriesDir);
 # expName = replace(splitpath(tyh5Path)[end], ".ty.h5" => "")
 # tseriesDir = joinpath(fishDir, expName)
 
-# tseries = h5read(tyh5Path, "/imaging/raw")
-# @assert size(tseries,4)==1
-# tseries = permutedims(tseries, (2,1,3,4,5))
-# tseries = tseries[:,:,:,1,:];
+tyh5Path = tseriesDir*".ty.h5"
+tseries = h5read(tyh5Path, "/imaging/raw")
+@assert size(tseries,4)==1
+tseries = permutedims(tseries, (2,1,3,4,5))
+tseries = tseries[:,:,:,1,:];
 
 ##
 (H, W, Z, T) = size(tseries)
@@ -161,6 +162,8 @@ stimGroupDF = CSV.File(open(read, slmTxtFile), header=["filepath", "powerFractio
 stimGroupDF = stimGroupDF[trialOrder,:]
 
 mat = matread.(findMatGroups(slmExpDir)[1])
+max_targets_center = maximum(map(mat->maximum(maximum.(matread(mat)["cfg"]["exp"]["maskS"]["targetsCenter"])), findMatGroups(slmExpDir)))
+@assert  max_targets_center < 512 "bad targets center value, don't trust results..."
 slmNum = getSLMnum(mat)
 zOffset = getzoffset(expDate, slmNum)
 ##
@@ -389,6 +392,12 @@ post = Int(ceil(nseconds*volRate))+1
 
 avgStim = trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder;
     pre=pre, post=post);
+
+try
+    h5write(joinpath(fishDir,expName*"_avgStim.h5"), "/block1", avgStim)
+catch
+end
+
 ##
 figB = 1.6
 # 2 for extra stim mask
