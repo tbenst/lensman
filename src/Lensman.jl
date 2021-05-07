@@ -27,7 +27,7 @@ machinery = PyNULL()
 
 # TODO: should we auto-install python dependencies via `tables = pyimport_conda("tables", "pytables")` or similar?
 function __init__()
-    pyimport_conda("skimage", "skimage")
+    pyimport_conda("skimage", "scikit-image")
     # pyimport("skimage")
     copy!(peak_local_max, pyimport("skimage.feature").peak_local_max)
     copy!(disk, pyimport("skimage.morphology").disk)
@@ -72,18 +72,29 @@ function getMaskNameIncludes(masks, maskNameIncludes, units=zbrain_units)
     mask = AxisArray(Float32.(mask), (:y, :x, :z), zbrain_units)
 end
 
-function antsApplyTransforms(fixedPath::String, moving::AxisArray, transformPath::String)
+function antsApplyTransforms2(fixedPath::String, moving::AxisArray, transformPath::String)
     movingPath = joinpath(tmppath, ANTsRegistration.write_nrrd(moving))
-    antsApplyTransforms(fixedPath, movingPath, transformPath)
+    antsApplyTransforms2(fixedPath, movingPath, transformPath)
 end
 
-function antsApplyTransforms(fixedPath::String, movingPath::String, transformPath::String)
+function antsApplyTransforms2(fixedPath::String, movingPath::String, transformPath::String)
     maskoutname = joinpath(tmppath, ANTsRegistration.randstring(10) * ".nii.gz")
-    antsApplyTransforms(fixedPath, movingPath, transformPath, maskoutname)
+    antsApplyTransforms2(fixedPath, movingPath, transformPath, maskoutname)
 end
 
-function antsApplyTransforms(fixedPath::String, movingPath::String, transformPath::String, maskoutname::String)
+# function antsApplyTransforms2(fixedPath::String, movingPath::String, transformPath1::String, transformPath2::String)
+#     maskoutname = joinpath(tmppath, ANTsRegistration.randstring(10) * ".nii.gz")
+#     antsApplyTransforms2(fixedPath, movingPath, transformPath1, transformPath2, maskoutname)
+# end
+
+function antsApplyTransforms2(fixedPath::String, movingPath::String, transformPath::String, maskoutname::String)
     run(`/home/tyler/.nix-profile/bin/antsApplyTransforms --float -d 3 -i $movingPath -r $fixedPath -t $transformPath -o $maskoutname`)
+    # run(`antsApplyTransforms --float -d 3 -i $movingPath -r $fixedPath -t $transformPath -o $maskoutname`)
+    niread(maskoutname)
+end
+
+function antsApplyTransforms2(fixedPath::String, movingPath::String, transformPath1::String, transformPath2::String, maskoutname::String)
+    run(`/home/tyler/.nix-profile/bin/antsApplyTransforms --float -d 3 -i $movingPath -r $fixedPath -t $transformPath2 -t $transformPath1 -o $maskoutname`)
     # run(`antsApplyTransforms --float -d 3 -i $movingPath -r $fixedPath -t $transformPath -o $maskoutname`)
     niread(maskoutname)
 end
@@ -697,7 +708,7 @@ end
 
 
 "Create binary mask of HxWxZ for each neuron location."
-function constructROImasks(cells, H, W, Z; targetSizePx)
+function constructROImasks(cells, H, W, Z, targetSizePx)
     @warn "now must index by cellID"
     nCells = maximum(cells.cellID)
     roiMask = Dict()
@@ -711,7 +722,7 @@ function constructROImasks(cells, H, W, Z; targetSizePx)
     roiMask
 end
 
-function constructROImasks(cells, H, W; targetSizePx)
+function constructROImasks(cells::DataFrame, H, W, targetSizePx)
     @warn "now must index by cellID"
     nCells = maximum(cells.cellID)
     roiMask = Dict()
@@ -724,6 +735,20 @@ function constructROImasks(cells, H, W; targetSizePx)
     end
     roiMask
 end
+
+function constructROImasks(neuron_locs::Vector{CartesianIndex{2}}, H, W, targetSizePx)
+    roiMask = []
+    for (i,loc) in enumerate(neuron_locs)
+        y,x = Tuple(loc)
+        mask = Gray.(zeros(Bool, H,W))
+        draw!(view(mask,:,:), Ellipse(CirclePointRadius(x,y,targetSizePx)))
+        mask = findall(channelview(mask))
+        push!(roiMask, mask)
+    end
+    roiMask
+end
+
+
 
 f_lookup_cellidx(xyzToIdx) = (x, y, z) -> map((a, b, c) -> xyzToIdx[(a, b, c)], x, y, z)
 
@@ -897,5 +922,9 @@ export read_microns_per_pixel,
     # write_markpoints,
     write_trial_order,
     regex_glob,
-    loadBOT
+    loadBOT,
+    markpoints_magic_numbers,
+    read_markpoints_series,
+    write_markpoints,
+    antsApplyTransforms2
 end

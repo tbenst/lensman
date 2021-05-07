@@ -9,6 +9,7 @@ $ git clone git@github.com:tbenst/lensman.git`
 $ cd lensman
 $ julia
 julia>ENV["GUROBI_HOME"] = "/opt/gurobi911" # optional
+julia>ENV["PYTHON"] = "/home/tyler/opt/anaconda3/envs/jl-1.6/bin" # optional
 julia>]
 pkg>activate .
 pkg>instantiate

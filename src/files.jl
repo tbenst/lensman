@@ -218,45 +218,23 @@ end
 
 
 "From a single voltageFile"
-function getStimTimesFromVoltages(voltageFile, Z::Int)
+function getStimTimesFromVoltages(voltageFile, Z::Int;
+        frame_start_key="frame starts", stim_key="respir", sigma=3)
     voltages = CSV.File(open(read, voltageFile)) |> DataFrame
     rename!(voltages, [c => stripLeadingSpace(c) for c in names(voltages)])
 
     # plot(voltages["Time(ms)"][1:10000], voltages["frame starts"][1:10000])
-    frameStarted = diff(voltages[!,"frame starts"] .> std(voltages[!,"frame starts"]) .* 3)
+    frameStarted = diff(voltages[!,frame_start_key] .> std(voltages[!,frame_start_key]) .* sigma)
     frameStartIdx = findall(frameStarted .== 1) .+ 1
 
-    ttlStarts = findTTLStarts(voltages[!,"respir"])
+    ttlStarts = findTTLStarts(voltages[!,stim_key])
     stimDur = countPulsesMaxGap(ttlStarts)
     stimStartIdx = ttlStarts[1:stimDur:end]
-    stimEndIdx = findTTLEnds(voltages[!,"respir"])[stimDur:stimDur:end]
+    stimEndIdx = findTTLEnds(voltages[!,stim_key])[stimDur:stimDur:end]
     stimStartFrameIdx = [Int.(floor.(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimStartIdx]
     stimEndFrameIdx = [Int.(ceil(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimEndIdx]
-    stimStartFrameIdx, stimEndFrameIdx
+    stimStartFrameIdx, stimEndFrameIdx, frameStartIdx
 end
-
-"From a several voltageFiles (ie trial structure)"
-function getStimTimesFromVoltages(voltageFiles::Array{String,1}, Z::Int)
-    volts = DataFrame[]
-    for vf in voltageFiles
-        voltages = CSV.File(open(read, vf)) |> DataFrame
-        rename!(voltages, [c => stripLeadingSpace(c) for c in names(voltages)])
-        push!(volts, voltages)
-    end
-    voltages = vcat(volts...)
-    # plot(voltages["Time(ms)"][1:10000], voltages["frame starts"][1:10000])
-    frameStarted = diff(voltages[!,"frame starts"] .> std(voltages[!,"frame starts"]) .* 3)
-    frameStartIdx = findall(frameStarted .== 1) .+ 1
-
-    ttlStarts = findTTLStarts(voltages[!,"respir"])
-    stimDur = countPulsesMaxGap(ttlStarts)
-    stimStartIdx = ttlStarts[1:stimDur:end]
-    stimEndIdx = findTTLEnds(voltages[!,"respir"])[stimDur:stimDur:end]
-    stimStartFrameIdx = [Int.(floor.(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimStartIdx]
-    stimEndFrameIdx = [Int.(ceil(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimEndIdx]
-    stimStartFrameIdx, stimEndFrameIdx
-end
-
 
 """Parse Sean's filename to time
 trialOrder_2020_11_02___21h03m29sr.txt -> Time(21,3,29)"""
@@ -339,7 +317,7 @@ zoom    X               Y
 1.5     2.78113654      3.090760608
 """
 function read_gpl(gpl_path; zoom=1., width=1024, height=1024,
-                  maxX=4.17170481, maxY=4.636140912)
+                  maxX=4.17170481, maxY=4.636140912,room="B115")
     gpl_xml = open(gpl_path, "r") do io
         gpl_xml = read(io, String)
         xp_parse(gpl_xml)
@@ -352,13 +330,31 @@ function read_gpl(gpl_path; zoom=1., width=1024, height=1024,
     x .+= maxX
     x ./= 2*maxX
     x .*= width
-    x .= width .- x
     y .+= maxY
     y ./= 2*maxY
     y .*= height
-    y .= height .- y
     x = Int.(round.(x, digits=0))
     y = Int.(round.(y, digits=0))
+    if room=="B115"
+        # need to reverse for B115...
+        x .= width .- x
+        y .= height .- y # for b115 only...?
+    end
+    map(CartesianIndex ∘ Tuple, zip(y,x))
+end
+
+""""Read Prairie View markpoints xml Series.
+"""
+function read_markpoints_series(xml_path; width=1024, height=1024)
+    xml_file = open(xml_path, "r") do io
+        xml_file = read(io, String)
+        xp_parse(xml_file)
+    end
+    pvgp = xml_file[xpath"/PVMarkPointSeriesElements/PVMarkPointElement/PVGalvoPointElement/Point"]
+    x = parse.(Float64, map(x->x.attr["X"], pvgp))
+    y = parse.(Float64, map(x->x.attr["Y"], pvgp))
+    x = Int.(round.(x*width, digits=0))
+    y = Int.(round.(y*height, digits=0))
     map(CartesianIndex ∘ Tuple, zip(y,x))
 end
 
@@ -368,23 +364,25 @@ getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0,0) ? 2 : 1
 
 
 
-"""Write prairie view markpoints (galvo) xml file.
+"""Write prairie view markpoints (galvo) gpl file.
 
 neuron_locs is array of (x,y)."""
 function write_markpoints(neuron_locs::Vector{CartesianIndex{2}}, filepath;
-        W=512, magicX=7.6, magicY=8.3)
-    @warn "Not tested, values are wrong / for b113!!"
+        W=512, magicX=7.6, magicY=8.3,spiral_size=0.228)
+        # spiral_size=0.228 is 7um for B113
     # create an empty XML document
     xmlGpl = XMLDocument()
     # create & attach a root node
     xGplRoot = create_root(xmlGpl, "PVGalvoPointList")
     for (i,ci) in enumerate(neuron_locs)
-        x,y = Tuple(ci)
+        # x,y = Tuple(ci)
+        y,x = Tuple(ci)
         # empirically, X ∈ [-7.6, 7.6], Y ∈ [8.3, -8.3]
         # where "(1,1)" is (-7.6,8.3)
         # and "(512,512)" is (7.6,-8.3)
         # and "(1,74)" meaning row 1 col 74 is (-5.37,8.3) 
         # and "(256,256)" is (0,0)
+        # these magic numbers may differ by Bruker scope
         x = (x-W/2)/(W/2) # map to (-1,1)
         x *= magicX
         y = (y-W/2)/(W/2)
@@ -401,7 +399,7 @@ function write_markpoints(neuron_locs::Vector{CartesianIndex{2}}, filepath;
         set_attribute(gplList, "UncagingLaserPower", "0.76")
         set_attribute(gplList, "Duration", "2")
         set_attribute(gplList, "IsSpiral", "True")
-        set_attribute(gplList, "SpiralSize", "0.220801205703228") # 7μm
+        set_attribute(gplList, "SpiralSize", "$spiral_size")
         set_attribute(gplList, "SpiralRevolutions", "5")
         set_attribute(gplList, "Z", "0")
     end

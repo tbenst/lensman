@@ -58,12 +58,18 @@ function slmpower(exp_date)
     slm1Power, slm2Power
 end
 
-# function markpoints_magic_numbers(room::String, W::Int)
-#     @assert ismember(room, ["b113", "b115"])
-#     if (W==1024) & (room=="b115")
-#     elseif (W==512) & (room=="b115")
-
-#     else
-#         error("Not implemented")
-#     end
-# end
+function markpoints_magic_numbers(room::String)
+    @assert in(room, ["B113", "B115"])
+    if room=="B115"
+        x = -4.17
+        y = -4.62
+        x = 4.17
+        y = 4.62
+    elseif room=="B113"
+        x = 7.6
+        y = 8.3
+    else
+        error("bad room string")
+    end
+    x,y
+end

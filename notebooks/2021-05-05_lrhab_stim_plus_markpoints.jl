@@ -60,15 +60,17 @@ microscope_units
 ## Read Zbrain cytosolic gcamp
 #####
 @warn "update for H2B vs cytosolic!!"
-gcamp_zbrain = AxisArray(permutedims(
+if occursin("6f", fishDir)
+    gcamp_zbrain = AxisArray(
+        load("$zbrain_dir/Ref20131120pt14pl2.nrrd"),
+        (:x, :y, :z), zbrain_units);
+else
+    gcamp_zbrain = AxisArray(permutedims(
         # h5read("$zbrain_dir/AnatomyLabelDatabase.hdf5", "Elavl3-GCaMP5G_6dpf_MeanImageOf7Fish"),
         h5read("$zbrain_dir/AnatomyLabelDatabase.hdf5", "Elavl3-H2BRFP_6dpf_MeanImageOf10Fish"),
         (2,1,3)),
     (:y, :x, :z), zbrain_units)
-gcamp_zbrain = AxisArray(permutedims(
-        load("$zbrain_dir/Ref20131120pt14pl2.nrrd"),
-        (1,2,3)),
-    (:x, :y, :z), zbrain_units);
+end
 
 gcamp_zbrain = reverse(gcamp_zbrain,dims=2); # face right
 gcamp_zbrain = reverse(gcamp_zbrain,dims=3); # top to bottom
@@ -251,7 +253,7 @@ raphe_neurons = plane_neurons .& raphe_mask[:,:,planeRaphe]
 @show sum(raphe_neurons)
 
 # sample consistent number of neurons
-nNeuronsForStim = 50
+nNeuronsForStim = 32
 right_hab_neuron_locs = findall(right_hab_neurons)
 nRHabNeurons = minimum([nNeuronsForStim, size(right_hab_neuron_locs,1)])
 right_hab_neuron_locs = sample(right_hab_neuron_locs, nRHabNeurons, replace=false)
@@ -358,43 +360,37 @@ write_markpoints(control_neuron_locs, "$(outname)_control.gpl",
     W=W, magicX=magicX, magicY=magicY, spiral_size=0.09)
 
 ##
-picked_left_hab_neuron_locs = read_gpl(joinpath(fishDir, "handpicked_left_hab.gpl"),
+neuron_locs = read_gpl(joinpath(fishDir, "96points_lrhab_control.gpl"),
     width=1024, height=1024)
-picked_right_hab_neuron_locs = read_gpl(joinpath(fishDir, "handpicked_right_hab.gpl"),
-    width=1024, height=1024)
-picked_raphe_neuron_locs = read_gpl(joinpath(fishDir, "handpicked_raphe.gpl"),
-    width=1024, height=1024)
+
+@warn "HARDCODE for 2021-05-05 experiment where ignore this pipeline"
+habZoffset = 0 # HARDCODE
+picked_right_hab_neuron_locs = neuron_locs[1:32]
+picked_left_hab_neuron_locs = neuron_locs[33:64]
+picked_control_neuron_locs = neuron_locs[65:96]
 
 right_hab_targets = vcat(Float64.(hcat(collect.(Tuple.(picked_right_hab_neuron_locs))...)),
 ones(Float64,1,nRHabNeurons)*habZoffset)'
 # must be in 512x512 image space!! -> cropping makes life hard :/
 right_hab_targets[:,[1,2]] ./= 2
 right_hab_targets = right_hab_targets[:,[2,1,3]]
-# @info "hack solution for the flip problem..."
-# right_hab_targets[:,1] .= 512 .- right_hab_targets[:,1]
-# right_hab_targets[:,2] .= 512 .- right_hab_targets[:,2]
 
 left_hab_targets = vcat(Float64.(hcat(collect.(Tuple.(picked_left_hab_neuron_locs))...)),
 ones(Float64,1,nLHabNeurons)*habZoffset)'
 left_hab_targets[:,[1,2]] ./= 2
 left_hab_targets = left_hab_targets[:,[2,1,3]]
-# left_hab_targets[:,1] .= 512 .- left_hab_targets[:,1]
-# left_hab_targets[:,2] .= 512 .- left_hab_targets[:,2]
 
-rapheZoffset = seanRaphe * 10^-6
-raphe_targets = vcat(Float64.(hcat(collect.(Tuple.(picked_raphe_neuron_locs))...)),
-ones(Float64,1,nRapheNeurons)*rapheZoffset)'
-raphe_targets[:,[1,2]] ./= 2
-raphe_targets = raphe_targets[:,[2,1,3]]
-
+control_targets = vcat(Float64.(hcat(collect.(Tuple.(picked_control_neuron_locs))...)),
+ones(Float64,1,nLHabNeurons)*habZoffset)'
+control_targets[:,[1,2]] ./= 2
+control_targets = control_targets[:,[2,1,3]]
 
 # Visualize stim targets
 im = RGB.(adj_zseries)
 stim_points = zeros(Bool,size(adj_zseries))
 stim_points[picked_right_hab_neuron_locs,planeHab] .= true
 stim_points[picked_left_hab_neuron_locs,planeHab] .= true
-stim_points[control_neuron_locs,planeHab] .= true
-stim_points[picked_raphe_neuron_locs,planeRaphe] .= true
+stim_points[picked_control_neuron_locs,planeHab] .= true
 stim_points = dilate(dilate(stim_points))
 channelview(im)[[1,3],:,:,:] .= 0
 channelview(im)[1,:,:,:] .= float(stim_points)
@@ -404,7 +400,7 @@ channelview(im)[3,:,:,:] .= 0.5 * (hab_mask .| raphe_mask)
 imshow(im[:,:,implanes])
 ## SAVE
 
-slmOutName = "$(outname)_lrhab_raphe_control"
+slmOutName = "$(outname)_lrhab_control"
 if isfile(slmOutName*".txt")
     error("file already exists! refusing to clobber")
 end
@@ -419,17 +415,17 @@ else
     error("need to manually specify remote path.")
 end
     
-create_slm_stim([left_hab_targets, right_hab_targets, raphe_targets,
+create_slm_stim([left_hab_targets, right_hab_targets,
     control_targets],    slmOutName,
     localToRemote = localToRemote,
     powers=[1], slmNum=slmNum)
 
 ## trialOrder
-nStims = 4
-nReps = 8 # transition reps
+nStims = 3
+nReps = 15 # transition reps
 nTrials = nStims^2 * nReps + 1
 
-transitionsLeft = ones(4,4) * nReps
+transitionsLeft = ones(nStims,nStims) * nReps
 trialOrder = Int64[]
 
 push!(trialOrder, rand(1:nStims))

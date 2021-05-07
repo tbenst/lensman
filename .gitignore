@@ -25,3 +25,5 @@ docs/site/
 
 # project-specific
 src/__pycache__
+
+Manifest.toml
