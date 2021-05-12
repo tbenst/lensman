@@ -18,9 +18,11 @@ tseriesroot = "/scratch/b115"
 # fishDir = "$tseriesroot/2021-03-30_wt-chrmine_6dpf_h2b6s/fish1"
 # fishDir = "$tseriesroot/2021-04-19_wt-chrmine_5dpf_6f/fish1"
 # fishDir = "$tseriesroot/2021-04-20_wt-chrmine_6dpf_6f/fish1"
-fishDir = "$tseriesroot/2021-04-20_h33r-chrmine_6dpf_6f/fish2"
+# fishDir = "$tseriesroot/2021-04-20_h33r-chrmine_6dpf_6f/fish2"
+fishDir = "$tseriesroot/2021-05-11_wt-chrmine_6f_6dpf/fish1"
 # fishDir = "/scratch/b115/2021-03-09_h2b6s/fish2"
 useRed = false
+pan_galvo = false
 
 # greenpath = glob("*840*", fishDir)[end]
 greenpath = glob("*920*", fishDir)[end]
@@ -88,13 +90,14 @@ end
 
 
 ## k neurons per stim
-k = 1
+k = 32
 # we reverse to get (x,y)
-targets_center_list = map(target->ideal_galvo_for_target(reverse(Tuple(target))...), neuron_locs)
-if H == 1024
-    targets_center_list ./= 2
+if pan_galvo
+    targets_center_list = map(target->ideal_galvo_for_target(reverse(Tuple(target))...), neuron_locs)
+    if H == 1024
+        targets_center_list ./= 2
+    end
 end
-
 target_groups = [vcat(cartIdxFunc.(locs, fill(offset, length(locs)))...)
     for locs in Iterators.partition(neuron_locs,k)]
 @show size.(target_groups)
@@ -118,11 +121,18 @@ end
 #     localToRemote = matpath -> "Y:" * replace(matpath[15:end], "/" => "\\"),
 #     powers=collect(1:nPower)/nPower)
 
-create_slm_stim(target_groups, outname,
-    # 9 is path "/scratch/" includes trailing
-    localToRemote = matpath -> "T:" * replace(matpath[9:end], "/" => "\\"),
-    powers=powers, frequencies=frequencies, slmNum=slmNum)
-    # targets_center_list=targets_center_list)
+if ~pan_galvo
+    create_slm_stim(target_groups, outname,
+        # 9 is path "/scratch/" includes trailing
+        localToRemote = matpath -> "T:" * replace(matpath[9:end], "/" => "\\"),
+        powers=powers, frequencies=frequencies, slmNum=slmNum)
+        # targets_center_list=targets_center_list)
+else
+    create_slm_stim(target_groups, outname,
+        localToRemote = matpath -> "T:" * replace(matpath[9:end], "/" => "\\"),
+        powers=powers, frequencies=frequencies, slmNum=slmNum,
+        targets_center_list=targets_center_list)
+end
 
 powerPerCell = 18
 println("Powers for power per cell of $powerPerCell: $(powerPerCell ./ 1000 .* 395mW)")
