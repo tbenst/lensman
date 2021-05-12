@@ -17,21 +17,24 @@ plt = PyPlot
 matplotlib = plt.matplotlib
 
 ##
-# tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
-# tseriesRootDir = "/data/dlab/b115"
-tseriesRootDir = "/scratch/b115"
-# tseriesRootDir = "/mnt/deissero/users/tyler/b115"
-
+if ON_SHERLOCK
+    tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
+else
+    # tseriesRootDir = "/data/dlab/b115"
+    tseriesRootDir = "/scratch/b115"
+    # tseriesRootDir = "/mnt/deissero/users/tyler/b115"
+end
 
 # newer
-# slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
-# slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
-# slmDir = "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment"
-slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
-# older
-# slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"
-# slmDir = "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
-
+if ON_SHERLOCK
+    slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
+else
+    # slmDir = "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment"
+    slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
+    # older
+    # slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"
+    # slmDir = "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
+end
 
 
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
@@ -59,7 +62,7 @@ slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 # tseriesDir = "$tseriesRootDir/2021-02-02_f1_h33r_GC6f_6dpf/fish2/TSeries-1024cell-32concurrent-5power-060"
 # tseriesDir = "$tseriesRootDir/2021-01-26_rsChRmine_6f_7dpf/fish2/TSeries-1024cell-32concurrent-048"
 # tseriesDir = "$tseriesRootDir/2021-03-09_wt-chrmine-gc6f/fish1/TSeries-32cell-8concurrent-10MHz-8rep-065"
-# tseriesDir = "$tseriesRootDir/2021-03-09_wt-chrmine-gc6f/fish1/TSeries-32cell-8concurrent-10MHz-8rep-065"
+tseriesDir = "$tseriesRootDir/2021-03-02_h33r-6f-6dpf/fish1/TSeries-128cell-8concurrent-50ppc-15mW-046"
 
 
 # compare to old 1024 stim experiment with 90% of cells responding (but some plateaus...)
@@ -71,10 +74,12 @@ slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 # tseriesDir = "$tseriesRootDir/2021-04-13_wt-chrmine_6dpf_h2b6s/fish1/TSeries-16cell-50rep-actually-stim-147"
 # tseriesDir = "$tseriesRootDir/2021-04-19_wt-chrmine_5dpf_6f/fish1/TSeries-15cell-5concurrent-5rep-actual-trigger-005"
 # tseriesDir = "$tseriesRootDir/2021-04-19_wt-chrmine_5dpf_6f/fish1/TSeries-15cell-5concurrent-5rep-actual-trigger-005"
-tseriesDir = "$tseriesRootDir/2021-04-20_h33r-chrmine_6dpf_6f/fish2/TSeries-20cell-1concurrent-20trial-047"
+# tseriesDir = "$tseriesRootDir/2021-04-20_h33r-chrmine_6dpf_6f/fish2/TSeries-20cell-1concurrent-20trial-047"
 
 # debug by looking at 3region..?
 # tseriesDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044/"
+# tseriesDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-039" # read fail @ 98%
+# tseriesDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TS"
 
 ##
 # tseriesDir = "$tseriesRootDir/2021-03-16"
@@ -118,12 +123,6 @@ fish_name = splitpath(tseriesDir)[end-1]
 tylerSLMDir = joinpath(fishDir, "slm")
 
 # tylerSLMDir = fishDir
-
-# tif
-tseries = loadTseries(tseriesDir);
-
-# tyh5
-
 
 tyh5Path = tseriesDir*".ty.h5"
 if isfile(tyh5Path)
@@ -189,8 +188,12 @@ elseif slmNum == 2
     slmpowerPerCell = slm2Power * powerPerCell / 1000
 end
 
-# stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFile, Z)
-stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFiles, Z)
+if length(voltageFiles) == 1
+    stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFiles[1], Z)
+else
+    @warn "test me"
+    stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFiles, Z)
+end
 allWithin(diff(stimStartIdx),0.05)
 # adjust for expected number of stimuli....
 # @assert length(stimStartIdx) == 32

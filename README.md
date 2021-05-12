@@ -7,10 +7,14 @@ Wielding the power of the lens in galaxies full of neurons
 # (assuming ssh key added to github account)
 $ git clone git@github.com:tbenst/lensman.git`
 $ cd lensman
+$ ml load gurobi # for sherlock, optional
 $ julia
 julia>ENV["GUROBI_HOME"] = "/opt/gurobi911" # optional
+julia>ENV["GUROBI_HOME"] = "/share/software/user/restricted/gurobi/9.0.3" # sherlock
 julia>ENV["PYTHON"] = "/home/tyler/opt/anaconda3/envs/jl-1.6/bin" # optional
+julia>ENV["PYTHON"] = "/home/groups/deissero/tyler/anaconda/bin/python" # optional
 julia>]
+pkg>registry add https://github.com/HolyLab/HolyLabRegistry.git
 pkg>activate .
 pkg>instantiate
 ```

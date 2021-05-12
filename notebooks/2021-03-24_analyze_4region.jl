@@ -47,12 +47,12 @@ tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
 # tseriesRootDir = "/scratch/b115"
 # tifDir = "$tseriesRootDir/2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-lrhab-raphe-control-129trial-052/"
 # tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-039/"
-# tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
+tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab_raphe_40trial-045/"
 # tifDir = "$tseriesRootDir/2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish1/TSeries-lrhab_raphe_40trial-040/"
-<<<<<<< HEAD
+
 
 # tifDir = "$tseriesRootDir/2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish1/TSeries-lrhab_raphe_40trial-023"
-tifDir = "$tseriesRootDir/2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish2/TSeries-lrhab_raphe_stim-40trial-proper-zoffset-034"
+# tifDir = "$tseriesRootDir/2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish2/TSeries-lrhab_raphe_stim-40trial-proper-zoffset-034"
 Z = 5
 
 # tifDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries-lrhab_raphe_stim-40trial-038"
@@ -70,7 +70,7 @@ fishDir = joinpath(splitpath(tifDir)[1:end-1]...)
 recording_folder = splitpath(tifDir)[end-2]
 fish_name = splitpath(tifDir)[end-1]
 
-plotDir = "/oak/stanford/groups/deissero/users/tyler/plots/2021_chrmine-structure"
+plotDir = "/oak/stanford/groups/deissero/users/tyler/plots/2021_chrmine-structure/2021-05-07/"
 # plotDir = "/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure"
 # plotDir = joinpath(fishDir, "plots")
 if ~isdir(plotDir)
@@ -98,9 +98,7 @@ dataFolders = splitpath(tifDir)
 xmlPath = joinpath(dataFolders..., dataFolders[end] * ".xml")
 expDate, frameRate, etlVals = getExpData(xmlPath)
 volRate = frameRate / Z
-
-pre = Int(ceil(5*volRate))
-post = Int(ceil(5*volRate))
+##
 
 # if imaging many planes, may need to read another xml file since didn't get all planes in first file
 # etlVals = etlVals[1:end-1]
@@ -208,23 +206,26 @@ try
 catch
 end
 ##
-# avgStim = h5read(joinpath(fishDir,expName*"_avgStim.h5"), "/block1");
+avgStim = h5read(joinpath(fishDir,expName*"_avgStim.h5"), "/block1");
 (H, W, Z, nStim) = size(avgStim)
 ## STA
+pre = Int(ceil(5*volRate))
+post = Int(ceil(5*volRate))
+
 
 figB = 1.6
 figW,figH = (figB*5, figB)
 
 window = Int(ceil(3*volRate))
 @assert (window < post) & (window < pre)
-# cmax = 2.5
-# cmin = -0.5
-cmax = 4
-cmin = -0.75
+cmax = 2.5
+cmin = -0.5
+# cmax = 4
+# cmin = -0.75
 cnorm = matplotlib.colors.TwoSlopeNorm(vmin=cmin,vcenter=0,vmax=cmax)
 # cnorm = matplotlib.colors.DivergingNorm(vmin=cmin,vcenter=0,vmax=cmax)
 
-for stimNum in 1:nStimuli
+for stimNum in 1:nStim
     f = mean(avgStim[:,:,:,stimNum,end-window+1:end],dims=4)[:,:,:,1]
     f0 = mean(avgStim[:,:,:,stimNum,1:window],dims=4)[:,:,:,1]
     df = f - f0
@@ -248,11 +249,7 @@ for stimNum in 1:nStimuli
     cbar_ax = fig.add_axes([0.97, 0.15, 0.0075, 0.7])
     # cbar = fig.colorbar(cim, ticks=[0,1,2], cax=cbar_ax)
     cbar = fig.colorbar(cim, cax=cbar_ax)
-<<<<<<< HEAD
-    path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)__stim$stimNum.svg")
-=======
     path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)_stim$stimNum.svg")
->>>>>>> 56fd75518c56a7e7f718057b57a8a9e37db5fb67
     @show path
     fig.savefig(path, dpi=600)
 end
