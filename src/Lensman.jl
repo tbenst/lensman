@@ -13,6 +13,7 @@ import Unitful: μm
 include("algorithms.jl")
 include("files.jl")
 include("plots.jl")
+include("generic.jl")
 include("magic_numbers.jl")
 
 peak_local_max = PyNULL()
@@ -838,6 +839,52 @@ function Green(x)
     RGB(zero(x), im.g, zero(x))
 end
 
+function balanced_transition_order(nStims, nTransitionReps, max_attempts)
+    best = Int64[]
+    local successful
+    for i=1:max_attempts
+        trialOrder, successful = balanced_transition_order(nStims, nTransitionReps)
+        if successful
+            best = trialOrder
+            break
+        else
+            if length(trialOrder) > length(best)
+                println("new best: $(length(trialOrder))")
+                best = trialOrder
+            end
+        end
+    end
+    if ~successful
+        @warn "didn't succeed in making balanced trial order"
+    end
+    best, successful
+end
+
+"Try to find a trial order with balanced number of transitions."
+function balanced_transition_order(nStims, nTransitionReps)
+    nTrials = nStims^2 * nTransitionReps + 1
+
+    transitionsLeft = ones(nStims,nStims) * nTransitionReps
+    trialOrder = Int64[]
+    successful = true
+    push!(trialOrder, rand(1:nStims))
+    for i in 2:nTrials
+        prevStim = trialOrder[i-1]
+        # @show prevStim
+        # @show transitionsLeft
+        candidateTransitionsLeft = findall(transitionsLeft[:,prevStim] .> 0)
+        if length(candidateTransitionsLeft)==0
+            successful=false
+            break
+        end
+        nextStim = rand(candidateTransitionsLeft)
+        # @show nextStim
+        push!(trialOrder, nextStim)
+        transitionsLeft[nextStim,prevStim] -= 1
+    end
+    trialOrder, successful
+end
+
 export read_microns_per_pixel,
     read_mask,
     zbrain_units,
@@ -926,5 +973,8 @@ export read_microns_per_pixel,
     markpoints_magic_numbers,
     read_markpoints_series,
     write_markpoints,
-    antsApplyTransforms2
+    antsApplyTransforms2,
+    vecvec2mat,
+    read_markpoint_groups,
+    balanced_transition_order
 end

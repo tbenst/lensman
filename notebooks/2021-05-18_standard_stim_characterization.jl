@@ -69,7 +69,10 @@ slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 # tseriesDir = "$tseriesRootDir/2021-04-19_wt-chrmine_5dpf_6f/fish1/TSeries-15cell-5concurrent-5rep-actual-trigger-005"
 # tseriesDir = "$tseriesRootDir/2021-04-19_wt-chrmine_5dpf_6f/fish1/TSeries-15cell-5concurrent-5rep-actual-trigger-005"
 # tseriesDir = "$tseriesRootDir/2021-04-20_h33r-chrmine_6dpf_6f/fish2/TSeries-20cell-1concurrent-20trial-047"
-tseriesDir = "$tseriesRootDir/2021-05-18_hsChRmine_h2b6s_6dpf/fish4/TSeries-lrhab-control-91trial-4Mhz-044"
+
+# tseriesDir = "$tseriesRootDir/2021-05-18_hsChRmine_h2b6s_6dpf/fish4/TSeries-lrhab-control-91trial-4Mhz-044"
+# tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish1/TSeries-lrhab-control-91trial-4Mhz-047"
+tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish5/TSeries-lrhab-control-91trial-4Mhz-045"
 
 # debug by looking at 3region..?
 # tseriesDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044/"
@@ -115,14 +118,6 @@ recording_folder = splitpath(tseriesDir)[end-2]
 fish_name = splitpath(tseriesDir)[end-1]
 tylerSLMDir = joinpath(fishDir, "slm")
 
-# tylerSLMDir = fishDir
-
-# tif
-tseries = loadTseries(tseriesDir);
-
-# tyh5
-
-
 tyh5Path = tseriesDir*".ty.h5"
 if isfile(tyh5Path)
     tseries = h5read(tyh5Path, "/imaging/raw")
@@ -157,18 +152,24 @@ xmlPath = joinpath(dataFolders..., dataFolders[end] * ".xml")
 expDate, frameRate, etlVals = getExpData(xmlPath)
 Z = size(etlVals,1)
 volRate = frameRate / Z
-slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
-trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
+try
+    global trialOrder, slmExpDir
+    slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
+    trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
+catch
+    # not sure if needed
+    # hack in case matlab code uses date program started not experiment run
+    slmExpDir = joinpath(slmDir,Dates.format(expDate - Day(1), "dd-u-Y"))
+    @info "try previous day"
+    trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
+end
 
 ## read power
 slmTxtFile = regex_glob(r".*(?<!trialOrder)\.txt$", tylerSLMDir)
 @assert length(slmTxtFile) == 1 slmTxtFile # if not, need to be careful to choose
-slmTxtFile = slmTxtFile[1]
-# slmTxtFile = glob("*.txt", fishDir)[1]
+slmTxtFile = slmTxtFile[2]
 
-# slmTxtFile = "/mnt/deissero/users/tyler/b115/2020-12-15_h2b6s_chrmine_kv2.1_5dpf/fish2/1024cell-32concurrent.txt"
-# slmTxtFile = "/mnt/deissero/users/tyler/slm/masks/2020-11-30/fish1-256-cell.txt"
-
+##
 stimGroupDF = CSV.File(open(read, slmTxtFile), header=["filepath", "powerFraction"]) |> DataFrame
 stimGroupDF = stimGroupDF[trialOrder,:]
 
@@ -187,8 +188,11 @@ elseif slmNum == 2
     slmpowerPerCell = slm2Power * powerPerCell / 1000
 end
 
-# stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFile, Z)
-stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFiles, Z)
+if length(voltageFiles) == 1
+    stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFiles[1], Z)
+else
+    stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFiles, Z)
+end
 allWithin(diff(stimStartIdx),0.05)
 # adjust for expected number of stimuli....
 # @assert length(stimStartIdx) == 32
@@ -207,23 +211,10 @@ for mat in matread.(findMatGroups(slmExpDir))
     push!(target_groups, mat["cfg"]["maskS"]["targets"][1])
     push!(group_stim_freq, getMatStimFreq(mat))
 end
-## use from Tyler's files, rather than sean's....
-# target_groups_debug = []
-# for mat in matread.(glob("*.mat", tylerSLMDir))
-#     push!(target_groups_debug, mat["experimentS"]["targets"][1])
-# end
-# # since 2 powers...
-# target_groups_debug = vcat(target_groups_debug, target_groups_debug)
 ##
-# target_groups = [mat["cfg"]["maskS"]["targets"][1]
-#     for mat in matread.(findMatGroups(slmExpDir))]
-
-# group_stim_freq = [getMatStimFreq(mat) for mat in matread.(findMatGroups(slmExpDir))]
-
-## TODO: very memory inefficient!  eats 90GB of RAM beyond tseries?!?
 nStimuli = maximum(trialOrder)
 nTrials = size(trialOrder,1)
-nTrialsPerStimulus = Int(size(trialOrder,1) / nStimuli)
+# nTrialsPerStimulus = Int(size(trialOrder,1) / nStimuli)
 # @assert nTrialsPerStimulus == 1
 # cells = Array{Array{Float64,1}}
 is1024 = size(tseries,1)==1024
@@ -231,29 +222,103 @@ targetsWithPlaneIndex = mapTargetGroupsToPlane(target_groups, etlVals,
 is1024=is1024, zOffset=zOffset)
 targetsWithPlaneIndex = map(x->Int.(round.(x, digits=0)), targetsWithPlaneIndex)
 
-# targetsWithPlaneIndex_debug = mapTargetGroupsToPlane(target_groups_debug, etlVals,
-# is1024=is1024, zOffset=zOffset)
-# targetsWithPlaneIndex_debug = map(x->Int.(round.(x, digits=0)), targetsWithPlaneIndex_debug)
-
-# @warn "debug use tyler slm folder..."
-# target_groups = target_groups_debug
-# targetsWithPlaneIndex = targetsWithPlaneIndex_debug
-
-
-# @warn "Hardcode plane 'fix' for 2020-12-16"
-# targetsWithPlaneIndex = map(x-> x .- [0 0 4], targetsWithPlaneIndex)
-
-##
-# @warn "only using first 32... (also why only 63 stimuli??"
-# cells = makeCellsDF(targetsWithPlaneIndex, stimStartIdx[1:32], stimEndIdx[1:32], trialOrder[1:32])
-# cells2 = makeCellsDF(targetsWithPlaneIndex, stimStartIdx[33:63], stimEndIdx[33:63], trialOrder[33:63])
-# trialOrder = trialOrder[7:end]
 cells = makeCellsDF(targetsWithPlaneIndex, stimStartIdx, stimEndIdx, trialOrder)
 cells[!, :stimFreq] = map(g->group_stim_freq[trialOrder][g], cells.stimGroup)
 cells[!, :laserPower] = round.(typeof(1.0mW),
     map(g->stimGroupDF.powerFraction[g], cells.stimNum) .* slmpowerPerCell, digits=1)
-# cells[!, :laserPower] .= slmpowerPerCell
 
+lateral_unit = microscope_lateral_unit(W)
+targetSizePx = spiral_size(expDate, lateral_unit)
+
+## influence maps
+if volRate > 10
+    nseconds = 3
+else
+    nseconds = 5
+end
+pre = Int(ceil(nseconds*volRate))+1
+post = Int(ceil(nseconds*volRate))+1
+
+avg_stim_h5_path = joinpath(fishDir,expName*"_avgStim.h5")
+have_avg_stim_h5 = isfile(avg_stim_h5_path)
+if have_avg_stim_h5
+    avgStim = h5read(avg_stim_h5_path, "/block1");
+else
+    avgStim = trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder;
+        pre=pre, post=post);
+    h5write(joinpath(fishDir,expName*"_avgStim.h5"), "/block1", avgStim)
+end;
+
+##
+figB = 1.6
+# 2 for extra stim mask
+# figW,figH = (figB*1.1, figB)
+figW,figH = (figB*Z, figB)
+
+window = Int(ceil(3*volRate))
+@assert (window < post) & (window < pre)
+# @assert Z == 1
+cmax = 2.5
+cmin = -0.5
+# cmax = 4
+# cmin = -0.75
+cnorm = matplotlib.colors.TwoSlopeNorm(vmin=cmin,vcenter=0,vmax=cmax)
+
+for stimNum in 1:nStimuli
+    f = mean(avgStim[:,:,:,stimNum,end-window+1:end],dims=4)[:,:,:,1]
+    f0 = mean(avgStim[:,:,:,stimNum,1:window],dims=4)[:,:,:,1]
+    df = f - f0
+    df_f = df./f0
+    z = 1
+    # cmax = percentile(df_f[:],99.9)
+    # cmin = percentile(df_f[:],0.1)
+    global fig = plt.figure(figsize=(figW,figH))
+    fig, axs = plt.subplots(1,Z, figsize=(figW,figH))
+    if Z==1
+        axs = [axs]
+    end
+    # ax = axs[2]
+    # ax = axs
+    for z in 1:Z
+        ax = axs[z]
+        global cim = ax.imshow(df_f[:,:,z], cmap="RdBu_r",
+            norm=cnorm)
+        ax.set_axis_off()
+        ax.set_title("$(Int(round(etlVals[z],digits=0)))μm")
+        # this will make extra circles (1 extra per repetition...)
+        for (x,y,targetZ) in eachrow(unique(cells[cells.stimNum .== stimNum,[:x,:y,:z]]))
+            if z == targetZ
+                circle = matplotlib.patches.Circle((x,y), targetSizePx, color="k",
+                    fill=false, lw=0.5, alpha=0.3)
+                ax.add_patch(circle)
+            end
+        end
+        # previous (but not this stim) targets
+        # for (x,y,z) in eachrow(unique(cells[cells.stimNum .!= stimNum,[:x,:y,:z]]))
+        #     @assert z == 1
+        #     circle = matplotlib.patches.Circle((x,y), targetSizePx, color="k",
+        #         fill=false, lw=0.5, alpha=0.5)
+        #     ax.add_patch(circle)
+        # end
+    end
+
+    # axs[1].imshow(stim_masks[:, :,z,stimNum], cmap="gray")
+
+    # cmax = percentile(abs.(df_f[:,:,1][:]),99.9)
+    # plt.imshow(hcat([df_f[:,:,z] for z in 1:Z]...), cmap="RdBu_r",
+    #     norm=cnorm)
+    fig.subplots_adjust(right=0.96)
+    cbar_ax = fig.add_axes([0.97, 0.15, 0.0075, 0.7])
+    # cbar = fig.colorbar(cim, ticks=[0,1,2], cax=cbar_ax)
+    cbar = fig.colorbar(cim, cax=cbar_ax)
+    path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)_stim$stimNum")
+    @show path*".svg"
+    fig.savefig(path*".svg", dpi=600)
+    fig.savefig(path*".png", dpi=600)
+end
+
+
+##
 stimLocs = map(CartesianIndex ∘ Tuple, eachrow(cells[:,[2,1]]))
 
 stimPlane = Int(mean(map(x->mean(x[:,3]), targetsWithPlaneIndex)))
@@ -261,10 +326,6 @@ avgImage = dropdims(mean(tseries[:,:,stimPlane,:], dims=3), dims=3)
 avgImageAdj = adjust_gamma(imadjustintensity(avgImage), 0.5)
 avgImageAdj = RGB.(avgImageAdj)
 channelview(avgImageAdj)[[1,3],:,:,:] .= 0
-
-lateral_unit = microscope_lateral_unit(W)
-targetSizePx = spiral_size(expDate, lateral_unit)
-
 
 avgImgWithTargets = addTargetsToImage(copy(avgImageAdj), cartIdx2Array(stimLocs),
     targetSize=targetSizePx)
@@ -394,93 +455,11 @@ if ~isfile(fluor_arrow_path)
         Arrow.write(io, fluor)
     end
 end
-## influence maps
-if volRate > 10
-    nseconds = 3
-else
-    nseconds = 5
-end
-pre = Int(ceil(nseconds*volRate))+1
-post = Int(ceil(nseconds*volRate))+1
 
-avgStim = trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder;
-    pre=pre, post=post);
-
-try
-    h5write(joinpath(fishDir,expName*"_avgStim.h5"), "/block1", avgStim)
-catch
-end
-
+## save red
+red_tseries = loadTseries(tseriesDir,"Ch2");
 ##
-figB = 1.6
-# 2 for extra stim mask
-# figW,figH = (figB*1.1, figB)
-figW,figH = (figB*Z, figB)
-
-window = Int(ceil(3*volRate))
-@assert (window < post) & (window < pre)
-# @assert Z == 1
-# cmax = 2.5
-# cmin = -0.5
-cmax = 4
-cmin = -0.75
-cnorm = matplotlib.colors.TwoSlopeNorm(vmin=cmin,vcenter=0,vmax=cmax)
-
-for stimNum in 1:nStimuli
-    f = mean(avgStim[:,:,:,stimNum,end-window+1:end],dims=4)[:,:,:,1]
-    f0 = mean(avgStim[:,:,:,stimNum,1:window],dims=4)[:,:,:,1]
-    df = f - f0
-    df_f = df./f0
-    z = 1
-    # cmax = percentile(df_f[:],99.9)
-    # cmin = percentile(df_f[:],0.1)
-    global fig = plt.figure(figsize=(figW,figH))
-    fig, axs = plt.subplots(1,Z, figsize=(figW,figH))
-    if Z==1
-        axs = [axs]
-    end
-    # ax = axs[2]
-    # ax = axs
-    for z in 1:Z
-        ax = axs[z]
-        global cim = ax.imshow(df_f[:,:,z], cmap="RdBu_r",
-            norm=cnorm)
-        ax.set_axis_off()
-        ax.set_title("$(Int(round(etlVals[z],digits=0)))μm")
-        # this will make extra circles (1 extra per repetition...)
-        for (x,y,targetZ) in eachrow(unique(cells[cells.stimNum .== stimNum,[:x,:y,:z]]))
-            if z == targetZ
-                circle = matplotlib.patches.Circle((x,y), targetSizePx, color="k",
-                    fill=false, lw=0.5, alpha=0.3)
-                ax.add_patch(circle)
-            end
-        end
-        # previous (but not this stim) targets
-        # for (x,y,z) in eachrow(unique(cells[cells.stimNum .!= stimNum,[:x,:y,:z]]))
-        #     @assert z == 1
-        #     circle = matplotlib.patches.Circle((x,y), targetSizePx, color="k",
-        #         fill=false, lw=0.5, alpha=0.5)
-        #     ax.add_patch(circle)
-        # end
-    end
-
-    # axs[1].imshow(stim_masks[:, :,z,stimNum], cmap="gray")
-
-    # cmax = percentile(abs.(df_f[:,:,1][:]),99.9)
-    # plt.imshow(hcat([df_f[:,:,z] for z in 1:Z]...), cmap="RdBu_r",
-    #     norm=cnorm)
-    fig.subplots_adjust(right=0.96)
-    cbar_ax = fig.add_axes([0.97, 0.15, 0.0075, 0.7])
-    # cbar = fig.colorbar(cim, ticks=[0,1,2], cax=cbar_ax)
-    cbar = fig.colorbar(cim, cax=cbar_ax)
-    path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)_stim$stimNum.svg")
-    @show path
-    fig.savefig(path, dpi=600)
-end
-
-
-
-
-
-## TODO: use 8vs32cell concurrent notebook as boilerplate to make WT vs rs vs H33R vs control plot...
-# 8cell vs 32cell concurrent!
+avg_red = mean(red_tseries[:,:,:,1:500],dims=4)[:,:,:,1];
+red = RGB.(imadjustintensity(adjust_gamma(avg_red[:,:,5], 0.5)))
+channelview(red)[[2,3],:,:] .= 0
+red

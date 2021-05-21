@@ -316,12 +316,16 @@ zoom    X               Y
 1.3     3.209      3.566
 1.5     2.78113654      3.090760608
 """
-function read_gpl(gpl_path; zoom=1., width=1024, height=1024,
-                  maxX=4.17170481, maxY=4.636140912,room="B115")
+function read_gpl(gpl_path::String; args...)
     gpl_xml = open(gpl_path, "r") do io
         gpl_xml = read(io, String)
         xp_parse(gpl_xml)
     end
+    read_gpl(gpl_xml; args...)
+end
+
+function read_gpl(gpl_xml::ETree; zoom=1., width=1024, height=1024,
+                  maxX=4.17170481, maxY=4.636140912,room="B115")
     pvgp = gpl_xml[xpath"/PVGalvoPointList/PVGalvoPoint"]
     x = parse.(Float64, map(x->x.attr["X"], pvgp))
     y = parse.(Float64, map(x->x.attr["Y"], pvgp))
@@ -341,6 +345,25 @@ function read_gpl(gpl_path; zoom=1., width=1024, height=1024,
         y .= height .- y # for b115 only...?
     end
     map(CartesianIndex ∘ Tuple, zip(y,x))
+end
+
+function read_markpoint_groups(gpl_path::String; args...)
+    gpl_xml = open(gpl_path, "r") do io
+        gpl_xml = read(io, String)
+        xp_parse(gpl_xml)
+    end
+    read_markpoint_groups(gpl_xml; args...)
+end
+
+function read_markpoint_groups(gpl_xml::ETree; args...)
+    points = read_gpl(gpl_xml; args...)
+    groups = gpl_xml[xpath"/PVGalvoPointList/PVGalvoPointGroup"]
+    aa_of_string = split.(map(x->x.attr["Indices"], groups), ",")
+    names = map(x->x.attr["Name"], groups)
+    idxs = map(y->parse.(Float64, y), aa_of_string)
+    @info "Assume `Point x` = index + 1 in markpoints"
+    idxs_per_group = Dict(name => Int.(is) .+ 1 for (name,is) in zip(names,idxs))
+    Dict(name => map(i->points[i],gi) for (name,gi) in idxs_per_group)
 end
 
 """"Read Prairie View markpoints xml Series.

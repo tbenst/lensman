@@ -1,12 +1,14 @@
-import Unitful: MHz, mW, nm, J, cm, Hz, fs, mJ
+import Unitful: MHz, mW, nm, J, cm, Hz, fs, mJ, ns
 # conclusion from 2021-05-11: use 2MHz and likely fine until 50 ppc
-rep_rate = 2MHz
-# rep_rate = 4MHz
 # rep_rate = 1MHz
+# rep_rate = 2MHz
+rep_rate = 4MHz
+# rep_rate = 10MHz
 # avg_power = 340mW
-avg_power = 500mW
+# avg_power = 500mW
+avg_power = 300mW
 pulse_width = 258fs
-power_variance_discount = 0.5
+power_variance_discount = 0.8
 
 λ = 1035nm
 NA = 1.05 * 0.75 # adjust for not filling entire objective...
@@ -19,22 +21,21 @@ NA = 1.05 * 0.75 # adjust for not filling entire objective...
 
 damage_threshold_upper = 2J/cm^2
 threshold_pulse_width = 60fs
-adj_damage_threshold_upper = damage_threshold_upper * (pulse_width/threshold_pulse_width)^2
-# adj_damage_threshold_upper = damage_threshold_upper * sqrt(pulse_width)/sqrt(threshold_pulse_width)
+adj_damage_threshold_upper = damage_threshold_upper * sqrt(pulse_width)/sqrt(threshold_pulse_width)
 
 # we estimate 1.25J/cm^2 in larval zebrafish
 damage_threshold_est = 1.25J/cm^2
 threshold_pulse_width = 60fs
-adj_damage_threshold_est = damage_threshold_est * (pulse_width/threshold_pulse_width)^2
-# adj_damage_threshold_est = damage_threshold_est * sqrt(pulse_width)/sqrt(threshold_pulse_width)
+adj_damage_threshold_est = damage_threshold_est * sqrt(pulse_width)/sqrt(threshold_pulse_width)
 
 # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3123732/
 # 100fs: 1J/cm^2
 # 1ns: 100J/cm^2
+# sqrt rule for conversion by pulse width:
+@assert uconvert(NoUnits,sqrt(1ns)/sqrt(100fs)) == 100
 damage_threshold_lower = 1.0J/cm^2
 threshold_pulse_width = 100fs
-adj_damage_threshold_lower = damage_threshold_lower * (pulse_width/threshold_pulse_width)^2
-# adj_damage_threshold_lower = damage_threshold_lower * sqrt(pulse_width)/sqrt(threshold_pulse_width)
+adj_damage_threshold_lower = damage_threshold_lower * sqrt(pulse_width)/sqrt(threshold_pulse_width)
 
 pulse_energy = avg_power / rep_rate
 diffraction_limit = (λ / (2*NA))^2
