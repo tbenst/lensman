@@ -21,14 +21,16 @@ matplotlib = plt.matplotlib
 zbrain_dir = "/data/zbrain"
 
 # slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
-slmDir = "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
-# slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"
+# slmDir = "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
+slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"
 exp_dir = "2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1"
 # fish_dir = "/data/dlab/b115/$exp_dir/"
 fish_dir = "/mnt/deissero/users/tyler/b115/$exp_dir/"
 tseries_dirs = glob("TSeries*", fish_dir)
 # sort by recording number
-tseries_dirs = tseries_dirs[sortperm(map(x->x[1], match.(r".*(\d{3})", tseries_dirs)))]
+reg = r".*(\d{3})$"
+tseries_dirs = filter(x->occursin(reg,x), tseries_dirs)
+tseries_dirs = tseries_dirs[sortperm(map(x->x[1], match.(reg, tseries_dirs)))]
 # when suite2p processes multiple files, output in first folder
 first_expName = splitpath(tseries_dirs[1])[end]
 suite2p_dir = "/data/dlab/b115/process-output/$exp_dir/$first_expName/hdf5/data/suite2p/"
@@ -72,9 +74,11 @@ cell_centers = map(x->np.array(get(x,"med")), combined_stat);
 combined_stim_start = Int64[]
 combined_stim_end = Int64[]
 combined_trial_order = Int64[]
-cell_in_mask = zeros(Bool,nCells,nStimuli)
+max_stimuli = 10
+cell_in_mask = zeros(Bool,nCells,max_stimuli)
 prev_stim_masks = nothing
 for (i,tseries_dir) in enumerate(tseries_dirs[[2,4]])
+    global nStimuli
     # get stim start times & add offset
     if i == 1
         t_offset = blocks_timesteps[1]
@@ -105,6 +109,9 @@ for (i,tseries_dir) in enumerate(tseries_dirs[[2,4]])
     trialOrder, slmExpDir = getTrialOrder(slmExpDir, expDate)
     combined_trial_order = vcat(combined_trial_order, trialOrder)
     nStimuli = maximum(trialOrder)
+    if nStimuli > max_stimuli
+        error("please set max_stimuli = $nStimuli")
+    end
     nTrials = size(trialOrder,1)
     @assert nTrials == size(stimStartIdx,1) # check TTL start-times match 
     target_groups = [mat["cfg"]["maskS"]["targets"][1]
@@ -127,6 +134,7 @@ for (i,tseries_dir) in enumerate(tseries_dirs[[2,4]])
     end
     prev_stim_masks = stim_masks
 end
+cell_in_mask = cell_in_mask[:,1:nStimuli]
 @show sum(cell_in_mask,dims=1)[1,:]
 
 ## TODO: save stim_masks and trial order and start times
@@ -135,7 +143,7 @@ stim_h5["stim_start_idx"] = combined_stim_start
 stim_h5["stim_end_idx"] = combined_stim_end
 stim_h5["trial_order"] = combined_trial_order
 stim_h5["stim_masks"] = prev_stim_masks
-
+close(stim_h5)
 ## get zbrain masks
 affine_transform_path = glob("*GenericAffine.mat", fish_dir)[1]
 affine_transform = sio.loadmat(affine_transform_path)
