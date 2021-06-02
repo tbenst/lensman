@@ -236,6 +236,31 @@ function getStimTimesFromVoltages(voltageFile, Z::Int;
     stimStartFrameIdx, stimEndFrameIdx, frameStartIdx
 end
 
+"""Read multiple voltageFiles and concatenate.
+TperTrial is a bit of a evil hack.
+Could potentially read from the CycleXXXX in voltageFile instead."""
+function getStimTimesFromVoltages(voltageFiles::Array{String,1}, Z::Int, TperTrial::Int;
+        frame_start_key="frame starts", stim_key="respir", sigma=3)
+    start_idx = 0
+    stimStartIdx = Int64[]
+    stimEndIdx = Int64[]
+    frameStartIdx = Int64[]
+    nStimsPerTrial = 0
+    for vf in voltageFiles
+        tempStartIdx, tempEndIdx, tempFrameIdx = getStimTimesFromVoltages(vf, Z,
+            frame_start_key=frame_start_key, stim_key=stim_key)
+        tempStartIdx .+= start_idx
+        tempEndIdx .+= start_idx
+        stimStartIdx = vcat(stimStartIdx, tempStartIdx)
+        stimEndIdx = vcat(stimEndIdx, tempEndIdx)
+        frameStartIdx = vcat(frameStartIdx, tempFrameIdx)
+        start_idx += TperTrial
+        nStimsPerTrial = max(length(tempStartIdx), nStimsPerTrial)
+    end
+    stimStartIdx, stimEndIdx, frameStartIdx
+end
+
+
 """Parse Sean's filename to time
 trialOrder_2020_11_02___21h03m29sr.txt -> Time(21,3,29)"""
 function getTimeFromFilename(fn)

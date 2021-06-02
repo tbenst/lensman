@@ -149,7 +149,7 @@ function cartIdx2Array(x::Vector{<:CartesianIndex})
 end
 
 "ImageJ 'kalman filter'"
-function imageJkalmanFilter(ys;gain=0.8,useBurnIn=true)
+function imageJkalmanFilter(ys::Array{T,1};gain=0.8,useBurnIn=true) where T
     predictions = zeros(size(ys))
     predictions[1] = ys[1]
     for t in 1:size(ys, 1) - 1
@@ -159,6 +159,15 @@ function imageJkalmanFilter(ys;gain=0.8,useBurnIn=true)
         predictions[t + 1] = pred * gain + obs * (1 - gain) + K * (obs - pred)
     end
     predictions
+end
+
+"TODO: improve memory efficiency."
+function imageJkalmanFilter(ndarray;gain=0.8,useBurnIn=true) where T
+    denoised = zeros(size(ndarray)...)
+    @threads for i in CartesianIndices(denoised[:,:,:,1])
+        denoised[i,:] = imageJkalmanFilter(ndarray[i,:])
+    end
+    denoised
 end
     
 function extractTrace(tseries, mask::Array{Bool,T}) where T

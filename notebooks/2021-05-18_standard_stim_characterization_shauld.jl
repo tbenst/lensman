@@ -70,11 +70,12 @@ slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
 # tseriesDir = "$tseriesRootDir/2021-04-20_h33r-chrmine_6dpf_6f/fish2/TSeries-20cell-1concurrent-20trial-047"
 
 # tseriesDir = "$tseriesRootDir/2021-05-18_hsChRmine_h2b6s_6dpf/fish4/TSeries-lrhab-control-91trial-4Mhz-044"
-# tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish1/TSeries-lrhab-control-91trial-4Mhz-047"
-tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish5/TSeries-lrhab-control-91trial-4Mhz-045"
+# tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish1/TSeries-lrhab-control-91trial-4Mhz-047" # missing tiffs...?
+tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish3/TSeries-lrhab-control-91trial-4Mhz-057" # ERROR on tiff header :(
+# tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish5/TSeries-lrhab-control-91trial-4Mhz-045"
+# tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish5/TSeries-35cell-20rep-40s-dark-4Mhz-059"
 # tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish5/TSeries-35cell-20rep-40s-dark-4Mhz-059"
 
-tseriesDir = "$tseriesroot/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061"
 # debug by looking at 3region..?
 # tseriesDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044/"
 
@@ -89,10 +90,6 @@ tseriesDir = "$tseriesroot/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118tri
 # possibly compare to...
 # 2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/ (4power)
 # 2021-02-15_wt_chrmine_gc6f/fish1/TSeries-1024cell-4freq-skip-first-066 (4freq; too large for memory on lensman)
-
-
-analysis_name = "lstm_denoise_only"
-# analysis_name = "kalman"
 
 tyh5Path = tseriesDir * ".ty.h5"
 
@@ -125,21 +122,11 @@ tylerSLMDir = joinpath(fishDir, "slm")
 
 tyh5Path = tseriesDir*".ty.h5"
 if isfile(tyh5Path)
-    println("using ty.h5 file")
-    tseries = h5read(tyh5Path, "/imaging/per_pixel_lstm_denoised")
-    # tseries = h5read(tyh5Path, "/imaging/raw")
-    # @show size(tseries)
-    # @assert size(tseries,2)==1
-    # tseries = tseries[:,1,:,:,:]
-    tseries = permutedims(tseries, (2,1,3,4))
+    tseries = h5read(tyh5Path, "/imaging/raw")
+    @assert size(tseries,4)==1
+    tseries = permutedims(tseries, (2,1,3,4,5))
+    tseries = tseries[:,:,:,1,:];
     tseriesDir = joinpath(fishDir, expName)
-
-    # tseries = h5read(tyh5Path, "/imaging/raw")
-    # drop singleton channel
-    # @assert size(tseries,4)==1
-    # tseries = permutedims(tseries, (2,1,3,4,5))
-    # tseries = tseries[:,:,:,1,:];
-    # tseriesDir = joinpath(fishDir, expName)
 else
     tseries = loadTseries(tseriesDir);
 end;
@@ -180,11 +167,15 @@ catch
 end
 
 ## read power
-slmTxtFile = regex_glob(r".*(?<!trialOrder)\.txt$", tylerSLMDir)
-@warn "Using second file!! Change me!!"
-# @assert length(slmTxtFile) == 1 slmTxtFile # if not, need to be careful to choose
-# slmTxtFile = slmTxtFile[1]
-slmTxtFile = slmTxtFile[2]
+try
+    global slmTxtFile
+    slmTxtFile = regex_glob(r".*(?<!trialOrder)\.txt$", tylerSLMDir)
+catch
+    global slmTxtFile
+    slmTxtFile = regex_glob(r".*(?<!trialOrder)\.txt$", fishDir)
+end
+@assert length(slmTxtFile) == 1 slmTxtFile # if not, need to be careful to choose
+slmTxtFile = slmTxtFile[1]
 
 ##
 stimGroupDF = CSV.File(open(read, slmTxtFile), header=["filepath", "powerFraction"]) |> DataFrame
@@ -206,25 +197,18 @@ elseif slmNum == 2
 end
 
 if length(voltageFiles) == 1
-    stimStartIdx, stimEndIdx, frameStartIdx = getStimTimesFromVoltages(voltageFiles[1], Z);
+    stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFiles[1], Z)
 else
-    @warn "HARDCODED TperTrial"
-    TperTrial = Int(T / 20)
-    stimStartIdx, stimEndIdx, frameStartIdx = getStimTimesFromVoltages(voltageFiles, Z, TperTrial);
+    stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFiles, Z)
 end
-
-if length(voltageFiles) == 1
-    allWithin(diff(stimStartIdx),0.05)
-    # adjust for expected number of stimuli....
-    # @assert length(stimStartIdx) == 32
-    @show length(stimStartIdx)
-    allWithin(stimEndIdx .- stimStartIdx,0.05)
-    avgStimDuration = mean(stimEndIdx .- stimStartIdx)
-    # adjust for volume rate / stim duration...
-    @assert 30 > avgStimDuration > 3
-else
-    @warn "multiple voltage files so not checking asserts in case a trial structure..?"
-end
+allWithin(diff(stimStartIdx),0.05)
+# adjust for expected number of stimuli....
+# @assert length(stimStartIdx) == 32
+@show length(stimStartIdx)
+allWithin(stimEndIdx .- stimStartIdx,0.05)
+avgStimDuration = mean(stimEndIdx .- stimStartIdx)
+# adjust for volume rate / stim duration...
+@assert 30 > avgStimDuration > 3
 
 # Assumes no sequence of stim
 # for 5Hz clock
@@ -255,36 +239,32 @@ lateral_unit = microscope_lateral_unit(W)
 targetSizePx = spiral_size(expDate, lateral_unit)
 
 ## influence maps
-max_frames = stimStartIdx[1]-1 
-max_time = (max_frames-1)/volRate # otherwise bad index issues
 if volRate > 10
     nseconds = 3
 else
     nseconds = 5
-    nseconds = minimum([nseconds, max_time])
 end
 pre = Int(ceil(nseconds*volRate))+1
 post = Int(ceil(nseconds*volRate))+1
 
-avg_stim_h5_path = joinpath(fishDir,expName*"$(analysis_name)_avgStim.h5")
+avg_stim_h5_path = joinpath(fishDir,expName*"_avgStim.h5")
 have_avg_stim_h5 = isfile(avg_stim_h5_path)
-have_avg_stim_h5 = false # temp force refresh
 if have_avg_stim_h5
     avgStim = h5read(avg_stim_h5_path, "/block1");
 else
     avgStim = trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder;
         pre=pre, post=post);
-    h5write(avg_stim_h5_path, "/block1", avgStim)
+    h5write(joinpath(fishDir,expName*"_avgStim.h5"), "/block1", avgStim)
 end;
 
 ##
 figB = 1.6
 # 2 for extra stim mask
 # figW,figH = (figB*1.1, figB)
+figW,figH = (figB*Z, figB)
 
-
-window = minimum([Int(ceil(3*volRate)), max_frames])
-@assert (window <= post) & (window <= pre)
+window = Int(ceil(3*volRate))
+@assert (window < post) & (window < pre)
 # @assert Z == 1
 cmax = 2.5
 cmin = -0.5
@@ -300,15 +280,8 @@ for stimNum in 1:nStimuli
     z = 1
     # cmax = percentile(df_f[:],99.9)
     # cmin = percentile(df_f[:],0.1)
-    if Z > 5
-        figW,figH = (figB*Z/2, figB*2)
-        global fig = plt.figure(figsize=(figW,figH))
-        fig, axs = plt.subplots(2,Int(Z/2), figsize=(figW,figH))
-    else
-        figW,figH = (figB*Z, figB)
-        global fig = plt.figure(figsize=(figW,figH))
-        fig, axs = plt.subplots(1,Z, figsize=(figW,figH))
-    end
+    global fig = plt.figure(figsize=(figW,figH))
+    fig, axs = plt.subplots(1,Z, figsize=(figW,figH))
     if Z==1
         axs = [axs]
     end
@@ -324,7 +297,7 @@ for stimNum in 1:nStimuli
         for (x,y,targetZ) in eachrow(unique(cells[cells.stimNum .== stimNum,[:x,:y,:z]]))
             if z == targetZ
                 circle = matplotlib.patches.Circle((x,y), targetSizePx, color="k",
-                    fill=false, lw=0.4, alpha=0.3)
+                    fill=false, lw=0.5, alpha=0.3)
                 ax.add_patch(circle)
             end
         end
@@ -342,29 +315,16 @@ for stimNum in 1:nStimuli
     # cmax = percentile(abs.(df_f[:,:,1][:]),99.9)
     # plt.imshow(hcat([df_f[:,:,z] for z in 1:Z]...), cmap="RdBu_r",
     #     norm=cnorm)
-    # may need to adjust if colorbar is cutoff
-    fig.subplots_adjust(right=0.9)
-    cbar_ax = fig.add_axes([0.91, 0.15, 0.0075, 0.7])
+    fig.subplots_adjust(right=0.96)
+    cbar_ax = fig.add_axes([0.97, 0.15, 0.0075, 0.7])
     # cbar = fig.colorbar(cim, ticks=[0,1,2], cax=cbar_ax)
     cbar = fig.colorbar(cim, cax=cbar_ax)
-    path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)_$(analysis_name)_stim$stimNum")
+    path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)_stim$stimNum")
     @show path*".svg"
     fig.savefig(path*".svg", dpi=600)
     fig.savefig(path*".png", dpi=600)
 end
 
-## kalman denoise
-@time denoised = imageJkalmanFilter(tseries);
-##
-avg_stim_h5_path = joinpath(fishDir,expName*"$(analysis_name)_avgStim.h5")
-have_avg_stim_h5 = isfile(avg_stim_h5_path)
-if have_avg_stim_h5
-    avgStim = h5read(avg_stim_h5_path, "/block1");
-else
-    avgStim = trialAverage(denoised, stimStartIdx, stimEndIdx, trialOrder;
-        pre=pre, post=post);
-    h5write(avg_stim_h5_path, "/block1", avgStim)
-end;
 
 ##
 stimLocs = map(CartesianIndex ∘ Tuple, eachrow(cells[:,[2,1]]))
