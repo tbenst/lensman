@@ -353,166 +353,6 @@ for stimNum in 1:nStimuli
     fig.savefig(path*".png", dpi=600)
 end
 
-## kalman denoise
-@time denoised = imageJkalmanFilter(tseries);
-##
-avg_stim_h5_path = joinpath(fishDir,expName*"$(analysis_name)_avgStim.h5")
-have_avg_stim_h5 = isfile(avg_stim_h5_path)
-if have_avg_stim_h5
-    avgStim = h5read(avg_stim_h5_path, "/block1");
-else
-    avgStim = trialAverage(denoised, stimStartIdx, stimEndIdx, trialOrder;
-        pre=pre, post=post);
-    h5write(avg_stim_h5_path, "/block1", avgStim)
-end;
-
-##
-stimLocs = map(CartesianIndex ∘ Tuple, eachrow(cells[:,[2,1]]))
-
-stimPlane = Int(mean(map(x->mean(x[:,3]), targetsWithPlaneIndex)))
-avgImage = dropdims(mean(tseries[:,:,stimPlane,:], dims=3), dims=3)
-avgImageAdj = adjust_gamma(imadjustintensity(avgImage), 0.5)
-avgImageAdj = RGB.(avgImageAdj)
-channelview(avgImageAdj)[[1,3],:,:,:] .= 0
-
-avgImgWithTargets = addTargetsToImage(copy(avgImageAdj), cartIdx2Array(stimLocs),
-    targetSize=targetSizePx)
-save(joinpath(plotDir,"$(expName)_avgImgWithTargets.png"), avgImgWithTargets)
-
-# winSize = Int(ceil(5*volRate))
-winSize = Int(ceil(2*volRate))
-# delay=Int(ceil(volRate*2))
-delay=0
-
-roiMask = constructROImasks(cells, H, W, Z, targetSizePx=targetSizePx);
-
-cellsDF = makeCellsDF(tseries, cells, roiMask, winSize=winSize, delay=delay);
-# cellsDF2 = makeCellsDF(tseries, cells2, roiMask, winSize=winSize, delay=delay);
-
-rankings = sortperm(cellsDF.df_f, lt=(>))
-
-
-meanDf_f = combine(groupby(cellsDF, :cellID), :df_f => mean).df_f_mean
-cellIDrankings = sortperm(meanDf_f, lt=(>))
-
-# rankings2 = sortperm(cellsDF2.df_f, lt=(>))
-numNaN = sum(isnan.(cellsDF.df_f))
-@assert numNaN == 0
-
-@show sum(cellsDF.df_f.>0.1), sum(cellsDF.df_f.>0.4), sum(cellsDF.df_f.>1.)
-# @show sum(cellsDF2.df_f.>0.1), sum(cellsDF2.df_f.>0.4), sum(cellsDF2.df_f.>1.)
-
-# only 26 are >40% for two stim in control...
-# intersect(cellsDF.x[cellsDF.df_f.>0.4], cellsDF2.x[cellsDF2.df_f.>0.4])
-# @show first(cellsDF[rankings[numNaN+1:end],:],50)
-
-cellsdf_arrow_path = tseriesDir*"_cellsDF.arrow"
-if ~isfile(cellsdf_arrow_path)
-    open(cellsdf_arrow_path, "w") do io
-        tempDF = copy(cellsDF)
-        tempDF[!, :laserPower] ./= 1mW
-        Arrow.write(io, tempDF)
-    end
-end
-
-## sanity check that stim mask looks right
-maxT = minimum([5000, size(tseries,4)])
-avg_image = mean(tseries[:,:,:,1:maxT], dims=4)[:,:,1,1];
-avg_image = imadjustintensity(adjust_gamma(avg_image,0.2))
-
-
-stim_masks = constructGroupMasks(targetsWithPlaneIndex, H, W, Z)
-Gray.(imadjustintensity(sum(stim_masks, dims=4)[:,:,1,1]))
-imshow(stim_masks)
-
-avgImgWithTargets
-##
-# histogram(cellsDF.df_f)
-p = histogram(combine(groupby(cellsDF, [:cellID, :laserPower]), :df_f => mean).df_f_mean)
-savefig(p, joinpath(plotDir,"$(expName)_df_histogram.svg"))
-p
-# groupbycellsDF
-
-##
-# volRate = 30
-before = Int(ceil(volRate*10))
-after = Int(ceil(volRate*20))
-# best
-plots = []
-nplots = 64
-##
-# nplots = 8
-# for idx in rankings[end:-1:end-nplots+1]
-# for idx in 1:nplots
-# plots = Array{Int}(undef, length(cellIDrankings))
-# can we @threads Array{Int}(undef, length(cellIDrankings))
-@showprogress for cellID in cellIDrankings[1:nplots]
-# @threads for (i,cellID) in enumerate(cellIDrankings)
-    indices = findall(cellsDF.cellID .== cellID)
-    push!(plots, plotStim(tseries,roiMask,cells,indices, volRate, before=before, after=after, colorBy=exp_param))
-    # plots[i] = plotStim(tseries,roiMask,cells,indices, volRate, before=before, after=after, colorBy=exp_param)
-end
-##
-p = plot(plots..., layout=(8,8), legend=true, size=(1024*4,1024*4))
-# savefig(p, joinpath(plotDir,"$(expName)_top40_traces_rollmedian.png"))
-savefig(p, joinpath(plotDir,"$(expName)_top64_traces.svg"))
-p
-##
-max_laser = maximum(cellsDF.laserPower)
-cells_meanDF = combine(groupby(cellsDF[cellsDF.laserPower .== max_laser,:],
-    [:cellID, :x, :y]), :df_f => mean)
-cmax = maximum(abs.(cells_meanDF.df_f_mean[(~).(isnan.(cells_meanDF.df_f_mean))]))
-p_df_map = Gadfly.with_theme(:dark) do
-    Gadfly.plot(cells_meanDF[(~).(isnan.(cells_meanDF.df_f_mean)), :], x=:x, y=:y, Gadfly.Geom.point, size=[targetSizePx], color=:df_f_mean,
-        Gadfly.Scale.color_continuous(minvalue=-1, maxvalue=1),
-        Gadfly.Coord.cartesian(yflip=true, fixed=true))
-end
-
-# img = PNG(joinpath(plotDir, "$(expName)_df_f_map.png"), 6inch, 5inch)
-img = SVG(joinpath(plotDir, "$(expName)_df_f_map.svg"), 6inch, 5inch)
-Gadfly.draw(img, p_df_map)
-p_df_map
-
-## extract and save traces for easy plotting later...
-fluor = DataFrame(time=Float64[], f=Float64[], cellID=UInt32[], stimStart=UInt32[],
-    laserPower=Float64[], stimFreq=Float64[])
-
-# TODO also compare on target vs off-target traces...? Number of off-target change
-# as function of # of cell stim?
-
-nTime = before + maximum(cells.stimStop - cells.stimStart) + after
-# TODO add @threads ?
-for cell in eachrow(cells)
-    x, y, z, stimStart, stimStop, laserPower, stimFreq, cellID = cell[[:x, :y, :z, :stimStart, :stimStop, :laserPower, :stimFreq, :cellID]]
-    roiM = roiMask[cellID]
-    theEnd = minimum([stimStop+after, size(tseries, ndims(tseries))])
-    theStart = maximum([stimStart-before, 1])
-    plotRange = theStart:theEnd
-    timeRange = (plotRange .- stimStart) ./ volRate
-    fluorescentTrace = extractTrace(tseries[:,:,:,plotRange], roiM)
-    for (t,f) in zip(timeRange, fluorescentTrace)
-        push!(fluor, (time=t, f=f, cellID=cellID, stimStart=stimStart,
-            stimFreq=stimFreq, laserPower=laserPower ./ 1mW))
-    end
-end
-first(fluor,5)
-
-fluor_arrow_path = tseriesDir*"_cells_fluorescence.arrow"
-if ~isfile(fluor_arrow_path)
-    open(fluor_arrow_path, "w") do io
-        Arrow.write(io, fluor)
-    end
-end
-
-## save red
-red_tseries = loadTseries(tseriesDir,"Ch2");
-##
-avg_red = mean(red_tseries[:,:,:,1:500],dims=4)[:,:,:,1];
-red = RGB.(imadjustintensity(adjust_gamma(avg_red[:,:,5], 0.5)))
-channelview(red)[[2,3],:,:] .= 0
-red
-
-
 ## pick cells to stim
 maxT = minimum([5000, size(tseries,4)])
 avg_vol = mean(tseries[:,:,:,1:10:maxT], dims=4)[:,:,:,1];
@@ -595,9 +435,23 @@ raphe_targets = raphe_targets[:,[2,1]]
 raphe_targets[:,1] = 512 .- raphe_targets[:,1]
 raphe_z = etlVals[10] * 10^-6
 raphe_targets = hcat(raphe_targets,fill(raphe_z, size(raphe_targets,1)))
+## make grid of control targets
+control_targets = zeros(32,3)
+target_offset = 8
+@assert target_offset > Int(ceil(targetSizePx))
+for idx in CartesianIndices(control_targets[:,1:2])
+    i,j = Tuple(idx)
+    if j==1
+        control_targets[i,j] = 60+((i-1)%4)*target_offset
+    else
+        control_targets[i,j] = 60+((i-1)÷4)*target_offset
+    end
+end
 ##
 
-target_groups = [ipn_targets[:,[2,1,3]], raphe_targets[:,[2,1,3]]]
+target_groups = [ipn_targets[:,[2,1,3]],
+                 raphe_targets[:,[2,1,3]],
+                 control_targets[:,[2,1,3]]]
 @show size.(target_groups)
 
 N = sum(size.(target_groups,1))
@@ -614,7 +468,7 @@ if ~isdir(expSLMdir)
     mkdir(expSLMdir)
 end
 if isfile(outname*".txt")
-    # error("file already exists! refusing to clobber")
+    error("file already exists! refusing to clobber")
 end
 
 # create_slm_stim(target_groups, outname,
@@ -640,3 +494,19 @@ avgImgWithTargets = addTargetsToImage(copy(tempavgImageAdj),
     Int.(round.(vcat(target_groups...)[:,[2,1]],digits=0)),
     # Int.(round.(raphe_targets,digits=0)),
     targetSize=targetSizePx)
+
+## trialOrder
+# shuffle each block so we never have a stimuli more than once per block
+# trialOrder = vcat([randperm(length(target_groups)) for _ in 1:20]...)
+ntransitions = 13
+nattempts = 1000
+trialOrder, successful = balanced_transition_order(num_groups, ntransitions,nattempts)
+count_per_group = [sum(trialOrder.==n) for n=1:num_groups]
+@assert all(abs.(count_per_group .- mean(count_per_group)) .<= 1)
+if ~isfile(outname*"_trialOrder.txt")
+    write_trial_order(trialOrder, outname)
+else
+    error("file already exists! refusing to clobber")
+end
+@show count_per_group
+length(trialOrder)
