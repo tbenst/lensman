@@ -354,6 +354,7 @@ function read_gpl(gpl_xml::ETree; zoom=1., width=1024, height=1024,
     pvgp = gpl_xml[xpath"/PVGalvoPointList/PVGalvoPoint"]
     x = parse.(Float64, map(x->x.attr["X"], pvgp))
     y = parse.(Float64, map(x->x.attr["Y"], pvgp))
+    idxs = parse.(Float64, map(x->x.attr["Index"], pvgp))
     maxX /= zoom
     maxY /= zoom
     x .+= maxX
@@ -369,7 +370,10 @@ function read_gpl(gpl_xml::ETree; zoom=1., width=1024, height=1024,
         x .= width .- x
         y .= height .- y # for b115 only...?
     end
-    map(CartesianIndex ∘ Tuple, zip(y,x))
+    cartIdxs = map(CartesianIndex ∘ Tuple, zip(y,x))
+    # updated 2021-06-16 to return dict instead of array
+    # no longer assumes a particular ordering of points
+    Dict(Int(idx) => cartIdx for (idx,cartIdx) in zip(idxs, cartIdxs))
 end
 
 function read_markpoint_groups(gpl_path::String; args...)
@@ -386,8 +390,8 @@ function read_markpoint_groups(gpl_xml::ETree; args...)
     aa_of_string = split.(map(x->x.attr["Indices"], groups), ",")
     names = map(x->x.attr["Name"], groups)
     idxs = map(y->parse.(Float64, y), aa_of_string)
-    @info "Assume `Point x` = index + 1 in markpoints"
-    idxs_per_group = Dict(name => Int.(is) .+ 1 for (name,is) in zip(names,idxs))
+    @show names, idxs
+    idxs_per_group = Dict(name => Int.(is) for (name,is) in zip(names,idxs))
     Dict(name => map(i->points[i],gi) for (name,gi) in idxs_per_group)
 end
 
