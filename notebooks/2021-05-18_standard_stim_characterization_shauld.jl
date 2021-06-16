@@ -70,11 +70,16 @@ slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
 # tseriesDir = "$tseriesRootDir/2021-04-20_h33r-chrmine_6dpf_6f/fish2/TSeries-20cell-1concurrent-20trial-047"
 
 # tseriesDir = "$tseriesRootDir/2021-05-18_hsChRmine_h2b6s_6dpf/fish4/TSeries-lrhab-control-91trial-4Mhz-044"
-# tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish1/TSeries-lrhab-control-91trial-4Mhz-047" # missing tiffs...?
-tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish3/TSeries-lrhab-control-91trial-4Mhz-057" # ERROR on tiff header :(
+# tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish1/TSeries-lrhab-control-91trial-4Mhz-047"
 # tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish5/TSeries-lrhab-control-91trial-4Mhz-045"
 # tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish5/TSeries-35cell-20rep-40s-dark-4Mhz-059"
-# tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish5/TSeries-35cell-20rep-40s-dark-4Mhz-059"
+
+# tseriesDir = "$tseriesroot/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061"
+# tseriesDir = "$tseriesRootDir/2021-06-01_wt-chrmine_h2b6s/fish4/TSeries-lrhab-118trial-059"
+# tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-titration-192trial-062"
+# tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072" # fails :(
+tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-titration-192trial-062"
+
 
 # debug by looking at 3region..?
 # tseriesDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044/"
@@ -91,7 +96,11 @@ tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish3/TSeries-lrha
 # 2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/ (4power)
 # 2021-02-15_wt_chrmine_gc6f/fish1/TSeries-1024cell-4freq-skip-first-066 (4freq; too large for memory on lensman)
 
-tyh5Path = tseriesDir * ".ty.h5"
+
+# analysis_name = "lstm_denoise_only"
+analysis_name = ""
+# analysis_name = "kalman"
+
 
 if occursin("freq", tseriesDir)
     exp_param = :stimFreq
@@ -121,16 +130,47 @@ fish_name = splitpath(tseriesDir)[end-1]
 tylerSLMDir = joinpath(fishDir, "slm")
 
 tyh5Path = tseriesDir*".ty.h5"
+##
+@assert tseriesDir == "/oak/stanford/groups/deissero/users/tyler/b115/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-titration-192trial-062"
+tyh5 = h5open(tyh5Path,"r")
+dset = tyh5["imaging/raw"]
+
+W, H, _, C, other = size(dset)
+Z = 10
+T = Int(other / Z)
+tseries = zeros(H,W,Z,T)
+for z in 1:Z
+    # 2 for Ca channel
+    tseries[:,:,z,:] = permutedims(dset[:,:,1,2,z:10:end], (2,1,3,4))
+end;
+
+##
 if isfile(tyh5Path)
+    println("using ty.h5 file")
+    # tseries = h5read(tyh5Path, "/imaging/per_pixel_lstm_denoised")
     tseries = h5read(tyh5Path, "/imaging/raw")
-    @assert size(tseries,4)==1
-    tseries = permutedims(tseries, (2,1,3,4,5))
-    tseries = tseries[:,:,:,1,:];
+    @show size(tseries)
+    error("stop")
+    # @assert size(tseries,2)==1
+    if ndims(tseries) == 5
+        tseries = tseries[:,:,1,:,:]
+    end
+    tseries = permutedims(tseries, (2,1,3,4))
     tseriesDir = joinpath(fishDir, expName)
+
+    # tseries = h5read(tyh5Path, "/imaging/raw")
+    # drop singleton channel
+    # @assert size(tseries,4)==1
+    # tseries = permutedims(tseries, (2,1,3,4,5))
+    # tseries = tseries[:,:,:,1,:];
+    # tseriesDir = joinpath(fishDir, expName)
 else
     tseries = loadTseries(tseriesDir);
 end;
 
+##
+Gray.(imadjustintensity(mean(tseries[:,:,1,2,1:10:500],dims=3)[:,:,1]))
+Gray.(imadjustintensity(mean(tseries[:,:,1,2,5:10:500],dims=3)[:,:,1]))
 ##
 (H, W, Z, T) = size(tseries)
 if Z > 1000
@@ -197,18 +237,25 @@ elseif slmNum == 2
 end
 
 if length(voltageFiles) == 1
-    stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFiles[1], Z)
+    stimStartIdx, stimEndIdx, frameStartIdx = getStimTimesFromVoltages(voltageFiles[1], Z);
 else
-    stimStartIdx, stimEndIdx = getStimTimesFromVoltages(voltageFiles, Z)
+    @warn "HARDCODED TperTrial"
+    TperTrial = Int(T / 20)
+    stimStartIdx, stimEndIdx, frameStartIdx = getStimTimesFromVoltages(voltageFiles, Z, TperTrial);
 end
-allWithin(diff(stimStartIdx),0.05)
-# adjust for expected number of stimuli....
-# @assert length(stimStartIdx) == 32
-@show length(stimStartIdx)
-allWithin(stimEndIdx .- stimStartIdx,0.05)
-avgStimDuration = mean(stimEndIdx .- stimStartIdx)
-# adjust for volume rate / stim duration...
-@assert 30 > avgStimDuration > 3
+
+if length(voltageFiles) == 1
+    allWithin(diff(stimStartIdx),0.05)
+    # adjust for expected number of stimuli....
+    # @assert length(stimStartIdx) == 32
+    @show length(stimStartIdx)
+    allWithin(stimEndIdx .- stimStartIdx,0.05)
+    avgStimDuration = mean(stimEndIdx .- stimStartIdx)
+    # adjust for volume rate / stim duration...
+    @assert 30 > avgStimDuration > 3
+else
+    @warn "multiple voltage files so not checking asserts in case a trial structure..?"
+end
 
 # Assumes no sequence of stim
 # for 5Hz clock
@@ -239,32 +286,36 @@ lateral_unit = microscope_lateral_unit(W)
 targetSizePx = spiral_size(expDate, lateral_unit)
 
 ## influence maps
+max_frames = stimStartIdx[1]-1 
+max_time = (max_frames-1)/volRate # otherwise bad index issues
 if volRate > 10
     nseconds = 3
 else
     nseconds = 5
+    nseconds = minimum([nseconds, max_time])
 end
 pre = Int(ceil(nseconds*volRate))+1
 post = Int(ceil(nseconds*volRate))+1
 
-avg_stim_h5_path = joinpath(fishDir,expName*"_avgStim.h5")
+avg_stim_h5_path = joinpath(fishDir,expName*"$(analysis_name)_avgStim.h5")
 have_avg_stim_h5 = isfile(avg_stim_h5_path)
+have_avg_stim_h5 = false # temp force refresh
 if have_avg_stim_h5
     avgStim = h5read(avg_stim_h5_path, "/block1");
 else
     avgStim = trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder;
         pre=pre, post=post);
-    h5write(joinpath(fishDir,expName*"_avgStim.h5"), "/block1", avgStim)
+    h5write(avg_stim_h5_path, "/block1", avgStim)
 end;
 
 ##
 figB = 1.6
 # 2 for extra stim mask
 # figW,figH = (figB*1.1, figB)
-figW,figH = (figB*Z, figB)
 
-window = Int(ceil(3*volRate))
-@assert (window < post) & (window < pre)
+
+window = minimum([Int(ceil(3*volRate)), max_frames])
+@assert (window <= post) & (window <= pre)
 # @assert Z == 1
 cmax = 2.5
 cmin = -0.5
@@ -277,11 +328,17 @@ for stimNum in 1:nStimuli
     f0 = mean(avgStim[:,:,:,stimNum,1:window],dims=4)[:,:,:,1]
     df = f - f0
     df_f = df./f0
-    z = 1
     # cmax = percentile(df_f[:],99.9)
     # cmin = percentile(df_f[:],0.1)
-    global fig = plt.figure(figsize=(figW,figH))
-    fig, axs = plt.subplots(1,Z, figsize=(figW,figH))
+    if Z > 5
+        figW,figH = (figB*Z/2, figB*2)
+        global fig = plt.figure(figsize=(figW,figH))
+        fig, axs = plt.subplots(2,Int(Z/2), figsize=(figW,figH))
+    else
+        figW,figH = (figB*Z, figB)
+        global fig = plt.figure(figsize=(figW,figH))
+        fig, axs = plt.subplots(1,Z, figsize=(figW,figH))
+    end
     if Z==1
         axs = [axs]
     end
@@ -297,7 +354,7 @@ for stimNum in 1:nStimuli
         for (x,y,targetZ) in eachrow(unique(cells[cells.stimNum .== stimNum,[:x,:y,:z]]))
             if z == targetZ
                 circle = matplotlib.patches.Circle((x,y), targetSizePx, color="k",
-                    fill=false, lw=0.5, alpha=0.3)
+                    fill=false, lw=0.4, alpha=0.3)
                 ax.add_patch(circle)
             end
         end
@@ -315,16 +372,29 @@ for stimNum in 1:nStimuli
     # cmax = percentile(abs.(df_f[:,:,1][:]),99.9)
     # plt.imshow(hcat([df_f[:,:,z] for z in 1:Z]...), cmap="RdBu_r",
     #     norm=cnorm)
-    fig.subplots_adjust(right=0.96)
-    cbar_ax = fig.add_axes([0.97, 0.15, 0.0075, 0.7])
+    # may need to adjust if colorbar is cutoff
+    fig.subplots_adjust(right=0.9)
+    cbar_ax = fig.add_axes([0.91, 0.15, 0.0075, 0.7])
     # cbar = fig.colorbar(cim, ticks=[0,1,2], cax=cbar_ax)
     cbar = fig.colorbar(cim, cax=cbar_ax)
-    path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)_stim$stimNum")
+    path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)_$(analysis_name)_stim$stimNum")
     @show path*".svg"
     fig.savefig(path*".svg", dpi=600)
     fig.savefig(path*".png", dpi=600)
 end
 
+## kalman denoise
+@time denoised = imageJkalmanFilter(tseries);
+##
+avg_stim_h5_path = joinpath(fishDir,expName*"$(analysis_name)_avgStim.h5")
+have_avg_stim_h5 = isfile(avg_stim_h5_path)
+if have_avg_stim_h5
+    avgStim = h5read(avg_stim_h5_path, "/block1");
+else
+    avgStim = trialAverage(denoised, stimStartIdx, stimEndIdx, trialOrder;
+        pre=pre, post=post);
+    h5write(avg_stim_h5_path, "/block1", avgStim)
+end;
 
 ##
 stimLocs = map(CartesianIndex ∘ Tuple, eachrow(cells[:,[2,1]]))
@@ -471,3 +541,132 @@ avg_red = mean(red_tseries[:,:,:,1:500],dims=4)[:,:,:,1];
 red = RGB.(imadjustintensity(adjust_gamma(avg_red[:,:,5], 0.5)))
 channelview(red)[[2,3],:,:] .= 0
 red
+
+
+## pick cells to stim
+maxT = minimum([5000, size(tseries,4)])
+avg_vol = mean(tseries[:,:,:,1:10:maxT], dims=4)[:,:,:,1];
+
+z = 10
+stimNum = 2
+f = mean(avgStim[:,:,:,stimNum,end-window+1:end],dims=4)[:,:,:,1]
+f0 = mean(avgStim[:,:,:,stimNum,1:window],dims=4)[:,:,:,1]
+df = f - f0
+df_f = df./f0;
+
+using AbstractPlotting, GLMakie
+## we manually rerun this cell for each plane & save the clicks into
+# an array in the next cell
+# img = df_f[:,:,z]
+img = avg_vol[:,:,10]
+img .= img[end:-1:1,:]
+img = permutedims(img, [2,1])
+scene = Scene(resolution = size(img))
+AbstractPlotting.heatmap!(scene, img,
+    # scale_plot = false,
+)
+    # colorrange=(-2.5,2.5),colormap=:vik)
+clicks = Node(Point2f0[(0,0)])
+on(scene.events.mousebuttons) do buttons
+   if ispressed(scene, Mouse.left)
+       pos = to_world(scene, Point2f0(scene.events.mouseposition[]))
+       clicks[] = push!(clicks[], pos)
+   end
+   return
+end
+AbstractPlotting.scatter!(scene, clicks, color = :green, marker = '+', markersize = 10)
+
+# Do not execute beyond this point!
+
+RecordEvents(scene, "output")
+
+##
+z4_points_s1 = clicks[][2:end]
+z4_points_s2 = clicks[][2:end]
+z5_points_s1 = clicks[][2:end]
+z6_points_s1 = clicks[][2:end-1]
+z8_points_s2 = clicks[][2:end]
+z9_points_s2 = clicks[][2:end]
+z10_points_s2 = clicks[][2:end]
+raphe_points = clicks[][2:end]
+##
+
+ipn_targets = aa2a(collect.(vcat(z4_points_s1, z4_points_s2, z5_points_s1, z6_points_s1,
+    z8_points_s2, z9_points_s2)))
+ipn_z = zeros(size(ipn_targets,1))
+
+start = 1
+n = (size(z4_points_s1,1)+size(z4_points_s2,1))
+ipn_z[start:start+n-1] .= etlVals[4] * 10^-6
+start += n
+n = size(z5_points_s1,1)
+ipn_z[start:start+n-1] .= etlVals[5] * 10^-6
+start += n
+n = size(z6_points_s1,1)
+ipn_z[start:start+n-1] .= etlVals[6] * 10^-6
+start += n
+n = size(z8_points_s2,1)
+ipn_z[start:start+n-1] .= etlVals[8] * 10^-6
+start += n
+n = size(z9_points_s2,1)
+ipn_z[start:start+n-1] .= etlVals[9] * 10^-6
+start += n
+@assert start - 1 == size(ipn_targets,1)
+
+# account for Makie weirdness
+ipn_targets = ipn_targets[:,[2,1]]
+ipn_targets[:,1] = 512 .- ipn_targets[:,1]
+
+ipn_targets = hcat(ipn_targets,ipn_z)
+
+raphe_targets = aa2a(collect.(raphe_points))
+# account for Makie weirdness
+raphe_targets = raphe_targets[:,[2,1]]
+raphe_targets[:,1] = 512 .- raphe_targets[:,1]
+raphe_z = etlVals[10] * 10^-6
+raphe_targets = hcat(raphe_targets,fill(raphe_z, size(raphe_targets,1)))
+##
+
+target_groups = [ipn_targets[:,[2,1,3]], raphe_targets[:,[2,1,3]]]
+@show size.(target_groups)
+
+N = sum(size.(target_groups,1))
+num_groups = length(target_groups)
+## Save files for SLM stim
+powers = [1]
+nPowers = length(powers)
+frequencies = repeat([5], nPowers)
+name_str = "IPN_Raphe"
+name = "$(num_groups)groups_$(N)cells_$name_str"
+expSLMdir = joinpath(fishDir,"slm")
+outname = joinpath(expSLMdir, name)
+if ~isdir(expSLMdir)
+    mkdir(expSLMdir)
+end
+if isfile(outname*".txt")
+    # error("file already exists! refusing to clobber")
+end
+
+# create_slm_stim(target_groups, outname,
+#     localToRemote = matpath -> "Y:" * replace(matpath[15:end], "/" => "\\"),
+#     powers=collect(1:nPower)/nPower)
+
+create_slm_stim(target_groups, outname,
+    # 9 is path "/scratch/" includes trailing
+    localToRemote = matpath -> "T:" * replace(matpath[9:end], "/" => "\\"),
+    powers=powers, frequencies=frequencies, slmNum=slmNum)
+
+##
+locs = aa2a(collect.(z5_points_s1))
+locs = locs[:,[2,1]]
+locs[:,1] = 512 .- locs[:,1]
+
+tempavgImageAdj = adjust_gamma(imadjustintensity(avg_vol[:,:,10]), 0.5)
+tempavgImageAdj = RGB.(tempavgImageAdj)
+channelview(tempavgImageAdj)[[1,3],:,:,:] .= 0
+
+avgImgWithTargets = addTargetsToImage(copy(tempavgImageAdj),
+    # Int.(round.(locs,digits=0)),
+    Int.(round.(vcat(target_groups...)[:,[2,1]],digits=0)),
+    # Int.(round.(raphe_targets,digits=0)),
+    targetSize=targetSizePx)
