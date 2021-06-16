@@ -1,5 +1,5 @@
 using Lensman
-
+@error "broken"
 if ~size(ARGS,1)==2
     println(raw"Usage: julia --project=. scripts/tifdir2tyh5.jl tifdir")
     # println(raw"Usage: julia O:\users\tyler\code\lensman\notebooks\tifdir2tyh5.jl tifdir")

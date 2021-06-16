@@ -14,14 +14,15 @@ plt = PyPlot
 matplotlib = plt.matplotlib
 
 ##
-tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
-# tseriesRootDir = "/data/dlab/b115"
+# tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
+tseriesRootDir = "/data/dlab/b115"
 # tseriesRootDir = "/scratch/b115"
 # tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 
 
 # newer
-slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
+# slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
+slmDir = "/mnt/deissero/users/tyler/b115/SLM_files"
 # slmDir = "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment"
 # slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
 # older
@@ -75,7 +76,7 @@ slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
 # tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish5/TSeries-35cell-20rep-40s-dark-4Mhz-059"
 
 # tseriesDir = "$tseriesroot/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061"
-tseriesDir = "$tseriesroot/2021-06-01_wt-chrmine_h2b6s/f1/TSeries-lrhab-118trial-059"
+tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
 # debug by looking at 3region..?
 # tseriesDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044/"
 

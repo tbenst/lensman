@@ -7,7 +7,6 @@ using Sockets, Observables, Statistics, Images, ImageView, Lensman,
 import Gadfly
 using Unitful: μm, m, s, mW
 ##
-# sudo chmod -R g+rw /scratch/b115
 tseriesroot = "/scratch/b115"
 
 # tseriesroot = "/mnt/deissero/users/tyler/b115"
@@ -34,7 +33,11 @@ tseriesroot = "/scratch/b115"
 # fishDir = "$tseriesroot/2021-06-01_rsChRmine_h2b6s/fish5"
 # fishDir = "$tseriesroot/2021-06-01_rsChRmine_h2b6s/fish3"
 # fishDir = "$tseriesroot/2021-06-01_wt-chrmine_h2b6s/fish4"
-fishDir = "$tseriesroot/2021-06-02_rsChRmine-h2b6s/fish2"
+# fishDir = "$tseriesroot/2021-06-02_rsChRmine-h2b6s/fish2"
+# fishDir = "$tseriesroot/2021-06-02_wtChRmine_h2b6s/fish3"
+# fishDir = "$tseriesroot/2021-06-08_rsChRmine_h2b6s/fish1" #bad
+# fishDir = "$tseriesroot/2021-06-08_rsChRmine_h2b6s/fish2"
+fishDir = "$tseriesroot/2021-06-15_rsChRmine_h2b6s_6dpf/fish1"
 
 useRed = false
 
@@ -68,7 +71,7 @@ if useRed
     channelview(rgb1000)[[2,3],:,:] .= 0;
 end
 (H, W) = size(imgreen)
-println("Make sure to run `chmod -R g+rw $fishDir`")
+println("Make sure to run `sudo chmod -R g+rw $fishDir`")
 ## read gpl targets
 @assert length(glob("*.gpl", fishDir)) == 1 (@show glob("*.gpl", fishDir))
 # gpl_path = glob("*.gpl", fishDir)[2]
