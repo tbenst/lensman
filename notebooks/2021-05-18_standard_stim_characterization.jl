@@ -14,21 +14,26 @@ plt = PyPlot
 matplotlib = plt.matplotlib
 
 ##
-# tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
-tseriesRootDir = "/data/dlab/b115"
-# tseriesRootDir = "/scratch/b115"
-# tseriesRootDir = "/mnt/deissero/users/tyler/b115"
-
+ON_SHERLOCK = read(`hostname`,String)[1:2] == "sh"
+if ON_SHERLOCK
+    tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
+else
+    tseriesRootDir = "/data/dlab/b115"
+    # tseriesRootDir = "/scratch/b115"
+    # tseriesRootDir = "/mnt/deissero/users/tyler/b115"
+end
 
 # newer
-# slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
-slmDir = "/mnt/deissero/users/tyler/b115/SLM_files"
-# slmDir = "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment"
-# slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
-# older
-# slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"
-# slmDir = "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
-
+if ON_SHERLOCK
+    slmDir = "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files"
+else
+    slmDir = "/mnt/deissero/users/tyler/b115/SLM_files"
+    # slmDir = "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment"
+    # slmDir = "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/"
+    # older
+    # slmDir = "/mnt/deissero/users/tyler/b115/SLM_files/"
+    # slmDir = "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
+end
 
 
 # tseriesDir = "/data/dlab/b115/2021-02-16_h2b6s_wt-chrmine/fish3/TSeries-1024cell-32concurrent-4freq-054"
@@ -76,7 +81,8 @@ slmDir = "/mnt/deissero/users/tyler/b115/SLM_files"
 # tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish5/TSeries-35cell-20rep-40s-dark-4Mhz-059"
 
 # tseriesDir = "$tseriesroot/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061"
-tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+# tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-titration-192trial-062"
 # debug by looking at 3region..?
 # tseriesDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044/"
 
@@ -127,26 +133,68 @@ fish_name = splitpath(tseriesDir)[end-1]
 tylerSLMDir = joinpath(fishDir, "slm")
 
 tyh5Path = tseriesDir*".ty.h5"
-if isfile(tyh5Path)
-    println("using ty.h5 file")
-    tseries = h5read(tyh5Path, "/imaging/per_pixel_lstm_denoised")
-    # tseries = h5read(tyh5Path, "/imaging/raw")
-    # @show size(tseries)
-    # @assert size(tseries,2)==1
-    # tseries = tseries[:,1,:,:,:]
-    tseries = permutedims(tseries, (2,1,3,4))
-    tseriesDir = joinpath(fishDir, expName)
+##
+"Take Float32 [0,1], and convert to UInt16"
+function float2uint(x)
+    # PV max is 8192..? or at least, that's what we used in babelfish
+    ret = round.(x .* 8192, digits=0)
+    clamp!(ret,0,2^16-1)
+    convert(Array{UInt16},ret)
+end
 
-    # tseries = h5read(tyh5Path, "/imaging/raw")
-    # drop singleton channel
-    # @assert size(tseries,4)==1
-    # tseries = permutedims(tseries, (2,1,3,4,5))
-    # tseries = tseries[:,:,:,1,:];
-    # tseriesDir = joinpath(fishDir, expName)
+function read_tyh5(tyh5_path)
+    @info "assume WHZCT, convert to HWZT"
+    h5 = h5open(tyh5Path,"r")
+    dset = h5["/imaging/per_pixel_lstm_denoised"]
+    dset = h5["/imaging/per_pixel_lstm_denoised_maybe_longer_time"]
+    println(ndims(dset))
+    if ndims(dset) == 5
+        @assert size(dset,4)==1
+        W,H,Z,C,T = size(dset)
+        dtype = eltype(dset)
+        if dtype == Float32
+            # convert to UInt16, asume max value of 1...
+            f_convert = float2uint
+        else
+            f_convert = x -> x
+        end
+        tseries = zeros(UInt16, H, W, Z, T)
+        # chunk by z for memory efficiency..
+        @showprogress for z=1:Z
+            # drop singleton channel
+            dat = f_convert(dset[:,:,z,1,:])
+            dat = permutedims(dat, (2,1,3))
+            tseries[:,:,z,:] = dat
+        end
+    else
+        error("stop")
+        tseries = h5read(tyh5Path, "/imaging/per_pixel_lstm_denoised")
+        # tseries = h5read(tyh5Path, "/imaging/raw")
+        # @show size(tseries)
+        # @assert size(tseries,2)==1
+        # tseries = tseries[:,1,:,:,:]
+        tseries = permutedims(tseries, (2,1,3,4))
+        tseriesDir = joinpath(fishDir, expName)
+
+        # tseries = h5read(tyh5Path, "/imaging/raw")
+        # drop singleton channel
+        # @assert size(tseries,4)==1
+        # tseries = permutedims(tseries, (2,1,3,4,5))
+        # tseries = tseries[:,:,:,1,:];
+        # tseriesDir = joinpath(fishDir, expName)
+    end
+    tseries
+end
+
+if isfile(tyh5Path)
+    @info "using ty.h5 file"
+    tseries = read_tyh5(tyh5Path)
 else
     tseries = loadTseries(tseriesDir);
 end;
+##
 
+GC.gc()
 ##
 (H, W, Z, T) = size(tseries)
 if Z > 1000
@@ -154,6 +202,7 @@ if Z > 1000
     (H, W, Z, T) = size(tseries)
 end
 @show (H, W, Z, T)
+##
 plotDir = joinpath(fishDir, "plots")
 if ~isdir(plotDir)
     mkdir(plotDir)
@@ -273,9 +322,10 @@ end
 pre = Int(ceil(nseconds*volRate))+1
 post = Int(ceil(nseconds*volRate))+1
 
-avg_stim_h5_path = joinpath(fishDir,expName*"$(analysis_name)_avgStim.h5")
+# avg_stim_h5_path = joinpath(fishDir,expName*"$(analysis_name)_avgStim.h5")
+avg_stim_h5_path = joinpath(fishDir,expName*"$(analysis_name)_avgStim_lstm.h5")
 have_avg_stim_h5 = isfile(avg_stim_h5_path)
-have_avg_stim_h5 = false # temp force refresh
+# have_avg_stim_h5 = false # temp force refresh
 if have_avg_stim_h5
     avgStim = h5read(avg_stim_h5_path, "/block1");
 else
