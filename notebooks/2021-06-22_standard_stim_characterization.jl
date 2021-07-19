@@ -1,5 +1,5 @@
 ## compare 
-ENV["DISPLAY"] = "localhost:11.0"
+# ENV["DISPLAY"] = "localhost:13.0"
 using Sockets, Observables, Statistics, Images, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
@@ -10,6 +10,7 @@ import Gadfly
 using Unitful: μm, m, s, mW
 import Base.Threads.@threads
 import PyPlot
+import Base.size
 plt = PyPlot
 matplotlib = plt.matplotlib
 
@@ -80,12 +81,17 @@ end
 # tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish5/TSeries-lrhab-control-91trial-4Mhz-045"
 # tseriesDir = "$tseriesRootDir/2021-05-18_rsChRmine_h2b6s_6dpf/fish5/TSeries-35cell-20rep-40s-dark-4Mhz-059"
 
-# tseriesDir = "$tseriesroot/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061"
+# tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061"
+
+# tseriesDir = "$tseriesRootDir/2021-06-01_wt-chrmine_h2b6s/fish4/TSeries-lrhab-control-118trial-061"
+# tseriesDir = "$tseriesRootDir/2021-06-01_rsChRmine_h2b6s/fish3/TSeries-lrhab-118trial-060"
+tseriesDir = "$tseriesRootDir/2021-06-29_hsChRmine_6f_6dpf/fish2/TSeries-round3-lrhab-118trial-068"
+
 # tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
 # tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-titration-192trial-062"
 # tseriesDir = "$tseriesRootDir/2021-06-08_rsChRmine-h2b6s/fish2/TSeries-titration-192trial-062"
 # tseriesDir = "$tseriesRootDir/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-1232021-06-21_6pm"
-tseriesDir = "$tseriesRootDir/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+# tseriesDir = "$tseriesRootDir/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
 # debug by looking at 3region..?
 # tseriesDir = "$tseriesRootDir/2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044/"
 
@@ -103,7 +109,8 @@ tseriesDir = "$tseriesRootDir/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-tit
 
 
 # analysis_name = "lstm_denoise_only"
-analysis_name = ""
+# analysis_name = "lstm_divide512"
+analysis_name = "lstm_divide8192"
 # analysis_name = "kalman"
 
 tyh5Path = tseriesDir * ".ty.h5"
@@ -135,73 +142,66 @@ recording_folder = splitpath(tseriesDir)[end-2]
 fish_name = splitpath(tseriesDir)[end-1]
 tylerSLMDir = joinpath(fishDir, "slm")
 
-tyh5Path = joinpath(fishDir,"TSeries-lrhab-titration-1232021-06-21_6pm" * ".ty.h5")
-# tyh5Path = tseriesDir*".ty.h5"
+# tyh5Path = joinpath(fishDir,"TSeries-lrhab-titration-1232021-06-21_6pm" * ".ty.h5")
+tyh5Path = tseriesDir*".ty.h5"
 ##
-"Take Float32 [0,1], and convert to UInt16"
-function float2uint(x)
-    # PV max is 8192..? or at least, that's what we used in babelfish
-    ret = round.(x .* 8192, digits=0)
-    clamp!(ret,0,2^16-1)
-    convert(Array{UInt16},ret)
-end
 
 # TODO: lazy read hdf5 wrapper...?
 
-function read_tyh5(tyh5_path)
-    @info "assume WHZCT, convert to HWZT"
-    h5 = h5open(tyh5Path,"r")
-    # dset = h5["/imaging/per_pixel_lstm_denoised"]
-    # dset = h5["/imaging/per_pixel_lstm_denoised_maybe_longer_time"]
-    dset = h5["/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm"]
-    println(ndims(dset))
-    if ndims(dset) == 5
-        @assert size(dset,4)==1
-        W,H,Z,C,T = size(dset)
-        dtype = eltype(dset)
-        if dtype == Float32
-            # convert to UInt16, asume max value of 1...
-            f_convert = float2uint
-        else
-            f_convert = x -> x
-        end
-        tseries = zeros(UInt16, H, W, Z, T)
-        # chunk by z for memory efficiency..
-        @showprogress for z=1:Z
-            # drop singleton channel
-            dat = f_convert(dset[:,:,z,1,:])
-            dat = permutedims(dat, (2,1,3))
-            tseries[:,:,z,:] = dat
-        end
-    else
-        error("stop")
-        tseries = h5read(tyh5Path, "/imaging/per_pixel_lstm_denoised")
-        # tseries = h5read(tyh5Path, "/imaging/raw")
-        # @show size(tseries)
-        # @assert size(tseries,2)==1
-        # tseries = tseries[:,1,:,:,:]
-        tseries = permutedims(tseries, (2,1,3,4))
-        tseriesDir = joinpath(fishDir, expName)
-
-        # tseries = h5read(tyh5Path, "/imaging/raw")
-        # drop singleton channel
-        # @assert size(tseries,4)==1
-        # tseries = permutedims(tseries, (2,1,3,4,5))
-        # tseries = tseries[:,:,:,1,:];
-        # tseriesDir = joinpath(fishDir, expName)
-    end
-    tseries
+struct LazyTy5
+    dset::HDF5.Dataset
 end
 
+"Index by HWZT & read from .ty.h5 file."
+function Base.getindex(X::LazyTy5,i...)
+    h,w,z,t = i
+    c = 1
+    res = Base.getindex(X.dset, w, h, z, c, t)
+    nd = ndims(res)
+    if nd > 0
+        permutedims(res, (2,1,collect(3:nd)...))
+    else
+        res
+    end
+end
+
+function size(X::LazyTy5)
+    W, H, Z, C, T = size(X.dset)
+    H, W, Z, T
+end
+
+function size(X::LazyTy5, i)
+    W, H, Z, C, T = size(X.dset)
+    (H, W, Z, T)[i]
+end
+
+"Allows lazy but memoized indexing from HDF5 file."
+function lazy_read_tyh5(tyh5_path,
+        dset_path="/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm")
+    @info "assume WHZCT, convert to HWZT"
+    h5 = h5open(tyh5Path,"r")
+    dset = h5[dset_path]
+    return h5, LazyTy5(dset)
+end
+
+
+##
+# tyh5Path = tyh5Path * "skipme"
 if isfile(tyh5Path)
     @info "using ty.h5 file"
-    tseries = read_tyh5(tyh5Path)
+    # tseries = read_tyh5(tyh5Path)
+    h5 = h5open(tyh5Path,"r")
+    # dset = "/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm"
+    dset = "/imaging/LSTM_per-voxel-state_divide512-2021-07-02"
+    # dset = "/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden_init_from_pretrained-2021-06-21_6pm"
+    h5, tseries = lazy_read_tyh5(tyh5Path, dset);
+    plotDir = joinpath(fishDir, "plots-denoised")
+    avgStimStr = "_avgStim_lstm.h5"
 else
     tseries = loadTseries(tseriesDir);
+    plotDir = joinpath(fishDir, "plots")
+    avgStimStr = "_avgStim.h5"
 end;
-##
-
-GC.gc()
 ##
 (H, W, Z, T) = size(tseries)
 if Z > 1000
@@ -210,7 +210,7 @@ if Z > 1000
 end
 @show (H, W, Z, T)
 ##
-plotDir = joinpath(fishDir, "plots")
+
 if ~isdir(plotDir)
     mkdir(plotDir)
 end
@@ -226,6 +226,8 @@ xmlPath = joinpath(dataFolders..., dataFolders[end] * ".xml")
 expDate, frameRate, etlVals = getExpData(xmlPath)
 Z = size(etlVals,1)
 volRate = frameRate / Z
+# TODO: if not mounted, script would fail...
+# need to make rsync job to back up...
 try
     global trialOrder, slmExpDir
     slmExpDir = joinpath(slmDir,Dates.format(expDate, "dd-u-Y"))
@@ -246,8 +248,11 @@ catch
     global slmTxtFile
     slmTxtFile = regex_glob(r".*(?<!trialOrder)\.txt$", fishDir)
 end
+# TODO: can we auto-select this somehow for scripting...?
+@warn "commented assertion check for slmTxtFile"
 @assert length(slmTxtFile) == 1 slmTxtFile # if not, need to be careful to choose
-slmTxtFile = slmTxtFile[1]
+# slmTxtFile = slmTxtFile[1]
+slmTxtFile = slmTxtFile[end]
 
 ##
 stimGroupDF = CSV.File(open(read, slmTxtFile), header=["filepath", "powerFraction"]) |> DataFrame
@@ -330,9 +335,9 @@ pre = Int(ceil(nseconds*volRate))+1
 post = Int(ceil(nseconds*volRate))+1
 
 # avg_stim_h5_path = joinpath(fishDir,expName*"$(analysis_name)_avgStim.h5")
-avg_stim_h5_path = joinpath(fishDir,expName*"$(analysis_name)_avgStim_lstm.h5")
+avg_stim_h5_path = joinpath(fishDir,expName*"$(analysis_name)"*avgStimStr)
 have_avg_stim_h5 = isfile(avg_stim_h5_path)
-# have_avg_stim_h5 = false # temp force refresh
+have_avg_stim_h5 = false # temp force refresh
 if have_avg_stim_h5
     avgStim = h5read(avg_stim_h5_path, "/block1");
 else
@@ -352,15 +357,27 @@ window = minimum([Int(ceil(3*volRate)), max_frames])
 # @assert Z == 1
 cmax = 2.5
 cmin = -0.5
+
+cmax = 1.0
+cmin = -0.2
+
+# cmax = 0.5
+# cmin = -0.1
 # cmax = 4
 # cmin = -0.75
+# cmin = -4
 cnorm = matplotlib.colors.TwoSlopeNorm(vmin=cmin,vcenter=0,vmax=cmax)
 
+@warn "df_f denominator epsilon may have changed"
 for stimNum in 1:nStimuli
+    # f = mean(avgStim[:,:,:,stimNum,end-window+1:end],dims=4)[:,:,:,1]
+    # TODO: should window be immediately after stim..? right now it's
+    # ~2 seconds after stim...?
     f = mean(avgStim[:,:,:,stimNum,end-window+1:end],dims=4)[:,:,:,1]
     f0 = mean(avgStim[:,:,:,stimNum,1:window],dims=4)[:,:,:,1]
     df = f - f0
-    df_f = df./f0
+    # originally no epsilon prior to July 2021
+    df_f = df./(f0 .+ 0.05)
     # cmax = percentile(df_f[:],99.9)
     # cmin = percentile(df_f[:],0.1)
     if Z > 5

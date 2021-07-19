@@ -465,3 +465,60 @@ function write_trial_order(trial_order, outname)
     println("wrote $(outname*"_trialOrder.txt")")
     println("be sure to modify mSLM/SetupFiles/Experiments/<TODAY>/trialOrder.txt")
 end
+
+
+"Allows lazy but memoized indexing from HDF5 file."
+function lazy_read_tyh5(tyh5_path,
+        dset_path="/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm")
+    @info "assume WHZCT, convert to HWZT"
+    h5 = h5open(tyh5_path,"r")
+    dset = h5[dset_path]
+    return h5, LazyTy5(dset)
+end
+
+function read_tyh5(tyh5_path,
+        dset="/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm")
+    @info "assume WHZCT, convert to HWZT"
+    h5 = h5open(tyh5_path,"r")
+    # dset = h5["/imaging/per_pixel_lstm_denoised"]
+    # dset = h5["/imaging/per_pixel_lstm_denoised_maybe_longer_time"]
+    dset = h5[dset]
+    println(ndims(dset))
+    if ndims(dset) == 5
+        @assert size(dset)[4]==1
+        W,H,Z,C,T = size(dset)
+        dtype = eltype(dset)
+        # if dtype == Float32
+        #     # convert to UInt16, asume max value of 1...
+        #     f_convert = float2uint
+        # else
+        #     f_convert = x -> x
+        # end
+        f_convert = x -> x
+        tseries = zeros(UInt16, H, W, Z, T)
+        # chunk by z for memory efficiency..
+        @showprogress for z=1:Z
+            # drop singleton channel
+            dat = f_convert(dset[:,:,z,1,:])
+            dat = permutedims(dat, (2,1,3))
+            tseries[:,:,z,:] = dat
+        end
+    else
+        error("stop")
+        tseries = h5read(tyh5Path, "/imaging/per_pixel_lstm_denoised")
+        # tseries = h5read(tyh5Path, "/imaging/raw")
+        # @show size(tseries)
+        # @assert size(tseries,2)==1
+        # tseries = tseries[:,1,:,:,:]
+        tseries = permutedims(tseries, (2,1,3,4))
+        tseriesDir = joinpath(fishDir, expName)
+
+        # tseries = h5read(tyh5Path, "/imaging/raw")
+        # drop singleton channel
+        # @assert size(tseries,4)==1
+        # tseries = permutedims(tseries, (2,1,3,4,5))
+        # tseries = tseries[:,:,:,1,:];
+        # tseriesDir = joinpath(fishDir, expName)
+    end
+    tseries
+end

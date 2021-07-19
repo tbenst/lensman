@@ -4,7 +4,7 @@ using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     ImageDraw, ImageFiltering, PyCall, MAT, Dates, DataStructures,
     Statistics, SharedArrays, CSV, DataFrames, Suppressor, Plots,
     LinearAlgebra, LibExpat, LightXML, RollingFunctions, HypothesisTests,
-    EllipsisNotation
+    EllipsisNotation, HDF5
 import Base.Threads.@threads
 using Distributed
 import Unitful: μm
@@ -15,6 +15,7 @@ include("files.jl")
 include("plots.jl")
 include("generic.jl")
 include("magic_numbers.jl")
+include("Types.jl")
 
 peak_local_max = PyNULL()
 disk = PyNULL()
@@ -528,11 +529,15 @@ function trialAverage(tseries, stimStartIdx, stimEndIdx, trialOrder; pre=16, pos
     trialTime = minimum(stimEndIdx .- stimStartIdx) + pre + post + 1
     # HWZCT
     avgStim = zeros(size(tseries)[1:3]..., nStimuli, trialTime);
-    ## sloooow
-    @showprogress for (i, start) in enumerate(stimStartIdx)
+    p = Progress(length(stimStartIdx), 1, "trial average:")
+    # threads crashes HDF5
+    # @threads for i in 1:length(stimStartIdx)
+    for i in 1:length(stimStartIdx)
+        start = stimStartIdx[i]
         stop = start - pre + trialTime - 1
         trialType = trialOrder[i]
         avgStim[:,:,:,trialType,:] .+= tseries[:,:,:,start - pre:stop]
+        next!(p)
     end
     for i in 1:nStimuli
         avgStim[:,:,:,i,:] ./= nTrialsPerStimulus[i]
@@ -985,5 +990,7 @@ export read_microns_per_pixel,
     antsApplyTransforms2,
     vecvec2mat,
     read_markpoint_groups,
-    balanced_transition_order
+    balanced_transition_order,
+    lazy_read_tyh5,
+    read_tyh5
 end

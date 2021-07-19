@@ -37,7 +37,10 @@ tseriesroot = "/scratch/b115"
 # fishDir = "$tseriesroot/2021-06-02_wtChRmine_h2b6s/fish3"
 # fishDir = "$tseriesroot/2021-06-08_rsChRmine_h2b6s/fish1" #bad
 # fishDir = "$tseriesroot/2021-06-08_rsChRmine_h2b6s/fish2"
-fishDir = "$tseriesroot/2021-06-15_rsChRmine_h2b6s_6dpf/fish1"
+# fishDir = "$tseriesroot/2021-06-15_rsChRmine_h2b6s_6dpf/fish1"
+# fishDir = "$tseriesroot/2021-06-29_hsChRmine_6f_6dpf/fish2"
+# fishDir = "$tseriesroot/2021-07-14_rsChRmine_h2b6s_5dpf/fish1"
+fishDir = "$tseriesroot/2021-07-14_rsChRmine_h2b6s_5dpf/fish2"
 
 useRed = false
 
@@ -57,6 +60,7 @@ if useRed
 end
 
 offset = float(uconvert(m, 0μm)) / m
+# offset = float(uconvert(m, -30μm)) / m
 @warn "using offset of $offset"
 slmNum = 2
 zOffset = offset * 1e6
@@ -76,6 +80,7 @@ println("Make sure to run `sudo chmod -R g+rw $fishDir`")
 @assert length(glob("*.gpl", fishDir)) == 1 (@show glob("*.gpl", fishDir))
 # gpl_path = glob("*.gpl", fishDir)[2]
 gpl_path = glob("*.gpl", fishDir)[1]
+# gpl_path = glob("*.gpl", fishDir)[3]
 
 group_locs = read_markpoint_groups(gpl_path, width=W, height=H, zoom=1)
 # neuron_locs = read_gpl(gpl_path, width=W, height=H, zoom=1)
@@ -109,9 +114,10 @@ powers = [1]
 nPowers = length(powers)
 frequencies = repeat([5], nPowers)
 name_str = join(keys(group_locs), "_")
-name = "$(num_groups)groups_$(N)cells_$name_str"
+# name = "$(num_groups)groups_$(N)cells_$name_str"
+# name = "round3_$(num_groups)groups_$(N)cells_$(name_str)"
 expSLMdir = joinpath(fishDir,"slm")
-outname = joinpath(expSLMdir, name)
+outname = joinpath(expSLMdir, name_str)
 if ~isdir(expSLMdir)
     mkdir(expSLMdir)
 end
@@ -150,8 +156,9 @@ length(trialOrder)
 
 
 ## titration experiment
+# lr_pairs = collect(zip(group_locs["right-hab"], group_locs["left-hab"]))
 lr_pairs = collect(zip(group_locs["rhab"], group_locs["lhab"]))
-lr_pairs = lr_pairs[randperm(length(lr_pairs))]
+# lr_pairs = lr_pairs[randperm(length(lr_pairs))]
 
 target_groups = Matrix{Float64}[]
 
@@ -174,10 +181,10 @@ num_groups = length(target_groups)
 powers = [1]
 nPowers = length(powers)
 frequencies = repeat([5], nPowers)
-name_str = "lrhab_titration"
-name = "$(length(titrations))titrations_$(max_pairs*2)cells"
+# name_str = "lrhab_titration"
+name_str = "$(length(titrations))titrations_$(max_pairs*2)cells"
 expSLMdir = joinpath(fishDir,"slm")
-outname = joinpath(expSLMdir, name)
+outname = joinpath(expSLMdir, name_str)
 if ~isdir(expSLMdir)
     mkdir(expSLMdir)
 end
@@ -246,3 +253,65 @@ println("Powers for power per cell of $powerPerCell: $(powerPerCell ./ 1000 .* 2
 ntrials = 20
 single_trialOrder = vcat([randperm(N) for _ in 1:ntrials]...)
 write_trial_order(single_trialOrder, outname)
+
+## Combo experiment....
+
+nCells = 64
+base = 2
+nReps = 8
+stimGroups, groupsPerCell = stonerStimGroups(nCells, base)
+sameGroups = stimGroups
+permGroups = stimGroups
+stonerGroups = stimGroups
+permutation = 1:nCells
+for i in 0:nReps-1
+    if i % 2 == 0
+        # draw new permutation
+        permutation = randperm(nCells)
+    end
+    if i % 2 == 1
+        # choose new permutation that balances the previous
+        stoner_perm = stonerPerm(nCells)
+    else
+        stoner_perm = collect(1:nCells)
+    end
+    stimGroupsPerm = map(g->perm(permutation,g),stimGroups)
+    stimGroupsPerm = map(g->perm(stoner_perm,g),stimGroupsPerm)
+    stonerGroups = vcat(stonerGroups, stimGroupsPerm)
+end
+
+stonerGroupsPerCell = calcGroupsPerCell(stonerGroups, nCells, base)
+
+
+stonerGroups
+
+stonerGroupsOpt, stonerGroupsPerCellOpt = randomSwaps(stonerGroups, stonerGroupsPerCell, calc_concurrency_score,
+nCells, base, 10000)
+
+count_concurrency(stonerGroupsOpt)
+## GENERATE COMBO Experiment
+all_cells = vcat(group_locs["rhab"], group_locs["lhab"])
+
+##
+k = Int(nCells / base)
+target_groups = []
+@warn "1024"
+for group in eachrow(stonerGroups)
+    groupStimLocs = all_cells[group]
+    push!(target_groups, vcat(cartIdx2SeanTarget.(groupStimLocs, fill(offset, k))...))
+end
+
+## Save files for SLM stim
+name_str = "cstoner_n$(nCells)_b$(base)_r$(nReps)"
+outname = joinpath(expSLMdir, name_str)
+
+
+create_slm_stim(target_groups, outname,
+    # 9 is path "/scratch/" includes trailing
+    localToRemote = matpath -> "T:" * replace(matpath[9:end], "/" => "\\"),
+    powers=powers, frequencies=frequencies, slmNum=slmNum)
+
+##
+imshow(addTargetsToImage(copy(rgb840),
+    cartIdx2Array(all_cells),
+    targetSize=targetSizePx))
