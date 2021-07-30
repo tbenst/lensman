@@ -9,3 +9,8 @@ function vecvec2mat(vecvec)
     end
     return my_array
 end
+
+"apply each function to args"
+funprod(functions...) = (args...)->map(x->x(args...), functions)
+
+zeroToOne(x) = (x.-minimum(x))/(minimum(x) + maximum(x))

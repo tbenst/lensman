@@ -49,6 +49,17 @@ git-tree-sha1 = "070897c0544f5cc60615395f6d2cd2d69ceea42a"
 uuid = "71802903-5811-4e1f-b8e7-37bd234b68eb"
 version = "0.1.0"
 
+[[ActorInterfaces]]
+git-tree-sha1 = "6efdd5bec34cbbcd0ecdd25391504280d9d27d2a"
+uuid = "7e194583-e687-41a0-9133-1c22a29c80af"
+version = "0.1.0"
+
+[[Actors]]
+deps = ["ActorInterfaces", "Dates", "Distributed", "Proquint", "Serialization"]
+git-tree-sha1 = "5664234a9d446616fc8ec78b98946e39b31a42a7"
+uuid = "18269d71-cc38-4e02-b8c8-1db30113a6dd"
+version = "0.2.4"
+
 [[Adapt]]
 deps = ["LinearAlgebra"]
 git-tree-sha1 = "f1b523983a58802c4695851926203b36e28f09db"
@@ -575,9 +586,9 @@ version = "1.4.0"
 
 [[FFTW_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "5a0d4b6a22a34d17d53543bd124f4b08ed78e8b0"
+git-tree-sha1 = "3676abafff7e4ff07bbd2c42b3d8201f31653dcc"
 uuid = "f5851436-0d7a-5f13-b9de-f02708fd171a"
-version = "3.3.9+7"
+version = "3.3.9+8"
 
 [[FGenerators]]
 deps = ["AbstractYieldMacros", "ContextualMacros", "FLoopsBase", "MacroTools", "Transducers"]
@@ -1232,9 +1243,9 @@ version = "1.36.0+3"
 
 [[Libiconv_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "8e924324b2e9275a51407a4e06deb3455b1e359f"
+git-tree-sha1 = "cba7b560fcc00f8cd770fa85a498cbc1d63ff618"
 uuid = "94ce4f54-9a6c-5748-9c1c-f9c7231a4531"
-version = "1.16.0+7"
+version = "1.16.0+8"
 
 [[Libmount_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1652,6 +1663,11 @@ deps = ["Distributed", "Printf"]
 git-tree-sha1 = "6e9c89cba09f6ef134b00e10625590746ba1e036"
 uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
 version = "1.5.0"
+
+[[Proquint]]
+git-tree-sha1 = "eb223efb13af2894a8e61e21868914350991eec9"
+uuid = "710532b4-0dcf-4e85-9a00-0fba2d710edd"
+version = "0.1.0"
 
 [[PyCall]]
 deps = ["Conda", "Dates", "Libdl", "LinearAlgebra", "MacroTools", "Serialization", "VersionParsing"]

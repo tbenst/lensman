@@ -1,5 +1,5 @@
 ## compare 
-# ENV["DISPLAY"] = "localhost:11.0"
+ENV["DISPLAY"] = "localhost:11.0"
 using Sockets, Observables, Statistics, Images, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
@@ -20,8 +20,8 @@ ON_SHERLOCK = read(`hostname`,String)[1:2] == "sh"
 if ON_SHERLOCK
     tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
 else
-    tseriesRootDir = "/data/dlab/b115"
-    # tseriesRootDir = "/scratch/b115"
+    # tseriesRootDir = "/data/dlab/b115"
+    tseriesRootDir = "/scratch/b115"
     # tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 end
 
@@ -37,17 +37,27 @@ else
     # slmDir = "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
 end
 
-tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+# tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+# tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+# tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-titration-192trial-070"
+tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069"
+# tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069"
+tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192"
+
 
 # avg_stim_h5_path = "$(tseriesDir)_avgStim_lstm.h5"
-avg_stim_h5_path = "$(tseriesDir)_avgStim.h5"
+# avg_stim_h5_path = "$(tseriesDir)_avgStim.h5"
+# avg_stim_h5_path = "$(tseriesDir)lstm_divide8192_avgStim_lstm.h5"
+avg_stim_h5_path = "$(tseriesDir)lstm_divide8192_avgStim.h5"
 fish_dir = joinpath(splitpath(avg_stim_h5_path)[1:end-1]...)
 plot_dir = joinpath(fish_dir, "plots-denoised")
 if ~isdir(plot_dir)
     mkdir(plot_dir)
 end
 ##
+avg_stim_h5_path = "/scratch/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062lstm_divide8192_avgStim.h5"
 avgStim = h5read(avg_stim_h5_path, "/block1");
+# avgStim = h5read(avg_stim_h5_path, "/block1");
 ##
 imshow(avgStim[:,:,6,1,:])
 ##

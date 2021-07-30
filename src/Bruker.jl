@@ -4,16 +4,11 @@ import Base.Threads.@threads
 using Unitful: μm, s
 
 "Return units in microns from Bruker xml file."
-function read_microns_per_pixel(xml_file)
-    open(glob("*.xml",xml_file)[1], "r") do io
-        xml = read(io, String)
-        global xml = xp_parse(xml)
-    end;
-    
-    "apply each function to args"
-    funprod(functions...) = (args...)->map(x->x(args...), functions)
-    zeroToOne(x) = (x.-minimum(x))/(minimum(x) + maximum(x))
-    
+function read_microns_per_pixel(xml_file::String)
+    read_microns_per_pixel(read_xml(xml_file))
+end
+
+function read_microns_per_pixel(xml::ETree)    
     micronsPerPixel_xml = xml[xpath"""//PVStateValue[@key="micronsPerPixel"]"""][1]
     # parse xml
     lookup_μm = axis -> etree -> parse(Float64,
@@ -22,3 +17,14 @@ function read_microns_per_pixel(xml_file)
     # zseries = centered(zseries) # need centered for qd registration
     microscope_units
 end
+
+"Return z-plane of Z or ETL for first DataFrame in sequence."
+function read_first_zaxis(xml::ETree, device="Z")
+    parse(Float64, xml[xpath"""/PVScan/Sequence/Frame[1]/PVStateShard/PVStateValue[@key="positionCurrent"]/SubindexedValues[@index="ZAxis"]/SubindexedValue[@description="$device"]/@value"""][1])
+end
+
+"Return z-plane of Z or ETL for all frames in sequence."
+function read_all_zaxis(xml::ETree, device="Z")
+    parse.(Float64, xml[xpath"""/PVScan/Sequence/Frame/PVStateShard/PVStateValue[@key="positionCurrent"]/SubindexedValues[@index="ZAxis"]/SubindexedValue[@description="$device"]/@value"""])
+end
+

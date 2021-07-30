@@ -1,5 +1,7 @@
-using LinearAlgebra, StatsBase, ProgressMeter, JuMP
+using LinearAlgebra, StatsBase, ProgressMeter, JuMP, ANTsRegistration, Dates,
+    NIfTI
 import Base.Threads.@threads
+sio = pyimport("scipy.io")
 
 """Sparse (min L1) solution to Y=AX for unknown A.
     
@@ -385,4 +387,65 @@ end
 function medianfilt(x, window=3)
     filtered = rollmedian(x, window)
     vcat([x[1]], filtered, [x[end]])
+end
+
+"""Use ANTs to perform registration, either affine or with SyN.
+
+See https://academic.oup.com/view-large/120212390 for reference on using with
+zebrafish atlas registration. That paper uses the following:
+
+ants_register(fixed, moving; interpolation = "WelchWindowedSinc",
+    histmatch = 0, sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
+    use_syn = false, synThreshold = 1e-7, synMaxIter = 200, dont_run = true)
+
+Tyler previously used affine + sampling_frac=1.0 for faster online registration.
+
+SyN took 9487s for a MultiMAP 
+
+Writes intermediate data to tmp directory.
+"""
+function ants_register(fixed, moving; interpolation = "BSpline",
+        histmatch = 1, maxiter = 200, threshold = "1e-6",
+        initial_moving_type = 1, sampling_frac = 1.0,
+        use_syn = false, synThreshold = 1e-7, synMaxIter = 200,
+        ants_path = "/opt/ANTs/install/bin/antsRegistration",
+        save_dir = ANTsRegistration.userpath(),
+        dont_run = false)
+    if use_syn
+        mstr = "_SyN"
+    else
+        mstr = "_affine"
+    end
+    outprefix = Dates.format(DateTime(now()), DateFormat("YmmddTHHMMSSsZ"))
+    fixedname = joinpath(save_dir, "$(outprefix)_fixed.nrrd")
+    save(fixedname, fixed)
+    movingname = joinpath(save_dir, "$(outprefix)_moving.nrrd")
+    save(movingname, moving)
+    outname = joinpath(save_dir, outprefix*mstr)
+    # from ANTs zfish atlas paper
+    if use_syn
+        # syn_cmd = "-t SyN\[0.05,6,0.5\] -m CC\[$fixedname, $movingname,1,2\] -c \[$synMaxIter\x$synMaxIter\x$synMaxIter\x0,$synThreshold,10\] --shrink-factors 12x8x4x2 --smoothing-sigmas 4x3x2x1vox"
+        syn_cmd = `-t SyN\[0.05,6,0.5\] -m CC\[$fixedname, $movingname,1,2\] -c \[$synMaxIter\x$synMaxIter\x$synMaxIter\x$(synMaxIter)x10,$synThreshold,10\] --shrink-factors 12x8x4x2x1 --smoothing-sigmas 4x3x2x1x0vox`
+    else
+        syn_cmd = ``
+    end
+    affine_cmd = `$(ants_path) -d 3 --float -o \[$outname\_, $outname\_Warped.nii.gz, $outname\_WarpedInv.nii.gz\] --interpolation $interpolation --use-histogram-matching $histmatch -r \[$fixedname, $movingname,$initial_moving_type\] -t rigid\[0.1\] -m MI\[$fixedname, $movingname,1,32, Regular,    $sampling_frac\] -c \[$maxiter\x$maxiter\x$maxiter\x0,$threshold,10\] --shrink-factors 12x8x4x2 --smoothing-sigmas 4x3x2x1vox -t Affine\[0.1\] -m MI\[$fixedname, $movingname,1,32, Regular,$sampling_frac\] -c \[$maxiter\x$maxiter\x$maxiter\x0,$threshold,10\] --shrink-factors 12x8x4x2 --smoothing-sigmas 4x3x2x1vox`
+    cmd = `$(affine_cmd) $(syn_cmd)`
+
+    if dont_run
+        return cmd
+    end
+
+    println("calling ANTs...")
+    @time println(read(cmd, String))
+
+    affine_transform_path = glob(outprefix*"*GenericAffine.mat", save_dir)[1]
+    affine_transform = sio.loadmat(affine_transform_path)
+    warpedname = joinpath(outname*"_Warped.nii.gz")
+
+    # if this fails, tmpfs may be out of space
+    # try `rm -rf /run/user/1000/tyler/ANTs/`
+    registered = niread(warpedname);
+    println("finished registering!")
+    registered
 end

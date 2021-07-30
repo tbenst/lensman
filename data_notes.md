@@ -18,4 +18,20 @@ was broken until 2020-10-27 -- although still looks broken on 10/28 & 11/02 expe
 
 
 ## Spiral size
-As of 2021-03-09, now actually 7um for 25x. Prior to this, should assume size of 7um * 14.4/25
+As of 2021-03-09, now actually 7um for 25x. Prior to this, should assume size of 7um * 14.4/25## 
+
+## Olympus .oir files
+example xml buried inside of binary:
+```
+          <commonphase:opticalResolution/>^M
+          <commonphase:length>^M
+            <commonparam:x>0.662912607362388</commonparam:x>^M
+            <commonparam:y>0.662912607362388</commonparam:y>^M
+            <commonparam:z>10.0</commonparam:z>^M
+          </commonphase:length>^M
+          <commonphase:pixelUnit>^M
+            <commonphase:x>MICRO_METER</commonphase:x>^M
+            <commonphase:y>MICRO_METER</commonphase:y>^M
+            <commonphase:z>MICRO_METER</commonphase:z>^M
+          </commonphase:pixelUnit>^M
+```

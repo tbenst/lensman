@@ -1,5 +1,5 @@
 ## compare 
-# ENV["DISPLAY"] = "localhost:11.0"
+ENV["DISPLAY"] = "localhost:14.0"
 using Sockets, Observables, Statistics, Images, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
@@ -35,9 +35,12 @@ else
     # slmDir = "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
 end
 
-tseriesDir = "$tseriesRootDir/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+# tseriesDir = "$tseriesRootDir/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062"
 
-avg_stim_h5_path = "$(tseriesDir)_avgStim_lstm.h5"
+# avg_stim_h5_path = "$(tseriesDir)_avgStim_lstm.h5"
+avg_stim_h5_path = "$(tseriesDir)lstm_divide8192_avgStim.h5"
+# avg_stim_h5_path = "$(tseriesDir)_avgStim.h5"
 fish_dir = joinpath(splitpath(avg_stim_h5_path)[1:end-1]...)
 plot_dir = joinpath(fish_dir, "plots-denoised")
 if ~isdir(plot_dir)
@@ -48,7 +51,7 @@ avgStim = h5read(avg_stim_h5_path, "/block1");
 ##
 imshow(avgStim)
 ##
-imshow(avgStim[:,:,6,16,:])
+imshow(avgStim[:,:,:,16,:])
 ##
 figB = 1.6
 

@@ -522,3 +522,43 @@ function read_tyh5(tyh5_path,
     end
     tseries
 end
+
+"Read XYZ units in microns from Olympus .oir imaging file."
+function read_oir_units(oir_file)
+    x_regex = Regex(raw"^\s*<commonparam:x>([\d\.]+)+<")
+    y_regex = Regex(raw"^\s*<commonparam:y>([\d\.]+)+<")
+    z_regex = Regex(raw"^\s*<commonparam:z>([\d\.]+)+<")
+    x_um = NaN
+    y_um = NaN
+    z_um = NaN
+    for f in eachline(oir_file)
+        x_match = match(x_regex, f)
+        y_match = match(y_regex, f)
+        z_match = match(z_regex, f)
+        if ~isnothing(x_match)
+            x_um = parse(Float64, x_match.captures[1])
+        elseif ~isnothing(y_match)
+            y_um = parse(Float64, y_match.captures[1])
+        elseif ~isnothing(z_match)
+            z_um = parse(Float64, z_match.captures[1])
+        end
+        if ~isnan(x_um) & ~isnan(y_um) & ~isnan(z_um)
+            break
+        end
+    end
+    (x_um, y_um, z_um)
+end
+
+"Glob one and only one file."
+function glob_one_file(pattern, dir)
+    files = glob(pattern, dir)
+    @assert length(files)==1 "Expecting exactly one file: $files"
+    files[1]
+end
+
+function read_xml(xml_file)
+    open(xml_file, "r") do io
+        xml = read(io, String)
+        xp_parse(xml)
+    end
+end

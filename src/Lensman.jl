@@ -16,6 +16,7 @@ include("plots.jl")
 include("generic.jl")
 include("magic_numbers.jl")
 include("Types.jl")
+include("hdf5_threads.jl")
 
 peak_local_max = PyNULL()
 disk = PyNULL()
@@ -24,12 +25,11 @@ np = PyNULL()
 autolevel_percentile = PyNULL()
 scipy = PyNULL()
 machinery = PyNULL()
-# py_utils = PyNULL()
+py_utils = PyNULL()
 
 
-# TODO: should we auto-install python dependencies via `tables = pyimport_conda("tables", "pytables")` or similar?
 function __init__()
-    pyimport_conda("skimage", "scikit-image")
+    pyimport_conda("skimage", "scikit-image", "tables")
     # pyimport("skimage")
     copy!(peak_local_max, pyimport("skimage.feature").peak_local_max)
     copy!(disk, pyimport("skimage.morphology").disk)
@@ -41,6 +41,8 @@ function __init__()
 
     # Nifty util to load local Python source code
     copy!(machinery, pyimport("importlib.machinery"))
+    loader = machinery.SourceFileLoader("py_utils", joinpath(dirname(@__FILE__), "py_utils.py"))
+    copy!(py_utils, loader.load_module("py_utils"))
 end
 
 
@@ -74,30 +76,45 @@ function getMaskNameIncludes(masks, maskNameIncludes, units=zbrain_units)
     mask = AxisArray(Float32.(mask), (:y, :x, :z), zbrain_units)
 end
 
-function antsApplyTransforms2(fixedPath::String, moving::AxisArray, transformPath::String)
+"Apply one transform, and write moving to a tmp file."
+function antsApplyTransforms(fixedPath::String, moving::AxisArray, transformPath::String)
     movingPath = joinpath(tmppath, ANTsRegistration.write_nrrd(moving))
-    antsApplyTransforms2(fixedPath, movingPath, transformPath)
+    antsApplyTransforms(fixedPath, movingPath, transformPath)
 end
 
-function antsApplyTransforms2(fixedPath::String, movingPath::String, transformPath::String)
+"Apply one transform."
+function antsApplyTransforms(fixedPath::String, movingPath::String, transformPath::String)
     maskoutname = joinpath(tmppath, ANTsRegistration.randstring(10) * ".nii.gz")
-    antsApplyTransforms2(fixedPath, movingPath, transformPath, maskoutname)
+    antsApplyTransforms(fixedPath, movingPath, transformPath, maskoutname)
 end
 
-# function antsApplyTransforms2(fixedPath::String, movingPath::String, transformPath1::String, transformPath2::String)
+# function antsApplyTransforms(fixedPath::String, movingPath::String, transformPath1::String, transformPath2::String)
 #     maskoutname = joinpath(tmppath, ANTsRegistration.randstring(10) * ".nii.gz")
-#     antsApplyTransforms2(fixedPath, movingPath, transformPath1, transformPath2, maskoutname)
+#     antsApplyTransforms(fixedPath, movingPath, transformPath1, transformPath2, maskoutname)
 # end
 
-function antsApplyTransforms2(fixedPath::String, movingPath::String, transformPath::String, maskoutname::String)
-    run(`/home/tyler/.nix-profile/bin/antsApplyTransforms --float -d 3 -i $movingPath -r $fixedPath -t $transformPath -o $maskoutname`)
-    # run(`antsApplyTransforms --float -d 3 -i $movingPath -r $fixedPath -t $transformPath -o $maskoutname`)
+"Apply one transform and save file with given outname."
+function antsApplyTransforms(fixedPath::String, movingPath::String, transformPath::String, maskoutname::String,
+        ants_path = "/opt/ANTs/install/bin/antsApplyTransforms")
+    run(`$ants_path --float -d 3 -i $movingPath -r $fixedPath -t $transformPath -o $maskoutname`)
     niread(maskoutname)
 end
 
-function antsApplyTransforms2(fixedPath::String, movingPath::String, transformPath1::String, transformPath2::String, maskoutname::String)
-    run(`/home/tyler/.nix-profile/bin/antsApplyTransforms --float -d 3 -i $movingPath -r $fixedPath -t $transformPath2 -t $transformPath1 -o $maskoutname`)
-    # run(`antsApplyTransforms --float -d 3 -i $movingPath -r $fixedPath -t $transformPath -o $maskoutname`)
+"Apply two transforms, writing AxisArrays to tmp files."
+function antsApplyTransforms(fixed::AxisArray, moving::AxisArray,
+        transformPath1::String, transformPath2::String,
+        maskoutname = maskoutname = joinpath(tmppath, ANTsRegistration.randstring(10) * ".nii.gz"),
+        ants_path = "/opt/ANTs/install/bin/antsApplyTransforms")
+    fixedPath = joinpath(tmppath, ANTsRegistration.write_nrrd(fixed))
+    movingPath = joinpath(tmppath, ANTsRegistration.write_nrrd(moving))
+    antsApplyTransforms(fixedPath, movingPath, transformPath1, transformPath2,
+        maskoutname, ants_path)
+end
+
+"Apply two transforms on existing fixed & moving files."
+function antsApplyTransforms(fixedPath::String, movingPath::String, transformPath1::String, transformPath2::String, maskoutname::String,
+        ants_path = "/opt/ANTs/install/bin/antsApplyTransforms")
+    run(`$ants_path --float -d 3 -i $movingPath -r $fixedPath -t $transformPath2 -t $transformPath1 -o $maskoutname`)
     niread(maskoutname)
 end
 
@@ -370,6 +387,28 @@ function loadTseries(tifdir, containsStr::String="Ch3")
     tseries
 end
 
+"Sparse, memory efficent average of Tseries"
+function avgTseries(tifdir, containsStr::String="Ch3"; every=100)
+    H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir, containsStr)
+    newT = Int(ceil(T / every))
+    tseries = Array{UInt16}(undef, H, W, Z, newT)
+    memory_size_bytes = prod(size(tseries)) * 2
+    memory_size_gb = round(memory_size_bytes / 1024^3, digits=1)
+    println("estimated memory usage: $memory_size_gb")
+    p = Progress(T, 1, "Average tseries:")
+    times = collect(1:every:T)
+    # @threads for t in 1:every:T
+    @threads for i in 1:length(times)
+        t = times[i]
+        for z in 1:Z
+            tp = framePlane2tiffPath[t,z]
+            tseries[:,:,z,i] .= reinterpret(UInt16, ImageMagick.load(tp))
+        end
+        next!(p)
+    end
+    (sum(tseries, dims=4) ./ newT)[:,:,:,1]
+end
+
 "Load brightness over time of mask"
 function loadBOT(tifdir; freduce=mean, containsStr::String="Ch3")
     H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir, containsStr)
@@ -504,10 +543,6 @@ function write_experiment_to_tyh5(tseries, stim_masks, stim_used_at_each_timeste
     - `output_path::String`: full path to write .ty.h5 file to
     - `compression_level::Int`: compression level to use for blosc:zstd when writing out data
     """
-
-    # TODO(allan.raventos): pyutils can probably be set as a global at the top of this module
-    loader = machinery.SourceFileLoader("py_utils", joinpath(dirname(@__FILE__), "py_utils.py"))
-    py_utils = loader.load_module("py_utils")
     py_utils.write_experiment_to_tyh5(
         tseries,
         output_path,
@@ -899,6 +934,17 @@ function balanced_transition_order(nStims, nTransitionReps)
     trialOrder, successful
 end
 
+# TODO: is there a better pattern to auto wrap..?
+mutual_information(A,B) = py_utils.mutual_information(A,B)
+
+# sadly, the below pattern will throw an error
+# transparent_cmap = py_utils.transparent_cmap
+# so we make a wrapper function instead...
+# perhaps we should make a macro for this..?
+function transparent_cmap(cmap; N=255, max_alpha=0.8)
+    py_utils.transparent_cmap(cmap, N, max_alpha)
+end
+
 export read_microns_per_pixel,
     read_mask,
     zbrain_units,
@@ -987,10 +1033,22 @@ export read_microns_per_pixel,
     markpoints_magic_numbers,
     read_markpoints_series,
     write_markpoints,
-    antsApplyTransforms2,
+    antsApplyTransforms,
     vecvec2mat,
     read_markpoint_groups,
     balanced_transition_order,
     lazy_read_tyh5,
-    read_tyh5
+    read_tyh5,
+    read_oir_units,
+    ants_register,
+    avgTseries,
+    match_histogram,
+    mutual_information,
+    glob_one_file,
+    transparent_cmap,
+    funprod,
+    zeroToOne,
+    read_xml,
+    read_first_zaxis,
+    read_all_zaxis
 end

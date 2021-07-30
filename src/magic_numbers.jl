@@ -33,6 +33,7 @@ end
 # TODO: measure size in Prarie view
 function microscope_lateral_unit(W)
     @info "Assume 25x objective & 1x zoom"
+    @warn "should use read_microns_per_pixel instead!"
     if W == 1024
         0.6299544139175637μm
     elseif W == 512
