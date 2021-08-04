@@ -16,6 +16,8 @@ julia>ENV["PYTHON"] = "/home/groups/deissero/tyler/anaconda/bin/python" # option
 julia>]
 pkg>registry add https://github.com/HolyLab/HolyLabRegistry.git
 pkg>activate .
+pkg> add https://github.com/timholy/ANTsRegistration.jl
+pkg> add https://github.com/JuliaFolds/GeneratorsX.jl
 pkg>instantiate
 ```
 
@@ -27,15 +29,6 @@ using Pkg
 if isfile("Project.toml") && isfile("Manifest.toml")
     Pkg.activate(".")
 end
-```
-
-## adding registries / unregistered packages (if needed)
-```julia
-julia>]
-pkg> activate .
-pkg> registry add https://github.com/HolyLab/HolyLabRegistry.git
-pkg> add https://github.com/timholy/ANTsRegistration.jl
-pkg> add https://github.com/JuliaFolds/GeneratorsX.jl
 ```
 
 ## fix old glibc issue

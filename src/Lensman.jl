@@ -17,6 +17,8 @@ include("generic.jl")
 include("magic_numbers.jl")
 include("Types.jl")
 include("hdf5_threads.jl")
+include("dict_threads.jl")
+include("experiment.jl")
 
 peak_local_max = PyNULL()
 disk = PyNULL()
@@ -1063,5 +1065,6 @@ export read_microns_per_pixel,
     read_first_zaxis,
     read_all_zaxis,
     ez_gamma,
-    timeseries_df_f
+    timeseries_df_f,
+    Recording, compute_rec, debug
 end

@@ -20,3 +20,22 @@ function layer_imgs(base, layer; ratio=0.8)
     new += layer .* ratio
     new
 end
+
+"""Compute and assign local variables.
+```
+@experiment (etlVals, Z, H, W) = "2021-08-03/fish1/TSeries-1"
+```
+
+will expand to:
+```
+etlVals, Z, H, W = compute("2021-08-03/fish1/TSeries-1",
+    ["etlVals", "Z", "H", "W"])
+```
+"""
+macro experiment(ex)
+    @assert ex.head == :(=) "no `=` found in expression."
+    vars = ex.args[1] # :((etlVals, Z, H, W))
+    exp_name = ex.args[2] # "2021-08-03/fish1/TSeries-1"
+    vars_str = map(string, vars.args) # ["etlVals", "Z", "H", "W"]
+    esc(:($vars = compute($exp_name, $vars_str)))
+    # ex
