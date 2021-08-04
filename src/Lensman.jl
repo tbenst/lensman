@@ -196,20 +196,29 @@ function extractTrace(tseries, cartIdxs::Array{T,1}) where T <: CartesianIndex
     nT = size(tseries, ndims(tseries))
     trace = zeros(Float64, nT)
     for t in 1:nT
-        trace[t] = mean(reinterpret(UInt16, view(tseries, cartIdxs, t)))
+        # trace[t] = mean(reinterpret(UInt16, view(tseries, cartIdxs, t)))
+        trace[t] = mean(view(tseries, cartIdxs, t))
     end
     trace
 end
 
+# "Calculate df/f, assuming last dimension is time."
+# function df_f(f_timeseries, f0_timeseries)
+#     d = ndims(f_timeseries)
+#     f = selectdim(mean(f_timeseries, dims=d), d, 1)
+#     f0 = selectdim(mean(f0_timeseries, dims=d), d, 1)
+#     @. (f - f0) / f0
+# end
+
 "Calculate df/f, assuming last dimension is time."
-function df_f(f_timeseries, f0_timeseries)
+function timeseries_df_f(f_timeseries)
     d = ndims(f_timeseries)
-    f = selectdim(mean(f_timeseries, dims=d), d, 1)
-    f0 = selectdim(mean(f0_timeseries, dims=d), d, 1)
-    @. (f - f0) / f
+    f = f_timeseries
+    f0 = minimum(f_timeseries, dims=d)
+    @. (f - f0) / f0
 end
 
-    cartesianIndToArray = cartIdx2Array
+cartesianIndToArray = cartIdx2Array
 
 "Given (2d) image and list of CartesianIndices, return RGB image."
 function colorImage(image, cartesianIdxs; nDilate=0, imAlpa=0.5)
@@ -934,6 +943,8 @@ function balanced_transition_order(nStims, nTransitionReps)
     trialOrder, successful
 end
 
+ez_gamma(x,gamma=0.5) = adjust_histogram(imadjustintensity(x), GammaCorrection(gamma))
+
 # TODO: is there a better pattern to auto wrap..?
 mutual_information(A,B) = py_utils.mutual_information(A,B)
 
@@ -1050,5 +1061,7 @@ export read_microns_per_pixel,
     zeroToOne,
     read_xml,
     read_first_zaxis,
-    read_all_zaxis
+    read_all_zaxis,
+    ez_gamma,
+    timeseries_df_f
 end

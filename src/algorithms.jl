@@ -449,3 +449,25 @@ function ants_register(fixed, moving; interpolation = "BSpline",
     println("finished registering!")
     registered
 end
+
+
+"This doesn't work reliably..."
+function find_imaging_planes(zseries, avg_imaging)
+    nZ = size(zseries, 3)
+    nI = size(avg_imaging,3)
+    mi = zeros(nZ,nI)
+    # can't use threads due to PyCall;
+    # TODO: reimplement mutual_information using pure julia..?
+    @showprogress for z in 1:nZ
+        for i in 1:nI
+            zplane = convert(Array{Float64},collect(zseries[:,:,z]))
+            zplane = imresize(zplane, size(avg_imaging)[1:2])
+            img = avg_imaging[:,:,i]
+            # img = adjust_histogram(avg_imaging[:,:,i], GammaCorrection(0.3))
+            mi[z,i] = mutual_information(zplane, img)
+        end
+    end
+    matching_zplanes = Tuple.(argmax(mi,dims=1)[1,:])
+    map(x->x[1], matching_zplanes)
+
+end

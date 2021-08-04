@@ -1,11 +1,11 @@
 ## compare 
-ENV["DISPLAY"] = "localhost:11.0"
+# ENV["DISPLAY"] = "localhost:11.0"
 using Sockets, Observables, Statistics, Images, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
     Compose, ImageMagick, Random, PyCall, Arrow, ProgressMeter,
     RollingFunctions
-using ImageView
+# using ImageView
 import Gadfly
 using Unitful: μm, m, s, mW
 import Base.Threads.@threads
@@ -20,8 +20,8 @@ ON_SHERLOCK = read(`hostname`,String)[1:2] == "sh"
 if ON_SHERLOCK
     tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
 else
-    # tseriesRootDir = "/data/dlab/b115"
-    tseriesRootDir = "/scratch/b115"
+    tseriesRootDir = "/data/dlab/b115"
+    # tseriesRootDir = "/scratch/b115"
     # tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 end
 
@@ -38,24 +38,24 @@ else
 end
 
 # tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
-# tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
 # tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-titration-192trial-070"
-tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069"
 # tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069"
-tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192"
+# tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069"
+# tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192"
 
 
 # avg_stim_h5_path = "$(tseriesDir)_avgStim_lstm.h5"
-# avg_stim_h5_path = "$(tseriesDir)_avgStim.h5"
+avg_stim_h5_path = "$(tseriesDir)_avgStim.h5"
 # avg_stim_h5_path = "$(tseriesDir)lstm_divide8192_avgStim_lstm.h5"
-avg_stim_h5_path = "$(tseriesDir)lstm_divide8192_avgStim.h5"
+# avg_stim_h5_path = "$(tseriesDir)lstm_divide8192_avgStim.h5"
 fish_dir = joinpath(splitpath(avg_stim_h5_path)[1:end-1]...)
 plot_dir = joinpath(fish_dir, "plots-denoised")
 if ~isdir(plot_dir)
     mkdir(plot_dir)
 end
 ##
-avg_stim_h5_path = "/scratch/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062lstm_divide8192_avgStim.h5"
+# avg_stim_h5_path = "/scratch/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062lstm_divide8192_avgStim.h5"
 avgStim = h5read(avg_stim_h5_path, "/block1");
 # avgStim = h5read(avg_stim_h5_path, "/block1");
 ##
@@ -109,7 +109,10 @@ img = RGB.(zeros(512,512,10))
 # channelview(img)[2,:,:,:] .= (df_f[:,:,:,1] .> 1.0) .* 255
 channelview(img)[1,:,:,:] .= imadjustintensity(df_f[:,:,:,2])
 channelview(img)[2,:,:,:] .= imadjustintensity(df_f[:,:,:,1])
-imshow(img)
+# imshow(img)
+save(joinpath(plot_dir, "ipn-raphe-df_f_map.png"), img[:,:,3])
+img[:,:,3]
+
 
 ##
 function make_ellipse_mask(x,y,a,b,thesize=size(df_f)[1:2])

@@ -89,3 +89,7 @@ end
 ##
 h5path = joinpath("/tmp", "masks.h5")
 h5r = h5open(h5path, "r")
+##
+for k in keys(h5r)
+    println(k)
+end
