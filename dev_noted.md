@@ -145,3 +145,9 @@ where exp_URI is eg date_folder/fishX/TSeries*
 This is a form of row polymorphism..? Similar to lens..?
 And would extend some flexible struct with new methods so
 that new keys / capabilities are added...
+
+## dagger limits
+cannot iterate or index thunk
+No good:
+@par y = f()[end]
+@par (x, y) = f()

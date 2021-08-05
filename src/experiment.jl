@@ -1,10 +1,12 @@
 using Lensman.DictThreadSafe
+using Dagger
+import Dagger: @par
 # import Lensman.DictThreadSafe: dictsrv
 struct Recording
     uri::String
-    settings::Dict # not thread safe
-    # cache::DictSrv # thread safe
-    cache::Dict # thread safe
+    thunks::Dict
+    Recording(uri, settings) = new(
+        uri, make_dag(uri, merge(DEFAULT_SETTINGS, settings)))
 end
 
 # Recording(uri, settings) = Recording(uri, settings, dictsrv(Dict()))
@@ -19,101 +21,72 @@ DEFAULT_SETTINGS = Dict(
     :tseries_dset => nothing,
     :tyh5_path => nothing,
 )
-function Recording(uri, settings)
-    Recording(
-        uri, merge(DEFAULT_SETTINGS, settings), Dict()
-    )
+
+"Master DAG for all computations."
+function make_dag(uri, settings)
+    dag = Dict()
+    @pun (rel_plot_dir, tseries_dset) = settings
+    @par cache=true begin
+        tseries_dir = get_tseries_dir(uri, settings[:tseries_root_dirs])
+        fish_dir = get_fish_dir(tseries_dir)
+        expName = (x->splitpath(x)[end])(tseries_dir)
+        recording_folder = (x->splitpath(x)[end-2])(tseries_dir)
+        fish_name = (x->splitpath(x)[end-1])(tseries_dir)
+        plot_dir = joinpath(fish_dir, rel_plot_dir)
+        slm_dir = joinpath(fish_dir, "slm")
+        tyh5_path = get_tyh5_path(settings[:tyh5_path], tseries_dir)
+
+        tseries = get_tseries(tseries_dir, tyh5_path, tseries_dset)
+    end
+    @assign dag = (tseries_dir, fish_dir, tyh5_path, tseries)
+    dag
+end
+
+function slow_job()
+    sleep(5)
+    10
+end
+
+"""Gather a Tuple/array of Dagger.Thunk
+
+TODO: not very efficient as sequential, not parallel..?
+"""
+function gather(arr)
+    # @par t = Tuple(arr...)
+    # collect(t)
+    map(collect, arr)
 end
 
 function Base.getindex(r::Recording, k)
-    if k in keys(r.cache)
-        r.cache[k]
-    else
-        result = _compute_rec(r, k)
-        r.cache[k] = result
-        result
-    end
+    collect(r.thunks[k])
 end
 
+#### main analysis functions
 
-Base.setindex(e::Recording, k, v) = (e.cache[k] = v)
 
-"""Compute and assign local variables.
-```
-@experiment (etlVals, Z, H, W) = "2021-08-03/fish1/TSeries-1"
-```
-
-will expand to:
-```
-etlVals, Z, H, W = (
-    compute("2021-08-03/fish1/TSeries-1", Val(:etlVals)),
-    compute("2021-08-03/fish1/TSeries-1", Val(:Z)),
-    compute("2021-08-03/fish1/TSeries-1", Val(:H)),
-    compute("2021-08-03/fish1/TSeries-1", Val(:W)),
-```
-"""
-macro experiment(ex)
-    @assert ex.head == :(=) "no `=` found in expression."
-    vars = ex.args[1] # :((etlVals, Z, H, W))
-    exp_name = ex.args[2] # "2021-08-03/fish1/TSeries-1"
-    vars_str = map(string, vars.args) # ["etlVals", "Z", "H", "W"]
-    esc(:($vars = compute_rec($exp_name, $vars_str)))
-    # ex
-end
-
-function compute_rec(r::Recording, ::Val{:tseries_dir})
-    for root_dir in r.settings[:tseries_root_dirs]
-        path = joinpath(root_dir, r.uri)
+function get_tseries_dir(uri, tseries_root_dirs)
+    for root_dir in tseries_root_dirs
+        path = joinpath(root_dir, uri)
         if isdir(path)
             return path
         end
     end
-    "could not find experiment"
+    @error "could not find experiment"
 end
 
-function compute_rec(r::Recording, ::Val{:fish_dir})
-    @pun tseries_dir = r
+function get_fish_dir(tseries_dir)
     sp = splitpath(tseries_dir)[1:end-1]
     joinpath(sp...)
 end
 
-function compute_rec(r::Recording, ::Val{:plot_dir})
-    @pun fish_dir = r
-    plot_dir = joinpath(fish_dir, r.settings[:rel_plot_dir])
-end
-
-function compute_rec(r::Recording, ::Val{:exp_name})
-    @pun tseries_dir = r
-    expName = splitpath(tseries_dir)[end]
-end
-
-function compute_rec(r::Recording, ::Val{:recording_folder})
-    @pun tseries_dir = r
-    recording_folder = splitpath(tseriesDir)[end-2]
-end
-
-function compute_rec(r::Recording, ::Val{:fish_name})
-    @pun tseries_dir = r
-    fish_name = splitpath(tseriesDir)[end-1]
-end
-
-function compute_rec(r::Recording, ::Val{:slm_dir})
-    @pun fish_dir = r
-    slm_dir = joinpath(fish_dir, "slm")
-end
-
-function compute_rec(r::Recording, ::Val{:tyh5_path})
-    @pun tyh5_path = r.settings
-    if isnothing(tyh5_path)
-        @pun tseries_dir = r
+function get_tyh5_path(settings_tyh5_path, tseries_dir)
+    if isnothing(settings_tyh5_path)
         tyh5_path = tseries_dir*".ty.h5"
     end
     tyh5_path
 end
 
-function compute_rec(r::Recording, ::Val{:tseries})
-    @pun (tyh5_path, tseries_dset) = r.settings
-    @pun tseries_dir = r
+function get_tseries(tseries_dir, tyh5_path, tseries_dset)
     if ~isnothing(tseries_dset)
         if isnothing(tyh5_path)
             tyh5_path = tseries_dir*".ty.h5"
