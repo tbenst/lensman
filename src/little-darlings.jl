@@ -39,3 +39,30 @@ macro experiment(ex)
     vars_str = map(string, vars.args) # ["etlVals", "Z", "H", "W"]
     esc(:($vars = compute($exp_name, $vars_str)))
     # ex
+
+
+
+## code exploring NWB .nwb file for suite2p output
+using HDF5
+# h5 = h5open("/scratch/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123.ty.h5", "r")
+ophys = h5open("$suite2p_dir/ophys.nwb", "r")
+# 2 x nNeurons
+size(ophys["/processing/ophys/ImageSegmentation/PlaneSegmentation/iscell"])
+# (2, 11670)
+
+size(ophys["/processing/ophys/ImageSegmentation/PlaneSegmentation/voxel_mask"])
+# (556770,) => (x = 0x00000000, y = 0x000000b4, z = 0x00000000, weight = 0.0014966136f0)
+
+
+ophys["/processing/ophys/ImageSegmentation/"]
+# nNeurons
+size(ophys["/processing/ophys/ImageSegmentation/PlaneSegmentation/voxel_mask_index"])
+# (11670,) => uint, all unique numbers from (421, 556770)
+
+# nTime x nNeurons
+size(ophys["/processing/ophys/Fluorescence/Fluorescence/data"])
+# (11444, 11670)
+
+# worthless index list..?
+size(ophys["/processing/ophys/Fluorescence/Fluorescence/rois"])
+

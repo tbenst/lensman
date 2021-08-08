@@ -562,3 +562,79 @@ function read_xml(xml_file)
         xp_parse(xml)
     end
 end
+
+function load_zseries(zseries_dir; ch_str = "Ch3")
+    tiff_files = joinpath.(zseries_dir,
+        filter(x->(x[end-6:end]=="ome.tif") & occursin(ch_str, x),
+        readdir(zseriesdir)))
+    tif0 = ImageMagick.load(tiff_files[1])
+    zseriesH, zseriesW = size(tif0)
+
+    zseries = zeros(Normed{UInt16,16}, zseriesH, zseriesW, size(tiff_files, 1))
+    @threads for z in 1:size(tiff_files,1)
+        zseries[:,:,z] = ImageMagick.load(tiff_files[z])
+    end
+    zseries
+end
+
+"Read sean's mat file stim frequency"
+getMatStimFreq(mat) = sum((~).(sum.(mat["cfg"]["exp"]["targets"]) .≈ 0.0))*5
+getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0,0) ? 1 : 2
+
+function read_suite2p(suite2p_dir)
+    iscell = npzread(joinpath(suite2p_dir, "combined", "iscell.npy"));
+    nCells = size(iscell,1)
+    cells_mask = DataFrame()
+    combined_stat = PyObject[]
+    plane_dirs = glob("plane*", suite2p_dir)
+    tseriesZ = length(plane_dirs)
+    @assert tseriesZ > 0
+    for z in 1:tseriesZ
+        # have to process suite2p plane by plane due to
+        # https://github.com/MouseLand/suite2p/issues/655
+        stat = np.load(joinpath(suite2p_dir, "plane$(z-1)", "stat.npy"), allow_pickle=true);
+        
+        # iterate neurons in plane
+        cell_idx_offset = length(combined_stat)
+        for k in keys(stat)
+            # uses 1 indexing (julia) rather than 0 indexing (suite2p/python)
+            stat[k].update(iplane=z) # can't do []  assignment in PyCall
+            # add ypix, xpix, cellNum to DataFrame
+            xpix = stat[k].get("xpix")
+            npix = length(xpix)
+            cells_mask = vcat(cells_mask, DataFrame(xpix=xpix, ypix=stat[k].get("ypix"),
+                              neuron_id=repeat([k+cell_idx_offset], npix)))
+        end
+        
+        combined_stat = vcat(combined_stat, stat)
+    end
+    # nNeurons x 2
+    cell_centers = aa2a(map(x->np.array(get(x,"med")), combined_stat));
+    stat = Dict()
+    @assign stat = (nCells, cell_centers, cells_mask, iscell)
+    stat
+end
+
+function read_nwb_rois(nwb_path)
+    ophys = h5open(nwb_path, "r")
+    is_cell = transpose(read(ophys["/processing/ophys/ImageSegmentation/PlaneSegmentation/iscell"]))
+    voxel_mask = read(ophys["/processing/ophys/ImageSegmentation/PlaneSegmentation/voxel_mask"])
+    voxel_mask_index = read(ophys["/processing/ophys/ImageSegmentation/PlaneSegmentation/voxel_mask_index"])
+    cell_traces = read(ophys["/processing/ophys/Fluorescence/Fluorescence/data"])
+    cell_masks = DataFrame()
+    for (i,e) in enumerate(voxel_mask_index)
+        # https://hdmf.readthedocs.io/en/stable/hdmf.common.table.html#hdmf.common.table.VectorData
+        if i == 1
+            s = 1
+        else
+            s = voxel_mask_index[i-1] + 1
+        end
+        df = DataFrame(voxel_mask[s:e])
+        df.cell_id = repeat([i], size(df,1))
+        cell_masks = vcat(cell_masks, df)
+    end
+    nCells = size(is_cell,1)
+    ret = Dict()
+    @assign ret = (cell_traces, cell_masks, is_cell, nCells)
+    ret
+end

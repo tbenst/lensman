@@ -5,19 +5,21 @@ using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     Statistics, SharedArrays, CSV, DataFrames, Suppressor, Plots,
     LinearAlgebra, LibExpat, LightXML, RollingFunctions, HypothesisTests,
     EllipsisNotation, HDF5
-import Base.Threads.@threads
+import Base.Threads: @threads, @spawn, @sync
 using Distributed
 import Unitful: μm
+# using Dagger
 # https://github.com/JuliaPy/PyCall.jl#using-pycall-from-julia-modules
 
+include("generic.jl")
 include("algorithms.jl")
 include("files.jl")
 include("plots.jl")
-include("generic.jl")
 include("magic_numbers.jl")
 include("Types.jl")
 include("hdf5_threads.jl")
 include("dict_threads.jl")
+include("images.jl")
 include("experiment.jl")
 
 peak_local_max = PyNULL()
@@ -321,12 +323,13 @@ function getStimFrameIdx(voltageFile, Z; colname="respir", nTTLperStim=10)
     stimStartFrameIdx, stimEndFrameIdx
 end
 
-function getExpData(xmlPath)
-    local tseries_xml
+function getExpData(tseries_path::String)
     open(xmlPath, "r") do io
         tseries_xml = read(io, String)
-        tseries_xml = xp_parse(tseries_xml)
-    end;
+        xp_parse(tseries_xml)
+    end
+end
+function getExpData(tseries_xml::LibExpat.ETree)
     # warning: find has different syntax from xpath!!!
     expDate = LibExpat.find(tseries_xml, "/PVScan[1]{date}")
     expDate = DateTime(expDate, "m/d/y I:M:S p")
@@ -354,7 +357,8 @@ changing trial order), no new folder is made BUT the new files for
 the RUN are copied to the same subfolder
 (trialOrder_2020_11_02___22h04m47s.txt)
 """
-function getTrialOrder(slmExpDir, expDate)
+function getTrialOrder(slm_dir, expDate)
+    slmExpDir = joinpath(slm_dir,Dates.format(expDate, "dd-u-Y"))
     slmRunDirs = joinpath.(slmExpDir,
         filter(x -> isdir(joinpath(slmExpDir, x)), readdir(slmExpDir)))
 
@@ -380,6 +384,15 @@ function getTrialOrder(slmExpDir, expDate)
     trialOrder[1,:], joinpath(splitpath(trialOrderTxt)[1:end - 1]...)
 end
 
+function _loadTSeries!(tseries, t, framePlane2tiffPath, p, Z)
+    for z in 1:Z
+        tp = framePlane2tiffPath[t,z]
+        tseries[:,:,z,t] .= reinterpret(UInt16, ImageMagick.load(tp))
+    end
+    next!(p)
+end
+
+"Read a 4D (HWZT) tiff stack in parallel from a folder."
 function loadTseries(tifdir, containsStr::String="Ch3")
     H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir, containsStr)
     tseries = Array{UInt16}(undef, H, W, Z, T)
@@ -387,15 +400,9 @@ function loadTseries(tifdir, containsStr::String="Ch3")
     memory_size_gb = round(memory_size_bytes / 1024^3, digits=1)
     println("estimated memory usage: $memory_size_gb")
     p = Progress(T, 1, "Load Tseries: ")
-
-    @threads for t in 1:T
-        for z in 1:Z
-            tp = framePlane2tiffPath[t,z]
-            tseries[:,:,z,t] .= reinterpret(UInt16, ImageMagick.load(tp))
-        end
-        next!(p)
+    Threads.@sync for t in 1:T
+        Threads.@spawn _loadTSeries!(tseries, t, framePlane2tiffPath, p, Z)
     end
-    tseries
 end
 
 "Sparse, memory efficent average of Tseries"
@@ -1066,5 +1073,6 @@ export read_microns_per_pixel,
     read_all_zaxis,
     ez_gamma,
     timeseries_df_f,
-    Recording, compute_rec, debug
+    Recording, compute_rec, debug,
+    shift_every_other_row, get_random_color
 end
