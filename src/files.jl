@@ -566,7 +566,7 @@ end
 function load_zseries(zseries_dir; ch_str = "Ch3")
     tiff_files = joinpath.(zseries_dir,
         filter(x->(x[end-6:end]=="ome.tif") & occursin(ch_str, x),
-        readdir(zseriesdir)))
+        readdir(zseries_dir)))
     tif0 = ImageMagick.load(tiff_files[1])
     zseriesH, zseriesW = size(tif0)
 

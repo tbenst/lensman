@@ -21,6 +21,13 @@ DEFAULT_SETTINGS = Dict(
         "/data/dlab/b115",
         "/mnt/deissero/users/tyler/b115"
     ],
+    :slm_root_dirs => [
+        "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
+        "/mnt/deissero/users/tyler/b115/SLM_files",
+        "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/",
+        "/mnt/deissero/users/tyler/b115/SLM_files/",
+        "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
+    ],
     :rel_plot_dir => "plots",
     :tseries_dset => nothing,
     :tyh5_path => nothing,
@@ -36,23 +43,27 @@ DEFAULT_SETTINGS = Dict(
 function make_dag(uri, settings)
     dag = Dict()
     @pun (rel_plot_dir, tseries_dset, zseries_name, tseries_root_dirs,
-        slm_dir
+        slm_dir, slm_root_dirs
     ) = settings
-    procutil=Dict(Dagger.ThreadProc => 36.0)
+    # procutil=Dict(Dagger.ThreadProc => 36.0)
     
-    # TODO: figure out how to read slmTxtFile...
+    # TODO: figure out how to read slmTxtFile when multiple options...
+    # (only needed for power fraction)
+    # TODO: error doesn't show proper line number..
     # @par cache=true procutil=procutil begin
+    # TODO: write new macro that first check if left hand symbol in
+    # dict, if not then assign thunk. This way can rerun this function
+    # multiple times to update DAG for live coding w/o invalidating cache
     @thunk begin
-        tseries_dir = get_series_dir(uri, tseries_root_dirs)
+        tseries_dir = find_folder(uri, tseries_root_dirs)
         fish_dir = get_fish_dir(tseries_dir)
-        zseries_dir = get_series_dir(zseries_name, tseries_root_dirs)
+        zseries_dir = joinpath(fish_dir, zseries_name)
         expName = (x->splitpath(x)[end])(tseries_dir)
         recording_folder = (x->splitpath(x)[end-2])(tseries_dir)
         fish_name = (x->splitpath(x)[end-1])(tseries_dir)
         plot_dir = joinpath(fish_dir, rel_plot_dir)
-        slm_dir = joinpath(fish_dir, "slm")
+        local_slm_dir = joinpath(fish_dir, "slm")
         tyh5_path = get_tyh5_path(settings[:tyh5_path], tseries_dir)
-        # test = slow_job()
         test = count_threads()
         tseries = get_tseries(tseries_dir, tyh5_path, tseries_dset)
         zseries = load_zseries(zseries_dir)
@@ -64,14 +75,19 @@ function make_dag(uri, settings)
         exp_date = ((x)->x[1])(result)
         frame_rate = ((x)->x[2])(result)
         etl_vals = ((x)->x[3])(result)
-        tseriesH = size(tseries,1)
-        tseriesW = size(tseries,2)
-        tseriesZ = size(tseries,3)
-        tseriesT = size(tseries,4)
+        res0 = tseriesTiffDirMetadata(tseries_dir)
+        tseriesH = getindex(res0,1)
+        tseriesW = getindex(res0,2)
+        tseriesZ = getindex(res0,3)
+        tseriesT = getindex(res0,4)        
         zseriesH = size(zseries,1)
         zseriesW = size(zseries,2)
         zseriesZ = size(zseries,3)
-        res = getTrialOrder(slm_dir, exp_date)
+        vol_rate = frame_rate / tseriesZ
+        date_str = Dates.format(exp_date, "dd-u-Y")
+        tmp = find_folder(date_str, slm_root_dirs)
+        used_slm_dir = (x->joinpath(splitpath(x)[1:end-1]...))(tmp)
+        res = getTrialOrder(used_slm_dir, exp_date)
         trial_order = getindex(res,1)
         slm_exp_dir = getindex(res,2)
         first_target_group = ((x)->matread.(findMatGroups(x)[1]))(slm_exp_dir)
@@ -98,6 +114,14 @@ function make_dag(uri, settings)
         cell_masks = getindex(ndict,:cell_masks)
         iscell = getindex(ndict,:iscell)
         nCells = getindex(ndict,:nCells)
+        d0 = splitpath(zseries_dir)
+        zseries_xml_path = (d->joinpath(d..., d[lastindex(d)] * ".xml"))(d0)
+        zseries_xml = read_xml(zseries_xml_path);
+        zseries_zaxes = read_all_zaxis(zseries_xml)
+        # this is ugly, should fix with macro...
+        et = ((e,t)-> e .+t)(etl_vals, tseries_zaxis)
+        f = (x->z->searchsortedfirst(x, z))(zseries_zaxes)
+        imaging2zseries_plane = map(f, et)
         # sdict = read_suite2p(suite2p_dir)
         # nCells = getindex(sdict,:nCells)
         # cell_centers = getindex(sdict,:cell_centers)
@@ -122,14 +146,15 @@ function make_dag(uri, settings)
 
     @assign dag = (
         tseries_dir, fish_dir, zseries_dir, expName, recording_folder,
-        fish_name, plot_dir, slm_dir, tyh5_path, test, tseries, zseries,
+        fish_name, plot_dir, local_slm_dir, tyh5_path, test, tseries, zseries,
         zseries_xml, tseries_xml, zseries_zaxes, tseries_zaxis, result,
         exp_date, frame_rate, etl_vals, tseriesH, tseriesW, tseriesZ, tseriesT,
         zseriesH, zseriesW, zseriesZ, res, trial_order, slm_exp_dir,
         first_target_group, slm_num, power_per_cell, res2, slm1_power,
         slm2_power, voltageFile, res3, stimStartIdx, stimEndIdx, frameStartIdx,
         res4, target_groups, group_stim_freq, nStimuli, nTrials, zOffset,
-        suite2p_dir, nwb_path, ndict, cell_traces, cell_masks, iscell, nCells
+        suite2p_dir, nwb_path, ndict, cell_traces, cell_masks, iscell, nCells,
+        used_slm_dir, vol_rate, imaging2zseries_plane, zseries_xml
     )
 
     dag
@@ -208,8 +233,9 @@ function is_setting(settings, key, continuation_thunk=ithunk())
     end
 end
 
-function get_series_dir(name, tseries_root_dirs)
-    for root_dir in tseries_root_dirs
+"Find a folder in first root_dirs where path exists."
+function find_folder(name, root_dirs)
+    for root_dir in root_dirs
         path = joinpath(root_dir, name)
         try
             if isdir(path)
@@ -218,7 +244,7 @@ function get_series_dir(name, tseries_root_dirs)
         catch
         end
     end
-    @error "could not find experiment"
+    @error "could not find folder $name"
 end
 
 

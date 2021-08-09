@@ -1,3 +1,5 @@
+using Random
+
 function get_random_color(seed)
     Random.seed!(seed)
     rand(RGB{N0f8})
