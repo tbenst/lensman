@@ -471,3 +471,18 @@ function find_imaging_planes(zseries, avg_imaging)
     map(x->x[1], matching_zplanes)
 
 end
+
+"Given a threshould, find the lowest stim number where all df_f are above"
+function stim_roi_threshold(df, key, thresh, nStimuli; id_key=:cell_id,
+        fraction_above=0.75)
+    cell_id = df[1,id_key]
+    for s in 1:nStimuli
+        idxs = df.stim .>= s
+        if (sum(df[idxs,key] .> thresh)/length(df[idxs,key])) > fraction_above
+            return s
+        end
+    end
+    # hack so background is black with 16 stimulation conditions
+    # we will mask out
+    return -1
+end

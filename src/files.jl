@@ -471,7 +471,7 @@ end
 function lazy_read_tyh5(tyh5_path,
         dset_path="/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm")
     @info "assume WHZCT, convert to HWZT"
-    h5 = h5open(tyh5_path,"r")
+    h5 = h5open(tyh5_path,"r", swmr=true)
     dset = h5[dset_path]
     return h5, LazyTy5(dset)
 end
@@ -637,4 +637,25 @@ function read_nwb_rois(nwb_path)
     ret = Dict()
     @assign ret = (cell_traces, cell_masks, is_cell, nCells)
     ret
+end
+
+"Read HDF5 file in parallel and calculate per-trial df/f."
+function get_df_f_per_voxel_per_trial_from_h5(tyh5_path, tseries_dset,
+        stimStartIdx, stimEndIdx, window_len, tseriesH, tseriesW, tseriesZ)
+    nTrials = length(stimStartIdx)
+    df_f_per_voxel_per_trial = 
+        SharedArray{Float64}(nTrials, tseriesH, tseriesW, tseriesZ);
+    @sync @distributed for i in 1:nTrials
+        h5open(tyh5_path, "r", swmr=true) do thread_h5
+            thread_tseries = thread_h5[tseries_dset]
+            # thread_tseries = lazy_read_tyh5(tyh5_path) # crashes
+            st, en = stimStartIdx[i], stimEndIdx[i]
+            s = st - 1
+            e = en + 1
+            f0 = mean(thread_tseries[:,:,:,:,s-window_len:s],dims=5)
+            f = mean(thread_tseries[:,:,:,:,e:e+window_len],dims=5)
+            df_f_per_voxel_per_trial[i,:,:,:] = @. (f - f0) / (f0 + 5)
+        end
+    end
+    convert(Array,df_f_per_voxel_per_trial)
 end

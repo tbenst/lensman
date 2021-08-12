@@ -1,6 +1,6 @@
 using Lensman.DictThreadSafe
-using Dagger
-import Dagger: @par
+# using Dagger
+# import Dagger: @par
 using Thunks, NPZ
 # import Lensman.DictThreadSafe: dictsrv
 struct Recording
@@ -34,6 +34,7 @@ DEFAULT_SETTINGS = Dict(
     :zbrain_units => (0.798μm, 0.798μm, 2μm),
     :slm_dir => "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/",
     :suite2p_dir => nothing,
+    :lazy_tyh5 => true
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment",
@@ -43,7 +44,7 @@ DEFAULT_SETTINGS = Dict(
 function make_dag(uri, settings)
     dag = Dict()
     @pun (rel_plot_dir, tseries_dset, zseries_name, tseries_root_dirs,
-        slm_dir, slm_root_dirs
+        slm_dir, slm_root_dirs, lazy_tyh5
     ) = settings
     # procutil=Dict(Dagger.ThreadProc => 36.0)
     
@@ -65,7 +66,7 @@ function make_dag(uri, settings)
         local_slm_dir = joinpath(fish_dir, "slm")
         tyh5_path = get_tyh5_path(settings[:tyh5_path], tseries_dir)
         test = count_threads()
-        tseries = get_tseries(tseries_dir, tyh5_path, tseries_dset)
+        tseries = get_tseries(tseries_dir, tyh5_path, tseries_dset, lazy_tyh5)
         zseries = load_zseries(zseries_dir)
         zseries_xml = read_rec_xml(zseries_dir)
         tseries_xml = read_rec_xml(tseries_dir)
@@ -122,6 +123,14 @@ function make_dag(uri, settings)
         et = ((e,t)-> e .+t)(etl_vals, tseries_zaxis)
         f = (x->z->searchsortedfirst(x, z))(zseries_zaxes)
         imaging2zseries_plane = map(f, et)
+        window_len = ((vol_rate)->Int(floor(5 * vol_rate)) - 1)(vol_rate)
+        df_f_per_voxel_per_trial = get_df_f_per_voxel_per_trial_from_h5(
+            tyh5_path, tseries_dset, stimStartIdx, stimEndIdx, window_len,
+            tseriesH, tseriesW, tseriesZ)
+        df_f_per_trial_dataframe = get_df_f_per_trial_dataframe(
+            df_f_per_voxel_per_trial, trial_order)
+
+
         # sdict = read_suite2p(suite2p_dir)
         # nCells = getindex(sdict,:nCells)
         # cell_centers = getindex(sdict,:cell_centers)
@@ -154,7 +163,8 @@ function make_dag(uri, settings)
         slm2_power, voltageFile, res3, stimStartIdx, stimEndIdx, frameStartIdx,
         res4, target_groups, group_stim_freq, nStimuli, nTrials, zOffset,
         suite2p_dir, nwb_path, ndict, cell_traces, cell_masks, iscell, nCells,
-        used_slm_dir, vol_rate, imaging2zseries_plane, zseries_xml
+        used_slm_dir, vol_rate, imaging2zseries_plane, zseries_xml,
+        df_f_per_voxel_per_trial, df_f_per_trial_dataframe
     )
 
     dag
@@ -266,12 +276,16 @@ function get_tyh5_path(settings_tyh5_path, tseries_dir)
     end
 end
 
-function get_tseries(tseries_dir, tyh5_path, tseries_dset)
+function get_tseries(tseries_dir, tyh5_path, tseries_dset, lazy_tyh5)
     if ~isnothing(tseries_dset)
         if isnothing(tyh5_path)
             tyh5_path = tseries_dir*".ty.h5"
         end
-        h5, tseries = lazy_read_tyh5(tyh5_path, tseries_dset);
+        if lazy_tyh5
+            h5, tseries = lazy_read_tyh5(tyh5_path, tseries_dset);
+        else
+            tseries = read_tyh5(tyh5_path, tseries_dset)
+        end
     else
         tseries = loadTseries(tseries_dir);
     end

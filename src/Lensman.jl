@@ -4,7 +4,7 @@ using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     ImageDraw, ImageFiltering, PyCall, MAT, Dates, DataStructures,
     Statistics, SharedArrays, CSV, DataFrames, Suppressor, Plots,
     LinearAlgebra, LibExpat, LightXML, RollingFunctions, HypothesisTests,
-    EllipsisNotation, HDF5
+    EllipsisNotation, HDF5, Distributed
 import Base.Threads: @threads, @spawn, @sync
 using Distributed
 import Unitful: μm
@@ -20,6 +20,8 @@ include("Types.jl")
 include("hdf5_threads.jl")
 include("dict_threads.jl")
 include("images.jl")
+include("distributed.jl")
+include("dataframes.jl")
 include("experiment.jl")
 
 peak_local_max = PyNULL()
@@ -384,13 +386,26 @@ function getTrialOrder(slm_dir, expDate)
     trialOrder[1,:], joinpath(splitpath(trialOrderTxt)[1:end - 1]...)
 end
 
-function _loadTSeries!(tseries, t, framePlane2tiffPath, p, Z)
-    for z in 1:Z
-        tp = framePlane2tiffPath[t,z]
-        tseries[:,:,z,t] .= reinterpret(UInt16, ImageMagick.load(tp))
-    end
-    next!(p)
-end
+# function _loadTSeries!(tseries, t, framePlane2tiffPath, p, Z)
+#     for z in 1:Z
+#         tp = framePlane2tiffPath[t,z]
+#         tseries[:,:,z,t] .= reinterpret(UInt16, ImageMagick.load(tp))
+#     end
+#     next!(p)
+# end
+
+# "Read a 4D (HWZT) tiff stack in parallel from a folder."
+# function loadTseries(tifdir, containsStr::String="Ch3")
+#     H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir, containsStr)
+#     tseries = Array{UInt16}(undef, H, W, Z, T)
+#     memory_size_bytes = prod(size(tseries)) * 2
+#     memory_size_gb = round(memory_size_bytes / 1024^3, digits=1)
+#     println("estimated memory usage: $memory_size_gb")
+#     p = Progress(T, 1, "Load Tseries: ")
+#     Threads.@sync for t in 1:T
+#         Threads.@spawn _loadTSeries!(tseries, t, framePlane2tiffPath, p, Z)
+#     end
+# end
 
 "Read a 4D (HWZT) tiff stack in parallel from a folder."
 function loadTseries(tifdir, containsStr::String="Ch3")
@@ -400,9 +415,15 @@ function loadTseries(tifdir, containsStr::String="Ch3")
     memory_size_gb = round(memory_size_bytes / 1024^3, digits=1)
     println("estimated memory usage: $memory_size_gb")
     p = Progress(T, 1, "Load Tseries: ")
-    Threads.@sync for t in 1:T
-        Threads.@spawn _loadTSeries!(tseries, t, framePlane2tiffPath, p, Z)
+
+    @threads for t in 1:T
+        for z in 1:Z
+            tp = framePlane2tiffPath[t,z]
+            tseries[:,:,z,t] .= reinterpret(UInt16, ImageMagick.load(tp))
+        end
+        next!(p)
     end
+    tseries
 end
 
 "Sparse, memory efficent average of Tseries"
@@ -609,19 +630,6 @@ function constructGroupMasks(groupLocs, H, W, Z;
         end
     end
     reinterpret(Bool, groupMasks)
-end
-
-
-function init_workers(nprocs=36)
-    addprocs(nprocs)
-    exp = quote
-        @everywhere begin
-            import Pkg
-        Pkg.activate(".")
-            using Lensman
-        end
-    end
-    @suppress_err eval(macroexpand(Distributed, exp))
 end
 
 function allWithin(array, fraction)
@@ -1074,5 +1082,8 @@ export read_microns_per_pixel,
     ez_gamma,
     timeseries_df_f,
     Recording, compute_rec, debug,
-    shift_every_other_row, get_random_color
+    shift_every_other_row, get_random_color,
+    df_f_per_voxel_per_trial_from_h5,
+    get_df_f_per_trial_dataframe,
+    stim_roi_threshold
 end
