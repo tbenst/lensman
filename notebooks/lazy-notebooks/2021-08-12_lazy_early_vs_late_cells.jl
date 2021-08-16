@@ -14,19 +14,7 @@ L = Lensman
 # import Dagger.Sch: ThunkOptions
 init_workers()
 ##
-
-r = Recording(
-    "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123";
-    zseries_name="ZSeries-structural-840nm-058",
-    # tseries_dset = "/imaging/LSTM_per-voxel-state_divide2048-2021-07-02",
-    tseries_dset = "/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm",
-    tyh5_path="/scratch/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-1232021-06-21_6pm.ty.h5",
-    suite2p_dir="/scratch/b115/2021-06-08_rsChRmine_h2b6s/fish2/s2p/suite2p",
-    lazy_tyh5=true
-    # tseries_root_dirs = [
-    #     "/data/b115"
-    # ],
-);
+r = Recordings["2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"]()
 # @pun df_f_per_voxel_per_trial = r;
 ##
 
@@ -40,7 +28,7 @@ r = Recording(
 
 global df_f_per_trial_dataframe
 if ~in(:df_f_per_trial_dataframe, keys(r.thunks))
-    @thunk begin
+    @lazy begin
         window_len = ((vol_rate)->Int(floor(5 * vol_rate)) - 1)(vol_rate)
         df_f_per_trial_dataframe = get_df_f_per_trial_dataframe(
             df_f_per_voxel_per_trial, trial_order)
@@ -348,7 +336,7 @@ img
 # Gray.(x)
 
 ## example for extending DAG....
-# @thunk begin
+# @lazy begin
 #     suite2p_dir = L.is_setting(:suite2p_dir, get_suite2p_dir(r.thunks[:tseries_dir]))
 # end
 ##

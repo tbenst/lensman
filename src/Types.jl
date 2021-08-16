@@ -1,8 +1,20 @@
 struct LazyTy5
+    tyh5_path::String
+    dset_str::String
+    h5::HDF5.File
     dset::HDF5.Dataset
+    function LazyTy5(tyh5_path, dset_str; mode="r", swmr=true)
+        h5 = h5open(tyh5_path, mode, swmr=swmr)
+        dset = h5[dset_str]
+        new(tyh5_path, dset_str, h5, dset)
+    end
 end
 
-"Index by HWZT & read from .ty.h5 file."
+"""
+Index by HWZT & read from .ty.h5 file.
+
+We ignore singleton Channel, and flip WH: WHCZT -> HWZT
+"""
 function Base.getindex(X::LazyTy5,i...)
     h,w,z,t = i
     c = 1
@@ -18,6 +30,10 @@ end
 function Base.size(X::LazyTy5)
     W, H, Z, C, T = size(X.dset)
     H, W, Z, T
+end
+
+function Base.close(X::LazyTy5)
+    close(X.h5)
 end
 
 function Base.size(X::LazyTy5, i)

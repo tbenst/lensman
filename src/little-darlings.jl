@@ -66,3 +66,17 @@ size(ophys["/processing/ophys/Fluorescence/Fluorescence/data"])
 # worthless index list..?
 size(ophys["/processing/ophys/Fluorescence/Fluorescence/rois"])
 
+
+##
+    
+## pattern for extending DAG (ugly! ergonomics should be improved..macro?)
+global df_f_per_trial_dataframe
+if ~in(:df_f_per_trial_dataframe, keys(r.thunks))
+    @lazy begin
+        window_len = ((vol_rate)->Int(floor(5 * vol_rate)) - 1)(vol_rate)
+        df_f_per_trial_dataframe = get_df_f_per_trial_dataframe(
+            df_f_per_voxel_per_trial, trial_order)
+    end
+    @assign r.thunks = df_f_per_trial_dataframe
+end
+@pun df_f_per_trial_dataframe = r;

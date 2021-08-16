@@ -7,8 +7,10 @@ struct Recording
     uri::String
     settings::Dict
     thunks::Dict
-    Recording(uri; settings...) = new(
-        uri, settings, make_dag(uri, merge(DEFAULT_SETTINGS, settings)))
+    function Recording(uri; settings...)
+        new_settings = merge(DEFAULT_SETTINGS, settings)
+        new(uri, new_settings, make_dag(uri, new_settings))
+    end
 end
 
 
@@ -28,23 +30,40 @@ DEFAULT_SETTINGS = Dict(
         "/mnt/deissero/users/tyler/b115/SLM_files/",
         "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
     ],
-    :rel_plot_dir => "plots",
+    :zbrain_dir => "/mnt/deissero/users/tyler/zbrain",
+    :rel_plot_dir => "denoised-plots",
     :tseries_dset => nothing,
     :tyh5_path => nothing,
     :zbrain_units => (0.798μm, 0.798μm, 2μm),
     :slm_dir => "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/",
+    :oir_dir => "",
     :suite2p_dir => nothing,
-    :lazy_tyh5 => true
+    :warp_prefix => "",
+    :lazy_tyh5 => true,
+    :window_secs => 5,
+    :ants_no_run => true, # TODO: make false once tested
+    :oir_920_name => "",
+    :oir_820_name => "",
+    :warp_prefix => "",
+    :notes => "",
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment",
 )
 
+# TODO: how do we handle the several formas of a tseries..?
+# - h5 file dset
+# - array
+# string of h5_path for multiprocessing
+# answer => use multiple dispatch + interface of required methods
+# and LazyTy5 should be able to give strings for dset/h5path for multiprocessing
+
 "Master DAG for all computations."
 function make_dag(uri, settings)
     dag = Dict()
     @pun (rel_plot_dir, tseries_dset, zseries_name, tseries_root_dirs,
-        slm_dir, slm_root_dirs, lazy_tyh5
+        slm_dir, slm_root_dirs, lazy_tyh5, window_secs, zbrain_dir,
+        oir_dir, warp_prefix, oir_920_name, oir_820_name
     ) = settings
     # procutil=Dict(Dagger.ThreadProc => 36.0)
     
@@ -62,7 +81,7 @@ function make_dag(uri, settings)
         expName = (x->splitpath(x)[end])(tseries_dir)
         recording_folder = (x->splitpath(x)[end-2])(tseries_dir)
         fish_name = (x->splitpath(x)[end-1])(tseries_dir)
-        plot_dir = joinpath(fish_dir, rel_plot_dir)
+        plot_dir = make_joinpath(fish_dir, rel_plot_dir)
         local_slm_dir = joinpath(fish_dir, "slm")
         tyh5_path = get_tyh5_path(settings[:tyh5_path], tseries_dir)
         test = count_threads()
@@ -102,6 +121,7 @@ function make_dag(uri, settings)
         stimStartIdx = getindex(res3,1)
         stimEndIdx = getindex(res3,2)
         frameStartIdx = getindex(res3,3)
+        nstim_pulses = getindex(res3,4)
         res4 = get_target_groups(slm_exp_dir)
         target_groups = getindex(res4,1)
         group_stim_freq = getindex(res4,1)
@@ -123,13 +143,47 @@ function make_dag(uri, settings)
         et = ((e,t)-> e .+t)(etl_vals, tseries_zaxis)
         f = (x->z->searchsortedfirst(x, z))(zseries_zaxes)
         imaging2zseries_plane = map(f, et)
-        window_len = ((vol_rate)->Int(floor(5 * vol_rate)) - 1)(vol_rate)
+        window_len = ((vol_rate)->Int(round(window_secs * vol_rate)))(vol_rate)
         df_f_per_voxel_per_trial = get_df_f_per_voxel_per_trial_from_h5(
             tyh5_path, tseries_dset, stimStartIdx, stimEndIdx, window_len,
             tseriesH, tseriesW, tseriesZ)
         df_f_per_trial_dataframe = get_df_f_per_trial_dataframe(
             df_f_per_voxel_per_trial, trial_order)
-
+        tseries_is1024 = (tseriesW==1024)
+        twp1 = mapTargetGroupsToPlane(target_groups, etl_vals,
+            is1024=tseries_is1024, zOffset=zOffset)
+        targets_with_plane_index = map(x->Int.(round.(x, digits=0)), twp1)
+        cells = makeCellsDF(targets_with_plane_index, stimStartIdx, stimEndIdx,
+            trial_order, group_stim_freq)
+        trial_average = calc_trial_average(tseries, stimStartIdx,
+            stimEndIdx, tseriesH, tseriesW, tseriesZ, trial_order;
+            pre=window_len, post=window_len)
+        lateral_unit = microscope_lateral_unit(tseriesZ)
+        target_size_px = spiral_size(exp_date, lateral_unit)
+        h2b_zbrain = read_zbrain_line("$zbrain_dir/AnatomyLabelDatabase.hdf5",
+            "Elavl3-H2BRFP_6dpf_MeanImageOf10Fish")
+        zbrain_warps = glob("*SyN_Warped.nii.gz", fish_dir)
+        zbrain_ants_cmd = (zbrain_warps -> length(zbrain_warps)==0 ? ants_register(fixed, moving; interpolation = "WelchWindowedSinc",
+            histmatch = 0, sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
+            use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
+            save_dir=fishDir, dont_run = true) : "using cached ANTs for zbrain registration")(zbrain_warps)
+        zbrain_warpedname = glob_one_file("*SyN_Warped.nii.gz", fish_dir)
+        zbrain_registered = niread(zbrain_warpedname)
+        oir_920_file = joinpath(oir_dir, oir_920_name)
+        oir_820_file = joinpath(oir_dir, oir_820_name)
+        multimap_920 = read_olympus(oir_920_file)
+        multimap_820 = read_olympus(oir_820_file)
+        multimap_warps = glob("*SyN_Warped.nii.gz", fish_dir)
+        multimap_ants_cmd = (multimap_warps -> length(multimap_warps)==0 ? ants_register(fixed, moving; interpolation = "WelchWindowedSinc",
+            histmatch = 0, sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
+            use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
+            save_dir=fishDir, dont_run = true) : "using cached ANTs for multimap registration")(zbrain_warps)
+        multimap_warpedname = glob_one_file("$warp_prefix*SyN_Warped.nii.gz", oir_dir)
+        mm920_registered = niread(multimap_warpedname)
+        mm_transform_affine = glob_one_file("$warp_prefix*GenericAffine.mat", oir_dir)
+        mm_transform_SyN = glob_one_file("$warp_prefix*SyN_1Warp.nii.gz", oir_dir)
+        mm820_registered = multimap_transforms(zseries, multimap_820,
+            mm_transform_affine, mm_transform_SyN)
 
         # sdict = read_suite2p(suite2p_dir)
         # nCells = getindex(sdict,:nCells)
@@ -164,7 +218,10 @@ function make_dag(uri, settings)
         res4, target_groups, group_stim_freq, nStimuli, nTrials, zOffset,
         suite2p_dir, nwb_path, ndict, cell_traces, cell_masks, iscell, nCells,
         used_slm_dir, vol_rate, imaging2zseries_plane, zseries_xml,
-        df_f_per_voxel_per_trial, df_f_per_trial_dataframe
+        df_f_per_voxel_per_trial, df_f_per_trial_dataframe, lateral_unit,
+        targets_with_plane_index, cells, trial_average, window_len,
+        target_size_px, h2b_zbrain, zbrain_registered, zbrain_ants_cmd,
+        zbrain_registered, mm920_registered, mm820_registered, nstim_pulses
     )
 
     dag
@@ -282,7 +339,7 @@ function get_tseries(tseries_dir, tyh5_path, tseries_dset, lazy_tyh5)
             tyh5_path = tseries_dir*".ty.h5"
         end
         if lazy_tyh5
-            h5, tseries = lazy_read_tyh5(tyh5_path, tseries_dset);
+            tseries = LazyTy5(tyh5_path, tseries_dset);
         else
             tseries = read_tyh5(tyh5_path, tseries_dset)
         end

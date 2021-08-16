@@ -1,3 +1,4 @@
+tifffile = pyimport("tifffile")
 
 """Make .mat file for Sean's multiSLM stim software.
 
@@ -228,12 +229,12 @@ function getStimTimesFromVoltages(voltageFile, Z::Int;
     frameStartIdx = findall(frameStarted .== 1) .+ 1
 
     ttlStarts = findTTLStarts(voltages[!,stim_key])
-    stimDur = countPulsesMaxGap(ttlStarts)
-    stimStartIdx = ttlStarts[1:stimDur:end]
-    stimEndIdx = findTTLEnds(voltages[!,stim_key])[stimDur:stimDur:end]
+    nstim_pulses = countPulsesMaxGap(ttlStarts)
+    stimStartIdx = ttlStarts[1:nstim_pulses:end]
+    stimEndIdx = findTTLEnds(voltages[!,stim_key])[nstim_pulses:nstim_pulses:end]
     stimStartFrameIdx = [Int.(floor.(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimStartIdx]
     stimEndFrameIdx = [Int.(ceil(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimEndIdx]
-    stimStartFrameIdx, stimEndFrameIdx, frameStartIdx
+    stimStartFrameIdx, stimEndFrameIdx, frameStartIdx, nstim_pulses
 end
 
 """Read multiple voltageFiles and concatenate.
@@ -467,14 +468,14 @@ function write_trial_order(trial_order, outname)
 end
 
 
-"Allows lazy but memoized indexing from HDF5 file."
-function lazy_read_tyh5(tyh5_path,
-        dset_path="/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm")
-    @info "assume WHZCT, convert to HWZT"
-    h5 = h5open(tyh5_path,"r", swmr=true)
-    dset = h5[dset_path]
-    return h5, LazyTy5(dset)
-end
+# "Allows lazy but memoized indexing from HDF5 file."
+# function lazy_read_tyh5(tyh5_path,
+#         dset_path="/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm")
+#     @info "assume WHZCT, convert to HWZT"
+#     h5 = h5open(tyh5_path,"r", swmr=true)
+#     dset = h5[dset_path]
+#     return h5, LazyTy5(dset)
+# end
 
 function read_tyh5(tyh5_path,
         dset="/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm")
@@ -569,12 +570,16 @@ function load_zseries(zseries_dir; ch_str = "Ch3")
         readdir(zseries_dir)))
     tif0 = ImageMagick.load(tiff_files[1])
     zseriesH, zseriesW = size(tif0)
+    zseries_lateral_unit = microscope_lateral_unit(zseriesW)
+    @info "hardcoded zseries z unit: 2μ"
+    zseries_microscope_units = (zseries_lateral_unit, zseries_lateral_unit, 2.0μm)
+
 
     zseries = zeros(Normed{UInt16,16}, zseriesH, zseriesW, size(tiff_files, 1))
     @threads for z in 1:size(tiff_files,1)
         zseries[:,:,z] = ImageMagick.load(tiff_files[z])
     end
-    zseries
+    AxisArray(zseries, (:y, :x, :z), zseries_microscope_units)
 end
 
 "Read sean's mat file stim frequency"
@@ -642,20 +647,140 @@ end
 "Read HDF5 file in parallel and calculate per-trial df/f."
 function get_df_f_per_voxel_per_trial_from_h5(tyh5_path, tseries_dset,
         stimStartIdx, stimEndIdx, window_len, tseriesH, tseriesW, tseriesZ)
+    @error "TODO: rewrite to use LazyTy5"
     nTrials = length(stimStartIdx)
     df_f_per_voxel_per_trial = 
         SharedArray{Float64}(nTrials, tseriesH, tseriesW, tseriesZ);
     @sync @distributed for i in 1:nTrials
         h5open(tyh5_path, "r", swmr=true) do thread_h5
-            thread_tseries = thread_h5[tseries_dset]
+            thread_tseries = LazyTy5(thread_h5[tseries_dset])
             # thread_tseries = lazy_read_tyh5(tyh5_path) # crashes
-            st, en = stimStartIdx[i], stimEndIdx[i]
-            s = st - 1
-            e = en + 1
-            f0 = mean(thread_tseries[:,:,:,:,s-window_len:s],dims=5)
-            f = mean(thread_tseries[:,:,:,:,e:e+window_len],dims=5)
+            s, e = stimStartIdx[i], stimEndIdx[i]
+            f0 = mean(thread_tseries[:,:,:,:,s-window_len:s-1],dims=5)
+            f = mean(thread_tseries[:,:,:,:,e+1:e+window_len],dims=5)
             df_f_per_voxel_per_trial[i,:,:,:] = @. (f - f0) / (f0 + 5)
         end
     end
     convert(Array,df_f_per_voxel_per_trial)
+end
+
+"Calculate average response for each unique stimuli"
+function calc_trial_average(tseries::LazyTy5, stimStartIdx,
+        stimEndIdx, tseriesH, tseriesW, tseriesZ, trialOrder;
+        pre=16, post=16)
+    println("dispatched on LazyTy5")
+    nStimuli = maximum(trialOrder)
+    nTrials = size(trialOrder, 1)
+    nTrialsPerStimulus = [sum(trialOrder .== i) for i in 1:nStimuli]
+    @assert nTrials == size(stimStartIdx, 1) # check TTL start-times match
+
+    ## avg stim effec
+    # TODO: should this be maximum instead to reduce chance of stim frame leaking in..?
+    stim_trial_lens = stimEndIdx .- stimStartIdx
+    @assert (maximum(stim_trial_lens) - minimum(stim_trial_lens)) <= 1
+    trialTime = maximum(stim_trial_lens) + pre + post + 1
+    # HWZCT
+    avgStim = SharedArray{Float64}(tseriesH, tseriesW, tseriesZ, nStimuli, trialTime)
+    # p = Progress(length(stimStartIdx), 1, "trial average:")
+    # threads crashes HDF5
+    # @threads for i in 1:length(stimStartIdx)
+    # for i in 1:length(stimStartIdx)
+    # TODO: why does this use 100+GB of memory for pre=post=30?
+    # also, is it actually safe to do this kind of parallel memory accumulation..?
+    @sync @distributed for i in 1:length(stimStartIdx)
+        thread_tseries = LazyTy5(tseries.tyh5_path, tseries.dset_str)
+        start = stimStartIdx[i]
+        stop = start - pre + trialTime - 1
+        trialType = trialOrder[i]
+        @views avgStim[:,:,:,trialType,:] .+= thread_tseries[:,:,:,start - pre:stop]
+        # next!(p)
+        close(thread_tseries)
+        thread_tseries = nothing
+        GC.gc()
+    end
+    @sync @distributed for i in 1:nStimuli
+        avgStim[:,:,:,i,:] ./= nTrialsPerStimulus[i]
+    end
+    avgStim
+end
+
+"Calculate average response for each unique stimuli"
+function calc_trial_average(tseries::Array{<:Real}, stimStartIdx,
+        stimEndIdx, tseriesH, tseriesW, tseriesZ, trialOrder;
+        pre=16, post=16)
+    nStimuli = maximum(trialOrder)
+    nTrials = size(trialOrder, 1)
+    nTrialsPerStimulus = [sum(trialOrder .== i) for i in 1:nStimuli]
+    @assert nTrials == size(stimStartIdx, 1) # check TTL start-times match
+
+    ## avg stim effec
+    # TODO: should this be maximum instead to reduce chance of stim frame leaking in..?
+    stim_trial_lens = stimEndIdx .- stimStartIdx
+    @assert (maximum(stim_trial_lens) - minimum(stim_trial_lens)) <= 1
+    trialTime = maximum(stim_trial_lens) + pre + post + 1
+    # HWZCT
+    avgStim = zeros(tseriesH, tseriesW, tseriesZ, nStimuli, trialTime)
+    p = Progress(length(stimStartIdx), 1, "trial average:")
+    for i in 1:length(stimStartIdx)
+        start = stimStartIdx[i]
+        stop = start - pre + trialTime - 1
+        trialType = trialOrder[i]
+        avgStim[:,:,:,trialType,:] .+= tseries[:,:,:,start - pre:stop]
+        next!(p)
+    end
+    for i in 1:nStimuli
+        avgStim[:,:,:,i,:] ./= nTrialsPerStimulus[i]
+    end
+    avgStim
+end
+
+"""
+e.g.
+
+read_zbrain_line("\$zbrain_dir/AnatomyLabelDatabase.hdf5",
+    "Elavl3-H2BRFP_6dpf_MeanImageOf10Fish")
+"""
+function read_zbrain_line(anatomy_label_h5_path, fishline; zbrain_units=zbrain_units)
+    volume = AxisArray(permutedims(
+    h5read(anatomy_label_h5_path,
+        fishline),
+        (2,1,3)), (:y, :x, :z), zbrain_units)
+    volume = reverse(volume,dims=2); # face right
+    volume = reverse(volume,dims=3); # bottom to top
+    volume
+end
+
+# "Read 4-channel olympus file."
+# function read_olympus_btf(btf_file)
+#     btf = collect(load(btf_file))
+#     oZ = size(btf, 3)
+#     # only blue for unknown reasons...
+#     btf = reshape(btf,
+#         size(btf)[1:2]..., 4, 2, Int(oZ//8))
+#     # ch1 = 646nm (red)
+#     channelview(btf)[1,:,:,1,:,:] = copy(channelview(btf)[3,:,:,1,:,:])
+#     channelview(btf)[2:3,:,:,1,:,:] .= 0
+#     # ch3 = 920nm (green)
+#     channelview(btf)[2,:,:,3,:,:] = copy(channelview(btf)[3,:,:,3,:,:])
+#     channelview(btf)[[1,3],:,:,3,:,:] .= 0
+#     #ch4 = 405nm (blue), already okay
+#     btf
+# end
+
+function read_olympus(oir_file)
+    x_um, y_um, z_um = read_oir_units(oir_file)
+    @assert z_um == 1.0 # make sure not a eg 10um, quick-pan goof
+    oir_img = tifffile.imread(replace(oir_file, "oir" => "ome.btf"));
+    oir_img = permutedims(oir_img, [4,5,3,2,1]);
+    AxisArray(oir_img, (:y, :x, :c, :t, :z),
+        (y_um, x_um, 1, 1, z_um))
+end
+
+"Like joinpath, but make directory if doesn't exist."
+function make_joinpath(parts...)
+    path = joinpath(parts...)
+    if ~isdir(path)
+        mkdir(path)
+    end
+    path
 end
