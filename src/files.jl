@@ -790,49 +790,56 @@ Save sparse CSC arrays in h5 file.
 
 ants_warps: [affine, SyN] or [affine]
 """
+# function save_region_masks(region_mask_dir, zseries, zbrain_masks, ants_warps,
 function save_region_masks(region_mask_path, zseries, zbrain_masks, ants_warps,
         zbrain_units)
     mask_names = zbrain_masks["MaskDatabaseNames"][1,:]
     nMasks = length(mask_names)
     H, W, Z = size(zseries)
+    # mkdir(region_mask_dir)
     Lensman.HDF5ThreadSafe.h5server(region_mask_path, "w") do h5
     # h5open(region_mask_path, "w") do h5
-        h5["/size"] = collect(size(zseries))
+        # h5["/size"] = collect(size(zseries))
         p = Progress(nMasks, 1, "Register:")
         # for i in 1:1
-        @threads for i in 1:nMasks
-            name = replace(mask_names[i], "/" => "_") # or else a h5 path..
-            mask = read_mask(zbrain_masks, i)
-            mask = AxisArray(Float32.(mask), AxisArrays.axes(mask))
-            mask = antsApplyTransforms(zseries, mask,
-                ants_warps...) .> 0
-            # save sparse vector
-            mask = sparse(reshape(registered,length(registered),1))
-            # TODO: or we could save as a .mat file for more standard format..?
-            # https://github.com/JuliaIO/MAT.jl/blob/3ed629c05f7261e86c0dde0869d265e99a265efb/src/MAT_HDF5.jl
-            # should work with abstract HDF5DataStore in hdf5_threads
-            mask = H5SparseMatrixCSC(h5, name, mask)
-            next!(p)
-            mask = nothing
-            GC.collect()
+        # @threads for i in 1:nMasks
+        # @threads for i in 1:1
+        for i in 1:1
+        # @sync @distributed for i in 1:nMasks
+        # @sync @distributed for i in 1:nMasks
+            # _save_one_region_mask(i, p, region_mask_dir, zseries, zbrain_masks,
+            # ants_warps, zbrain_units)
+            _save_one_region_mask(i, p, zseries, zbrain_masks,
+                ants_warps, zbrain_units, h5)
+            GC.gc()
         end
     end
 end
 
-function _save_one_region_mask(i, p, region_mask_path, zseries, zbrain_masks,
-        ants_warps, zbrain_units)
-    name = replace(mask_names[i], "/" => "_") # or else a h5 path..
-    mask = read_mask(zbrain_masks, i)
-    mask = AxisArray(Float32.(mask), AxisArrays.axes(mask))
-    mask = antsApplyTransforms(zseries, mask,
-        ants_warps...) .> 0
-    # save sparse vector
-    mask = sparse(reshape(registered,length(registered),1))
-    # TODO: or we could save as a .mat file for more standard format..?
-    # https://github.com/JuliaIO/MAT.jl/blob/3ed629c05f7261e86c0dde0869d265e99a265efb/src/MAT_HDF5.jl
-    # should work with abstract HDF5DataStore in hdf5_threads
-    mask = H5SparseMatrixCSC(h5, name, mask)
-    next!(p)
-    mask = nothing
-    GC.collect()
+# function _save_one_region_mask(i, p, region_mask_dir, zseries, zbrain_masks,
+    # ants_warps, zbrain_units, h5
+function _save_one_region_mask(i, p, zseries, zbrain_masks,
+        ants_warps, zbrain_units, h5
+)
+    # or else a h5 path..
+    name = replace(zbrain_masks["MaskDatabaseNames"][1,i], "/" => "_")
+    # h5open(region_mask_path, "w") do h5
+    begin
+        h5["/size"] = collect(size(zseries))
+        mask = read_mask(zbrain_masks, i)
+        mask = AxisArray(Float32.(mask), AxisArrays.axes(mask))
+        GC.gc()
+        mask = antsApplyTransforms(zseries, mask,
+            ants_warps...) .> 0
+        # save sparse vector
+        mask = sparse(reshape(mask,length(mask),1))
+        GC.gc()
+        # TODO: or we could save as a .mat file for more standard format..?
+        # https://github.com/JuliaIO/MAT.jl/blob/3ed629c05f7261e86c0dde0869d265e99a265efb/src/MAT_HDF5.jl
+        # should work with abstract HDF5DataStore in hdf5_threads
+        # mask = H5SparseMatrixCSC(region_mask_path, name, mask)
+        mask = H5SparseMatrixCSC(h5, name, mask; chunk=nothing)
+        next!(p)
+    end
+    nothing    
 end

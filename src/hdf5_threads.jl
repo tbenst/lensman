@@ -3,7 +3,7 @@ module HDF5ThreadSafe
 
 using Actors, HDF5, Thunks
 import Actors: spawn
-import HDF5: create_group, create_dataset
+import HDF5: create_group
 
 struct HDF5server{L} <: HDF5.H5DataStore
     id::HDF5.hid_t
@@ -19,8 +19,6 @@ Base.setindex!(h5s::HDF5server, value, key) = call(h5s.lk, setindex!, value, key
 Base.close(h5s::HDF5server) = call(h5s.lk, close)
 Base.keys(h5s::HDF5server) = call(h5s.lk, keys)
 create_group(h5s::HDF5server, string) = call(h5s.lk, create_group, string)
-create_dataset(h5s::HDF5server, args; kwargs...) = call(h5s.lk, create_dataset, args...; kwargs...)
-delete_object(h5s::HDF5server, args; kwargs...) = call(h5s.lk, delete_object, args...; kwargs...)
 
 # hdf5 server behavior
 _h5server(h5::HDF5.File, f::Function, args...) = f(h5, args...)

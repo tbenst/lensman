@@ -166,7 +166,18 @@ function update_recording_dag(recording::DAG)
         mm820_registered = multimap_transforms(zseries, multimap_820,
             mm_transform_affine, mm_transform_SyN)
         region_mask_path = joinpath(fish_dir, "region_masks.h5")
+        region_mask_dir = joinpath(fish_dir, "region_masks")
         zbrain_masks = matread("$zbrain_dir/MaskDatabase.mat")
+        # region_masks = if isdir(region_mask_dir)
+        #     Dict(n=>joinpath(region_mask_dir,n) for n in readdir(region_mask_dir))
+        # else
+        #     # save_region_masks(region_mask_dir, zseries, zbrain_masks,
+        #     save_region_masks(region_mask_dir, zseries, zbrain_masks,
+        #         [mm_transform_affine, mm_transform_SyN], zbrain_units)
+        #     Dict(n=>joinpath(region_mask_dir,n) for n in readdir(region_mask_dir))
+        # end
+
+
         region_mask_h5 = if isfile(region_mask_path)
             h5open(region_mask_path, "r", swmr=true)
         else
@@ -214,7 +225,9 @@ function update_recording_dag(recording::DAG)
         target_size_px, zbrain_registered, zbrain_ants_cmd,
         zbrain_registered, mm920_registered, mm820_registered, nstim_pulses,
         mm_transform_affine, mm_transform_SyN,
-        region_mask_path, region_mask_h5, zbrain_masks
+        region_mask_path, zbrain_masks,
+        # region_masks
+        region_mask_h5
     )
 
     recording

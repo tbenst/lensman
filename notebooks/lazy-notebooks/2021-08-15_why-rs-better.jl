@@ -10,7 +10,7 @@ import Plots: heatmap
 using Thunks
 import Base.Threads: @spawn, @sync, @threads
 L = Lensman
-# init_workers()
+# init_workers(18)
 ##
 resources = Resources();
 ## takes 20 seconds...? should profile macro code...
@@ -19,9 +19,12 @@ r = Recordings[
     ](;resources...);
 ##
 @pun region_mask_path = r
-# rm(region_mask_path)
+isfile(region_mask_path) ? rm(region_mask_path) : nothing
+region_dir = region_mask_path[1:end-3]
+isdir(region_dir) ? rm(region_dir, recursive=true) : nothing
+# @pun region_masks = r
 @pun region_mask_h5 = r
-
+# println("region_masks: $region_masks")
 println("success!")
 exit()
 ##
