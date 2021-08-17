@@ -1,55 +1,10 @@
 using Lensman.DictThreadSafe
 # using Dagger
 # import Dagger: @par
-using Thunks, NPZ
 # import Lensman.DictThreadSafe: dictsrv
-struct Recording
-    uri::String
-    settings::Dict
-    thunks::Dict
-    function Recording(uri; settings...)
-        new_settings = merge(DEFAULT_SETTINGS, settings)
-        new(uri, new_settings, make_dag(uri, new_settings))
-    end
-end
-
 
 # Recording(uri, settings) = Recording(uri, settings, dictsrv(Dict()))
-DEFAULT_SETTINGS = Dict(
-    :tseries_root_dirs => [
-        "/oak/stanford/groups/deissero/users/tyler/b115",
-        "/scratch/b115",
-        "/scratch2",
-        "/data/dlab/b115",
-        "/mnt/deissero/users/tyler/b115"
-    ],
-    :slm_root_dirs => [
-        "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
-        "/mnt/deissero/users/tyler/b115/SLM_files",
-        "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/",
-        "/mnt/deissero/users/tyler/b115/SLM_files/",
-        "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
-    ],
-    :zbrain_dir => "/mnt/deissero/users/tyler/zbrain",
-    :rel_plot_dir => "denoised-plots",
-    :tseries_dset => nothing,
-    :tyh5_path => nothing,
-    :zbrain_units => (0.798μm, 0.798μm, 2μm),
-    :slm_dir => "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/",
-    :oir_dir => "",
-    :suite2p_dir => nothing,
-    :warp_prefix => "",
-    :lazy_tyh5 => true,
-    :window_secs => 5,
-    :ants_no_run => true, # TODO: make false once tested
-    :oir_920_name => "",
-    :oir_820_name => "",
-    :warp_prefix => "",
-    :notes => "",
-    # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
-    # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
-    # slm_dir => "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment",
-)
+
 
 # TODO: how do we handle the several formas of a tseries..?
 # - h5 file dset
@@ -58,13 +13,36 @@ DEFAULT_SETTINGS = Dict(
 # answer => use multiple dispatch + interface of required methods
 # and LazyTy5 should be able to give strings for dset/h5path for multiprocessing
 
-"Master DAG for all computations."
-function make_dag(uri, settings)
-    dag = Dict()
-    @pun (rel_plot_dir, tseries_dset, zseries_name, tseries_root_dirs,
+
+# TODO: split into functions that use a macro to fill args with same name..?
+# eg suppose for this function:
+# calc_trial_average(tseries::LazyTy5, stimStartIdx,
+        # stimEndIdx, tseriesH, tseriesW, tseriesZ, trialOrder;
+        # pre=16, post=16)
+# we do:
+# trial_average = @dagcall r calc_trial_average(tseries, stimStartIdx,
+#        stimEndIdx, tseriesH, tseriesW, tseriesZ, trialOrder;
+#        pre=16, post=16)
+# which expands to:
+# trial_average = calc_trial_average(r[:tseries], r[:stimStartIdx],
+#        r[:stimEndIdx], r[:tseriesH], r[:tseriesW], r[:tseriesZ],
+#        r[:trialOrder]; pre=16, post=16)
+# ...but only if local variable isn't defined..? eg using @isdefined..?
+# also would require new macro to replace @lazy such that:
+# @lazy tseries_dir = find_folder(uri, tseries_root_dirs)
+# becomes:
+# tseries_dir = thunk(find_folder)(uri, tseries_root_dirs)
+# r[:tseries_dir] = tseries_dir
+# is this too much metaprogramming...? Harder for others to read...
+
+
+"Master DAG for all computations on a recording."
+function update_recording_dag(recording::DAG)
+    @pun (uri, rel_plot_dir, tseries_dset, zseries_name, tseries_root_dirs,
         slm_dir, slm_root_dirs, lazy_tyh5, window_secs, zbrain_dir,
-        oir_dir, warp_prefix, oir_920_name, oir_820_name
-    ) = settings
+        oir_dir, warp_prefix, oir_920_name, oir_820_name, tyh5_path,
+        h2b_zbrain, zbrain_units
+    ) = recording
     # procutil=Dict(Dagger.ThreadProc => 36.0)
     
     # TODO: figure out how to read slmTxtFile when multiple options...
@@ -74,7 +52,7 @@ function make_dag(uri, settings)
     # TODO: write new macro that first check if left hand symbol in
     # dict, if not then assign thunk. This way can rerun this function
     # multiple times to update DAG for live coding w/o invalidating cache
-    @thunk begin
+    @reversible begin
         tseries_dir = find_folder(uri, tseries_root_dirs)
         fish_dir = get_fish_dir(tseries_dir)
         zseries_dir = joinpath(fish_dir, zseries_name)
@@ -83,7 +61,7 @@ function make_dag(uri, settings)
         fish_name = (x->splitpath(x)[end-1])(tseries_dir)
         plot_dir = make_joinpath(fish_dir, rel_plot_dir)
         local_slm_dir = joinpath(fish_dir, "slm")
-        tyh5_path = get_tyh5_path(settings[:tyh5_path], tseries_dir)
+        tyh5_path = get_tyh5_path(tyh5_path, tseries_dir)
         test = count_threads()
         tseries = get_tseries(tseries_dir, tyh5_path, tseries_dset, lazy_tyh5)
         zseries = load_zseries(zseries_dir)
@@ -128,7 +106,8 @@ function make_dag(uri, settings)
         nStimuli = maximum(trial_order)
         nTrials = size(trial_order,1)
         zOffset = getzoffset(exp_date, slm_num)
-        suite2p_dir = is_setting(settings, :suite2p_dir, thunk(get_suite2p_dir)(tseries_dir))
+        # TODO: put outside of @lazy..?
+        suite2p_dir = is_node(recording, :suite2p_dir, thunk(get_suite2p_dir)(tseries_dir))
         nwb_path = joinpath(suite2p_dir, "ophys.nwb")
         ndict = read_nwb_rois(nwb_path)
         cell_traces = getindex(ndict,:cell_traces)
@@ -160,13 +139,14 @@ function make_dag(uri, settings)
             pre=window_len, post=window_len)
         lateral_unit = microscope_lateral_unit(tseriesZ)
         target_size_px = spiral_size(exp_date, lateral_unit)
-        h2b_zbrain = read_zbrain_line("$zbrain_dir/AnatomyLabelDatabase.hdf5",
-            "Elavl3-H2BRFP_6dpf_MeanImageOf10Fish")
         zbrain_warps = glob("*SyN_Warped.nii.gz", fish_dir)
-        zbrain_ants_cmd = (zbrain_warps -> length(zbrain_warps)==0 ? ants_register(fixed, moving; interpolation = "WelchWindowedSinc",
-            histmatch = 0, sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
+        zbrain_ants_cmd = (zbrain_warps -> length(zbrain_warps)==0
+            ? ants_register(zseries, h2b_zbrain;
+            interpolation = "WelchWindowedSinc", histmatch = 0,
+            sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
             use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
-            save_dir=fishDir, dont_run = true) : "using cached ANTs for zbrain registration")(zbrain_warps)
+            save_dir=fish_dir, dont_run = true)
+            : "using cached ANTs for zbrain registration")(zbrain_warps)
         zbrain_warpedname = glob_one_file("*SyN_Warped.nii.gz", fish_dir)
         zbrain_registered = niread(zbrain_warpedname)
         oir_920_file = joinpath(oir_dir, oir_920_name)
@@ -174,16 +154,28 @@ function make_dag(uri, settings)
         multimap_920 = read_olympus(oir_920_file)
         multimap_820 = read_olympus(oir_820_file)
         multimap_warps = glob("*SyN_Warped.nii.gz", fish_dir)
-        multimap_ants_cmd = (multimap_warps -> length(multimap_warps)==0 ? ants_register(fixed, moving; interpolation = "WelchWindowedSinc",
+        multimap_ants_cmd = (multimap_warps -> length(multimap_warps)==0
+            ? ants_register(zseries, multimap_920; interpolation = "WelchWindowedSinc",
             histmatch = 0, sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
             use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
-            save_dir=fishDir, dont_run = true) : "using cached ANTs for multimap registration")(zbrain_warps)
+            save_dir=fish_dir, dont_run = true) : "using cached ANTs for multimap registration")(zbrain_warps)
         multimap_warpedname = glob_one_file("$warp_prefix*SyN_Warped.nii.gz", oir_dir)
         mm920_registered = niread(multimap_warpedname)
         mm_transform_affine = glob_one_file("$warp_prefix*GenericAffine.mat", oir_dir)
         mm_transform_SyN = glob_one_file("$warp_prefix*SyN_1Warp.nii.gz", oir_dir)
         mm820_registered = multimap_transforms(zseries, multimap_820,
             mm_transform_affine, mm_transform_SyN)
+        region_mask_path = joinpath(fish_dir, "region_masks.h5")
+        zbrain_masks = matread("$zbrain_dir/MaskDatabase.mat")
+        region_mask_h5 = if isfile(region_mask_path)
+            h5open(region_mask_path, "r", swmr=true)
+        else
+            save_region_masks(region_mask_path, zseries, zbrain_masks,
+                [mm_transform_affine, mm_transform_SyN], zbrain_units)
+            h5open(region_mask_path, "r", swmr=true)
+        end
+        # TODO: how should we handle thunks shared across recordings...?
+        # we need to compose DAGs then....
 
         # sdict = read_suite2p(suite2p_dir)
         # nCells = getindex(sdict,:nCells)
@@ -194,11 +186,10 @@ function make_dag(uri, settings)
         # assigned all above
 
     end
-
     # if slm_num == 1
-    #     slmpower_per_cell = @thunk slm1Power * power_per_cell / 1000
+    #     slmpower_per_cell = @lazy slm1Power * power_per_cell / 1000
     # elseif slm_num == 2
-    #     slmpower_per_cell = @thunk slm2Power * power_per_cell / 1000
+    #     slmpower_per_cell = @lazy slm2Power * power_per_cell / 1000
     # end
 
 
@@ -207,7 +198,7 @@ function make_dag(uri, settings)
     # @par cache=true procutil=procutil tseries =
     #     get_tseries(tseries_dir, tyh5_path, tseries_dset)
 
-    @assign dag = (
+    @assign recording = (
         tseries_dir, fish_dir, zseries_dir, expName, recording_folder,
         fish_name, plot_dir, local_slm_dir, tyh5_path, test, tseries, zseries,
         zseries_xml, tseries_xml, zseries_zaxes, tseries_zaxis, result,
@@ -220,11 +211,13 @@ function make_dag(uri, settings)
         used_slm_dir, vol_rate, imaging2zseries_plane, zseries_xml,
         df_f_per_voxel_per_trial, df_f_per_trial_dataframe, lateral_unit,
         targets_with_plane_index, cells, trial_average, window_len,
-        target_size_px, h2b_zbrain, zbrain_registered, zbrain_ants_cmd,
-        zbrain_registered, mm920_registered, mm820_registered, nstim_pulses
+        target_size_px, zbrain_registered, zbrain_ants_cmd,
+        zbrain_registered, mm920_registered, mm820_registered, nstim_pulses,
+        mm_transform_affine, mm_transform_SyN,
+        region_mask_path, region_mask_h5, zbrain_masks
     )
 
-    dag
+    recording
 end
 
 function update_dag(r)
@@ -238,11 +231,11 @@ function update_dag(r)
         slm2_power, voltageFile, res3, stimStartIdx, stimEndIdx, frameStartIdx,
         res4, target_groups, group_stim_freq, nStimuli, nTrials, zOffset,
         suite2p_dir, nwb_path, ndict, cell_traces, cell_masks, iscell, nCells
-    ) = r.thunks
+    ) = r.nodes
 
-    if ~in(:somekey, keys(r.thunks))
-        somekey = @thunk get_somekey()
-        @assign r.thunks = somekey
+    if ~in(:somekey, keys(r.nodes))
+        somekey = @lazy get_somekey()
+        @assign r.nodes = somekey
     end
 
 end
@@ -282,21 +275,16 @@ function gather(arr)
     map(collect, arr)
 end
 
-function Base.getindex(r::Recording, k)
-    # collect(r.thunks[k])
-    reify(r.thunks[k])
-end
-
 #### main analysis functions
 
 "I thunk nothing."
 ithunk() = thunk(identity)(nothing)
 
-function is_setting(settings, key, continuation_thunk=ithunk())
-    if key in keys(settings)
-        settings[key]
+function is_node(nodes, key, continuation_thunk=ithunk())
+    if key in keys(nodes)
+        nodes[key]
     else
-        reify(continuation_thunk)
+        continuation_thunk
     end
 end
 

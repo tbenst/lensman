@@ -27,13 +27,13 @@ r = Recordings["2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"]()
 ## pattern for extending DAG (ugly! ergonomics should be improved..macro?)
 
 global df_f_per_trial_dataframe
-if ~in(:df_f_per_trial_dataframe, keys(r.thunks))
+if ~in(:df_f_per_trial_dataframe, keys(r.nodes))
     @lazy begin
         window_len = ((vol_rate)->Int(floor(5 * vol_rate)) - 1)(vol_rate)
         df_f_per_trial_dataframe = get_df_f_per_trial_dataframe(
             df_f_per_voxel_per_trial, trial_order)
     end
-    @assign r.thunks = df_f_per_trial_dataframe
+    @assign r.nodes = df_f_per_trial_dataframe
 end
 @pun df_f_per_trial_dataframe = r;
 
@@ -337,10 +337,10 @@ img
 
 ## example for extending DAG....
 # @lazy begin
-#     suite2p_dir = L.is_setting(:suite2p_dir, get_suite2p_dir(r.thunks[:tseries_dir]))
+#     suite2p_dir = L.is_setting(:suite2p_dir, get_suite2p_dir(r.nodes[:tseries_dir]))
 # end
 ##
-suite2p_dir = thunk(L.is_setting)(r.settings, :suite2p_dir, thunk(L.get_suite2p_dir)(r.thunks[:tseries_dir]))
-@assign r.thunks = suite2p_dir
+suite2p_dir = thunk(L.is_setting)(r.settings, :suite2p_dir, thunk(L.get_suite2p_dir)(r.nodes[:tseries_dir]))
+@assign r.nodes = suite2p_dir
 @pun suite2p_dir = r
 

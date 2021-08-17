@@ -1,5 +1,5 @@
 module DictThreadSafe
-using Actors
+using Actors, Thunks
 import Actors: spawn
 
 struct DictSrv{L}
@@ -17,8 +17,14 @@ Base.keys(d::DictSrv) = call(d.lk, keys)
 ds(d::Dict, f::Function, args...) = f(d, args...)
 ds(d::Dict) = copy(d)
 
+sv = @lazy supervisor()
+
 # start dict server
-dictsrv(d::Dict; remote=false) = DictSrv(spawn(ds, d; remote))
+function dictsrv(d::Dict; remote=false)
+    dsrv = DictSrv(spawn(ds, d; remote))
+    exec(dsrv.lk, Actors.supervise, reify(sv));
+    dsrv
+end
 
 export DictSrv, dictsrv 
 

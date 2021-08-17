@@ -48,3 +48,24 @@ function float2uint(x)
     clamp!(ret,0,2^16-1)
     convert(Array{UInt16},ret)
 end
+
+abstract type AbstractDAG <: AbstractDict{Symbol, Any} end
+
+struct DAG <: AbstractDAG
+    nodes::Dict
+    function DAG(;nodes...)
+        new(nodes)
+    end
+end
+
+function Base.getindex(r::AbstractDAG, k)
+    reify(r.nodes[k])
+end
+
+function Base.setindex!(r::AbstractDAG, value, key...)
+    r.nodes[key...] = value
+end
+
+Base.iterate(t::AbstractDAG) = iterate(t.nodes)
+Base.iterate(t::AbstractDAG, i) = iterate(t.nodes, i)
+Base.length(t::AbstractDAG) = length(t.nodes)

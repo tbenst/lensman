@@ -1,0 +1,7 @@
+[deps]
+H5Sparse = "d026d0c0-3790-4945-99de-4163f1ba8085"
+ProfileView = "c46f51b8-102a-5cf2-8d2c-8597cb0e0da7"
+SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
+SnoopCompile = "aa65fe97-06da-5843-b5b1-d5d13cad87d2"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

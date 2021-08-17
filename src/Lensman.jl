@@ -4,7 +4,8 @@ using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     ImageDraw, ImageFiltering, PyCall, MAT, Dates, DataStructures,
     Statistics, SharedArrays, CSV, DataFrames, Suppressor, Plots,
     LinearAlgebra, LibExpat, LightXML, RollingFunctions, HypothesisTests,
-    EllipsisNotation, HDF5, Distributed
+    EllipsisNotation, HDF5, Distributed, Thunks, NPZ, SparseArrays,
+    H5Sparse
 import Base.Threads: @threads, @spawn, @sync
 using Distributed
 import Unitful: μm
@@ -24,7 +25,8 @@ include("distributed.jl")
 include("dataframes.jl")
 include("Bruker.jl")
 include("core.jl")
-include("experiment.jl")
+include("resources.jl")
+include("recording_dag.jl")
 include("recordings.jl")
 
 export read_microns_per_pixel,
@@ -141,5 +143,6 @@ export read_microns_per_pixel,
     get_df_f_per_trial_dataframe,
     stim_roi_threshold,
     Recordings,
-    trial_average_from_h5
+    trial_average_from_h5,
+    Resources
 end

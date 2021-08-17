@@ -59,13 +59,17 @@ end
 "Apply one transform, and write moving to a tmp file."
 function antsApplyTransforms(fixedPath::String, moving::AxisArray, transformPath::String)
     movingPath = joinpath(tmppath, ANTsRegistration.write_nrrd(moving))
-    antsApplyTransforms(fixedPath, movingPath, transformPath)
+    result = antsApplyTransforms(fixedPath, movingPath, transformPath)
+    rm(movingPath)
+    result
 end
 
 "Apply one transform."
 function antsApplyTransforms(fixedPath::String, movingPath::String, transformPath::String)
     maskoutname = joinpath(tmppath, ANTsRegistration.randstring(10) * ".nii.gz")
-    antsApplyTransforms(fixedPath, movingPath, transformPath, maskoutname)
+    result = antsApplyTransforms(fixedPath, movingPath, transformPath, maskoutname)
+    rm(maskoutname)
+    result
 end
 
 # function antsApplyTransforms(fixedPath::String, movingPath::String, transformPath1::String, transformPath2::String)
@@ -83,12 +87,15 @@ end
 "Apply two transforms, writing AxisArrays to tmp files."
 function antsApplyTransforms(fixed::AxisArray, moving::AxisArray,
         transformPath1::String, transformPath2::String,
-        maskoutname = maskoutname = joinpath(tmppath, ANTsRegistration.randstring(10) * ".nii.gz"),
+        maskoutname = joinpath(tmppath, ANTsRegistration.randstring(10) * ".nii.gz"),
         ants_path = "/opt/ANTs/install/bin/antsApplyTransforms")
     fixedPath = joinpath(tmppath, ANTsRegistration.write_nrrd(fixed))
     movingPath = joinpath(tmppath, ANTsRegistration.write_nrrd(moving))
-    antsApplyTransforms(fixedPath, movingPath, transformPath1, transformPath2,
+    result = antsApplyTransforms(fixedPath, movingPath, transformPath1, transformPath2,
         maskoutname, ants_path)
+    rm(fixedPath)
+    rm(movingPath)
+    result
 end
 
 "Apply two transforms on existing fixed & moving files."

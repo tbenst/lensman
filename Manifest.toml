@@ -21,10 +21,10 @@ uuid = "7b86fcea-f67b-53e1-809c-8f1719c154e8"
 version = "2.36.1+0"
 
 [[AWS]]
-deps = ["Base64", "Compat", "Dates", "GitHub", "HTTP", "IniFile", "JSON", "MbedTLS", "Mocking", "OrderedCollections", "Retry", "Sockets", "URIs", "UUIDs", "XMLDict"]
-git-tree-sha1 = "e9d52dcd16b4d17a4ae1a3f718353150176608c0"
+deps = ["Base64", "Compat", "Dates", "Downloads", "GitHub", "HTTP", "IniFile", "JSON", "MbedTLS", "Mocking", "OrderedCollections", "Retry", "Sockets", "URIs", "UUIDs", "XMLDict"]
+git-tree-sha1 = "e84a3907b482b3c424aa75bf1cf15478b466e292"
 uuid = "fbe9abb3-538b-5e4e-ba9e-bc94f4f92ebc"
-version = "1.56.0"
+version = "1.57.0"
 
 [[AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -260,9 +260,9 @@ version = "0.2.1"
 
 [[ChainRules]]
 deps = ["ChainRulesCore", "Compat", "LinearAlgebra", "Random", "Statistics"]
-git-tree-sha1 = "6615deb51db68c3fa0cc7b34e5399c15f63fa97e"
+git-tree-sha1 = "13a109f39b6474621503893ca4681b5d3bbd4389"
 uuid = "082447d4-558c-5d27-93f4-14fc19e9eca2"
-version = "1.7.0"
+version = "1.8.0"
 
 [[ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra", "SparseArrays"]
@@ -860,6 +860,14 @@ deps = ["Cairo", "Colors", "Dates", "FixedPointNumbers", "Graphics", "Gtk", "Int
 git-tree-sha1 = "2a82c9204afbd8bfb39c0d6735bface4a3df9917"
 uuid = "27996c0f-39cd-5cc1-a27a-05f136f946b6"
 version = "1.0.5"
+
+[[H5Sparse]]
+deps = ["HDF5", "SparseArrays"]
+git-tree-sha1 = "8b6ab564b03c4e32d647e7f0536b75277152d713"
+repo-rev = "master"
+repo-url = "https://github.com/tbenst/H5Sparse.jl"
+uuid = "d026d0c0-3790-4945-99de-4163f1ba8085"
+version = "0.2.1"
 
 [[HDF5]]
 deps = ["Blosc", "Compat", "HDF5_jll", "Libdl", "Mmap", "Random", "Requires"]
@@ -1487,9 +1495,9 @@ version = "0.4.1"
 
 [[NNlib]]
 deps = ["Adapt", "ChainRulesCore", "Compat", "LinearAlgebra", "Pkg", "Requires", "Statistics"]
-git-tree-sha1 = "16520143f067928bb69eee59ac8bca06be1e43b8"
+git-tree-sha1 = "3bc876dbff74cc9c4ece84ef9326da8ccd71c98f"
 uuid = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
-version = "0.7.27"
+version = "0.7.28"
 
 [[NNlibCUDA]]
 deps = ["CUDA", "LinearAlgebra", "NNlib", "Random", "Statistics"]
@@ -2179,9 +2187,11 @@ uuid = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 version = "0.1.7"
 
 [[Thunks]]
-git-tree-sha1 = "a9d0d1b7c264c9fc7d48ccddc070380b7d0316e5"
+git-tree-sha1 = "6a782c7175150be40d01c8946e669a4595722889"
+repo-rev = "master"
+repo-url = "https://github.com/tbenst/Thunks.jl"
 uuid = "490da00b-a60c-4ded-a4cf-df7cded56bfa"
-version = "0.3.0"
+version = "0.3.3"
 
 [[TiffImages]]
 deps = ["ColorTypes", "DocStringExtensions", "FileIO", "FixedPointNumbers", "IndirectArrays", "Inflate", "OffsetArrays", "OrderedCollections", "PkgVersion", "ProgressMeter"]
