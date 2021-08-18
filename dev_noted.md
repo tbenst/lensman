@@ -151,3 +151,9 @@ cannot iterate or index thunk
 No good:
 @par y = f()[end]
 @par (x, y) = f()
+
+## remove node & redo
+@pun region_mask_path = r
+rm(region_mask_path)
+undo(r.nodes[:region_masks_h5])
+@pun region_mask_path = r

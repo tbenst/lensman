@@ -66,6 +66,12 @@ git-tree-sha1 = "84918055d15b3114ede17ac6a7182f68870c16f7"
 uuid = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 version = "3.3.1"
 
+[[AlgebraOfGraphics]]
+deps = ["Colors", "Dates", "FileIO", "GLM", "GeoInterface", "GeometryBasics", "GridLayoutBase", "KernelDensity", "Loess", "Makie", "PlotUtils", "PooledArrays", "RelocatableFolders", "StatsBase", "StructArrays", "Tables"]
+git-tree-sha1 = "8e4d8d012a5fb4f12cf60ae8658afa3aeffe5873"
+uuid = "cbdf2221-f076-402e-a563-3d30da359d67"
+version = "0.5.2"
+
 [[Animations]]
 deps = ["Colors"]
 git-tree-sha1 = "e81c509d2c8e49592413bfb0bb3b08150056c79d"
@@ -729,6 +735,12 @@ git-tree-sha1 = "dba1e8614e98949abfa60480b13653813d8f0157"
 uuid = "0656b61e-2033-5cc2-a64a-77c0f6c09b89"
 version = "3.3.5+0"
 
+[[GLM]]
+deps = ["Distributions", "LinearAlgebra", "Printf", "Reexport", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "StatsModels"]
+git-tree-sha1 = "f564ce4af5e79bb88ff1f4488e64363487674278"
+uuid = "38e38edf-8417-5370-95a0-9cbb8c7f171a"
+version = "1.5.1"
+
 [[GLMakie]]
 deps = ["ColorTypes", "Colors", "FileIO", "FixedPointNumbers", "FreeTypeAbstraction", "GLFW", "GeometryBasics", "LinearAlgebra", "Makie", "Markdown", "MeshIO", "ModernGL", "Observables", "Printf", "Serialization", "ShaderAbstractions", "StaticArrays"]
 git-tree-sha1 = "ef6b2599a755101af901bc9e5e2c535e9e2a0543"
@@ -790,6 +802,12 @@ repo-rev = "master"
 repo-url = "https://github.com/JuliaFolds/GeneratorsX.jl"
 uuid = "b9fe75cc-d44c-4b67-9646-1eca8ff4e0d0"
 version = "0.1.0"
+
+[[GeoInterface]]
+deps = ["RecipesBase"]
+git-tree-sha1 = "38a649e6a52d1bea9844b382343630ac754c931c"
+uuid = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
+version = "0.5.5"
 
 [[GeometryBasics]]
 deps = ["EarCut_jll", "IterTools", "LinearAlgebra", "StaticArrays", "StructArrays", "Tables"]
@@ -863,8 +881,8 @@ version = "1.0.5"
 
 [[H5Sparse]]
 deps = ["HDF5", "SparseArrays"]
-git-tree-sha1 = "9d625af9b546163ba6fa4fd11daf9124e090d72f"
-repo-rev = "master"
+git-tree-sha1 = "6072175eb07b67f561d7f403c6f0296ffbad7bd0"
+repo-rev = "no-race"
 repo-url = "https://github.com/tbenst/H5Sparse.jl"
 uuid = "d026d0c0-3790-4945-99de-4163f1ba8085"
 version = "0.2.1"
@@ -1889,6 +1907,12 @@ git-tree-sha1 = "f605060dc690ca50697cceff54aaa7067418a920"
 uuid = "d4862ba2-f42c-5aeb-af4f-96a8884a16c4"
 version = "0.1.0"
 
+[[RelocatableFolders]]
+deps = ["SHA", "Scratch"]
+git-tree-sha1 = "0529f4188bc8efee85a7e580aca1c7dff6b103f8"
+uuid = "05181044-ff0b-4ac5-8273-598c1e38db00"
+version = "0.1.0"
+
 [[Requires]]
 deps = ["UUIDs"]
 git-tree-sha1 = "4036a3bd08ac7e968e27c203d45f5fff15020621"
@@ -2023,6 +2047,11 @@ version = "0.2.7"
 deps = ["Distributed", "Mmap", "Random", "Serialization"]
 uuid = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 
+[[ShiftedArrays]]
+git-tree-sha1 = "22395afdcf37d6709a5a0766cc4a5ca52cb85ea0"
+uuid = "1277b4bf-5013-50f5-be3d-901d8477a67a"
+version = "1.0.0"
+
 [[Showoff]]
 deps = ["Dates", "Grisu"]
 git-tree-sha1 = "91eddf657aca81df9ae6ceb20b959ae5653ad1de"
@@ -2116,6 +2145,12 @@ deps = ["IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialF
 git-tree-sha1 = "20d1bb720b9b27636280f751746ba4abb465f19d"
 uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
 version = "0.9.9"
+
+[[StatsModels]]
+deps = ["DataAPI", "DataStructures", "LinearAlgebra", "Printf", "ShiftedArrays", "SparseArrays", "StatsBase", "StatsFuns", "Tables"]
+git-tree-sha1 = "a209a68f72601f8aa0d3a7c4e50ba3f67e32e6f8"
+uuid = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
+version = "0.6.24"
 
 [[StringDistances]]
 deps = ["Distances"]

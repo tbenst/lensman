@@ -486,3 +486,17 @@ function stim_roi_threshold(df, key, thresh, nStimuli; id_key=:cell_id,
     # we will mask out
     return -1
 end
+
+function influence_map(trial_average, window; ϵ=0.1)
+    f = mean(trial_average[:,:,:,:,end-window+1:end],dims=5)[:,:,:,:,1]
+    f0 = mean(trial_average[:,:,:,:,1:window],dims=5)[:,:,:,:,1]
+    df = f - f0
+    df_f = df./(f0 .+ ϵ)
+end
+
+function influence_map(trial_average, pre_idx, post_idx; ϵ=0.1)
+    f = mean(trial_average[:,:,:,:,post_idx],dims=5)[:,:,:,:,1]
+    f0 = mean(trial_average[:,:,:,:,pre_idx],dims=5)[:,:,:,:,1]
+    df = f - f0
+    df_f = df./(f0 .+ ϵ)
+end

@@ -16,16 +16,16 @@ using Lensman.DictThreadSafe
 
 # TODO: split into functions that use a macro to fill args with same name..?
 # eg suppose for this function:
-# calc_trial_average(tseries::LazyTy5, stimStartIdx,
-        # stimEndIdx, tseriesH, tseriesW, tseriesZ, trialOrder;
+# calc_trial_average(tseries::LazyTy5, stim_start_idx,
+        # stim_end_idx, tseriesH, tseriesW, tseriesZ, trialOrder;
         # pre=16, post=16)
 # we do:
-# trial_average = @dagcall r calc_trial_average(tseries, stimStartIdx,
-#        stimEndIdx, tseriesH, tseriesW, tseriesZ, trialOrder;
+# trial_average = @dagcall r calc_trial_average(tseries, stim_start_idx,
+#        stim_end_idx, tseriesH, tseriesW, tseriesZ, trialOrder;
 #        pre=16, post=16)
 # which expands to:
-# trial_average = calc_trial_average(r[:tseries], r[:stimStartIdx],
-#        r[:stimEndIdx], r[:tseriesH], r[:tseriesW], r[:tseriesZ],
+# trial_average = calc_trial_average(r[:tseries], r[:stim_start_idx],
+#        r[:stim_end_idx], r[:tseriesH], r[:tseriesW], r[:tseriesZ],
 #        r[:trialOrder]; pre=16, post=16)
 # ...but only if local variable isn't defined..? eg using @isdefined..?
 # also would require new macro to replace @lazy such that:
@@ -41,7 +41,7 @@ function update_recording_dag(recording::DAG)
     @pun (uri, rel_plot_dir, tseries_dset, zseries_name, tseries_root_dirs,
         slm_dir, slm_root_dirs, lazy_tyh5, window_secs, zbrain_dir,
         oir_dir, warp_prefix, oir_920_name, oir_820_name, tyh5_path,
-        h2b_zbrain, zbrain_units
+        h2b_zbrain, zbrain_units, rostral, dorsal, suite2p_dir
     ) = recording
     # procutil=Dict(Dagger.ThreadProc => 36.0)
     
@@ -96,8 +96,8 @@ function update_recording_dag(recording::DAG)
         slm2_power = getindex(res2,2)
         voltageFile = glob_one_file("*VoltageRecording*.csv", tseries_dir)
         res3 = getStimTimesFromVoltages(voltageFile, tseriesZ)
-        stimStartIdx = getindex(res3,1)
-        stimEndIdx = getindex(res3,2)
+        stim_start_idx = getindex(res3,1)
+        stim_end_idx = getindex(res3,2)
         frameStartIdx = getindex(res3,3)
         nstim_pulses = getindex(res3,4)
         res4 = get_target_groups(slm_exp_dir)
@@ -106,8 +106,7 @@ function update_recording_dag(recording::DAG)
         nStimuli = maximum(trial_order)
         nTrials = size(trial_order,1)
         zOffset = getzoffset(exp_date, slm_num)
-        # TODO: put outside of @lazy..?
-        suite2p_dir = is_node(recording, :suite2p_dir, thunk(get_suite2p_dir)(tseries_dir))
+        suite2p_dir = isnothing(suite2p_dir) ? get_suite2p_dir(tseries_dir) : suite2p_dir
         nwb_path = joinpath(suite2p_dir, "ophys.nwb")
         ndict = read_nwb_rois(nwb_path)
         cell_traces = getindex(ndict,:cell_traces)
@@ -124,7 +123,7 @@ function update_recording_dag(recording::DAG)
         imaging2zseries_plane = map(f, et)
         window_len = ((vol_rate)->Int(round(window_secs * vol_rate)))(vol_rate)
         df_f_per_voxel_per_trial = get_df_f_per_voxel_per_trial_from_h5(
-            tyh5_path, tseries_dset, stimStartIdx, stimEndIdx, window_len,
+            tyh5_path, tseries_dset, stim_start_idx, stim_end_idx, window_len,
             tseriesH, tseriesW, tseriesZ)
         df_f_per_trial_dataframe = get_df_f_per_trial_dataframe(
             df_f_per_voxel_per_trial, trial_order)
@@ -132,10 +131,10 @@ function update_recording_dag(recording::DAG)
         twp1 = mapTargetGroupsToPlane(target_groups, etl_vals,
             is1024=tseries_is1024, zOffset=zOffset)
         targets_with_plane_index = map(x->Int.(round.(x, digits=0)), twp1)
-        cells = makeCellsDF(targets_with_plane_index, stimStartIdx, stimEndIdx,
+        cells = makeCellsDF(targets_with_plane_index, stim_start_idx, stim_end_idx,
             trial_order, group_stim_freq)
-        trial_average = calc_trial_average(tseries, stimStartIdx,
-            stimEndIdx, tseriesH, tseriesW, tseriesZ, trial_order;
+        trial_average = calc_trial_average(tseries, stim_start_idx,
+            stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
             pre=window_len, post=window_len)
         lateral_unit = microscope_lateral_unit(tseriesZ)
         target_size_px = spiral_size(exp_date, lateral_unit)
@@ -147,7 +146,11 @@ function update_recording_dag(recording::DAG)
             use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
             save_dir=fish_dir, dont_run = true)
             : "using cached ANTs for zbrain registration")(zbrain_warps)
+        # TODO: should first try reading settings
         zbrain_warpedname = glob_one_file("*SyN_Warped.nii.gz", fish_dir)
+        zbrain_transform_affine = glob_one_file("$warp_prefix*GenericAffine.mat", fish_dir)
+        zbrain_transform_SyN = glob_one_file("$warp_prefix*SyN_1Warp.nii.gz", fish_dir)
+        zbrain_transforms = [zbrain_transform_affine, zbrain_transform_SyN]
         zbrain_registered = niread(zbrain_warpedname)
         oir_920_file = joinpath(oir_dir, oir_920_name)
         oir_820_file = joinpath(oir_dir, oir_820_name)
@@ -163,35 +166,26 @@ function update_recording_dag(recording::DAG)
         mm920_registered = niread(multimap_warpedname)
         mm_transform_affine = glob_one_file("$warp_prefix*GenericAffine.mat", oir_dir)
         mm_transform_SyN = glob_one_file("$warp_prefix*SyN_1Warp.nii.gz", oir_dir)
+        mm_transforms = [mm_transform_affine, mm_transform_SyN]
         mm820_registered = multimap_transforms(zseries, multimap_820,
             mm_transform_affine, mm_transform_SyN)
         region_mask_path = joinpath(fish_dir, "region_masks.h5")
         region_mask_dir = joinpath(fish_dir, "region_masks")
         zbrain_masks = matread("$zbrain_dir/MaskDatabase.mat")
-        # region_masks = if isdir(region_mask_dir)
-        #     Dict(n=>joinpath(region_mask_dir,n) for n in readdir(region_mask_dir))
-        # else
-        #     # save_region_masks(region_mask_dir, zseries, zbrain_masks,
-        #     save_region_masks(region_mask_dir, zseries, zbrain_masks,
-        #         [mm_transform_affine, mm_transform_SyN], zbrain_units)
-        #     Dict(n=>joinpath(region_mask_dir,n) for n in readdir(region_mask_dir))
-        # end
-
-
-        region_mask_h5 = if isfile(region_mask_path)
+        zbrain_mask_names = replace.(zbrain_masks["MaskDatabaseNames"], "/" => "_")[1,:]
+        region_masks_h5 = if isfile(region_mask_path)
             h5open(region_mask_path, "r", swmr=true)
         else
             save_region_masks(region_mask_path, zseries, zbrain_masks,
-                [mm_transform_affine, mm_transform_SyN], zbrain_units)
-            h5open(region_mask_path, "r", swmr=true)
+                zbrain_transforms;
+                rostral=rostral, dorsal=dorsal)
         end
-        # TODO: how should we handle thunks shared across recordings...?
-        # we need to compose DAGs then....
 
-        # sdict = read_suite2p(suite2p_dir)
-        # nCells = getindex(sdict,:nCells)
-        # cell_centers = getindex(sdict,:cell_centers)
-        # cells_mask = getindex(sdict,:cells_mask)
+        sdict = read_suite2p(suite2p_dir)
+        nCells = getindex(sdict,:nCells)
+        cell_centers = getindex(sdict,:cell_centers)
+        cells_mask = getindex(sdict,:cells_mask)
+        iscell = getindex(sdict,:iscell)
 
         # targetsWithPlaneIndex = mapTargetGroupsToPlane(target_groups, etl_vals; is1024=(tseriesW==1024), zOffset=zOffset)
         # assigned all above
@@ -216,7 +210,7 @@ function update_recording_dag(recording::DAG)
         exp_date, frame_rate, etl_vals, tseriesH, tseriesW, tseriesZ, tseriesT,
         zseriesH, zseriesW, zseriesZ, res, trial_order, slm_exp_dir,
         first_target_group, slm_num, power_per_cell, res2, slm1_power,
-        slm2_power, voltageFile, res3, stimStartIdx, stimEndIdx, frameStartIdx,
+        slm2_power, voltageFile, res3, stim_start_idx, stim_end_idx, frameStartIdx,
         res4, target_groups, group_stim_freq, nStimuli, nTrials, zOffset,
         suite2p_dir, nwb_path, ndict, cell_traces, cell_masks, iscell, nCells,
         used_slm_dir, vol_rate, imaging2zseries_plane, zseries_xml,
@@ -224,10 +218,9 @@ function update_recording_dag(recording::DAG)
         targets_with_plane_index, cells, trial_average, window_len,
         target_size_px, zbrain_registered, zbrain_ants_cmd,
         zbrain_registered, mm920_registered, mm820_registered, nstim_pulses,
-        mm_transform_affine, mm_transform_SyN,
-        region_mask_path, zbrain_masks,
-        # region_masks
-        region_mask_h5
+        mm_transform_affine, mm_transform_SyN, zbrain_transforms,
+        region_mask_path, zbrain_masks, region_masks_h5, zbrain_mask_names,
+        nCells, cell_centers, cells_mask, iscell
     )
 
     recording
@@ -241,7 +234,7 @@ function update_dag(r)
         exp_date, frame_rate, etl_vals, tseriesH, tseriesW, tseriesZ, tseriesT,
         zseriesH, zseriesW, zseriesZ, res, trial_order, slm_exp_dir,
         first_target_group, slm_num, power_per_cell, res2, slm1_power,
-        slm2_power, voltageFile, res3, stimStartIdx, stimEndIdx, frameStartIdx,
+        slm2_power, voltageFile, res3, stim_start_idx, stim_end_idx, frameStartIdx,
         res4, target_groups, group_stim_freq, nStimuli, nTrials, zOffset,
         suite2p_dir, nwb_path, ndict, cell_traces, cell_masks, iscell, nCells
     ) = r.nodes

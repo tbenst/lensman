@@ -553,7 +553,7 @@ end
 "Glob one and only one file."
 function glob_one_file(pattern, dir)
     files = glob(pattern, dir)
-    @assert length(files)==1 "Expecting exactly one file: $files"
+    @assert length(files)==1 "Expecting exactly one file for $dir/$pattern: $files"
     files[1]
 end
 
@@ -647,19 +647,16 @@ end
 "Read HDF5 file in parallel and calculate per-trial df/f."
 function get_df_f_per_voxel_per_trial_from_h5(tyh5_path, tseries_dset,
         stimStartIdx, stimEndIdx, window_len, tseriesH, tseriesW, tseriesZ)
-    @error "TODO: rewrite to use LazyTy5"
+    @info "rewrote to use LazyTy5; not tested"
     nTrials = length(stimStartIdx)
     df_f_per_voxel_per_trial = 
         SharedArray{Float64}(nTrials, tseriesH, tseriesW, tseriesZ);
     @sync @distributed for i in 1:nTrials
-        h5open(tyh5_path, "r", swmr=true) do thread_h5
-            thread_tseries = LazyTy5(thread_h5[tseries_dset])
-            # thread_tseries = lazy_read_tyh5(tyh5_path) # crashes
-            s, e = stimStartIdx[i], stimEndIdx[i]
-            f0 = mean(thread_tseries[:,:,:,:,s-window_len:s-1],dims=5)
-            f = mean(thread_tseries[:,:,:,:,e+1:e+window_len],dims=5)
-            df_f_per_voxel_per_trial[i,:,:,:] = @. (f - f0) / (f0 + 5)
-        end
+        proc_tseries = LazyTy5(tyh5_path, tseries_dset)
+        s, e = stimStartIdx[i], stimEndIdx[i]
+        f0 = mean(proc_tseries[:,:,:,s-window_len:s-1],dims=4)
+        f = mean(proc_tseries[:,:,:,e+1:e+window_len],dims=4)
+        df_f_per_voxel_per_trial[i,:,:,:] = @. (f - f0) / (f0 + 5)
     end
     convert(Array,df_f_per_voxel_per_trial)
 end
@@ -681,19 +678,17 @@ function calc_trial_average(tseries::LazyTy5, stimStartIdx,
     trialTime = maximum(stim_trial_lens) + pre + post + 1
     # HWZCT
     avgStim = SharedArray{Float64}(tseriesH, tseriesW, tseriesZ, nStimuli, trialTime)
-    # p = Progress(length(stimStartIdx), 1, "trial average:")
     # threads crashes HDF5
     # @threads for i in 1:length(stimStartIdx)
     # for i in 1:length(stimStartIdx)
     # TODO: why does this use 100+GB of memory for pre=post=30?
     # also, is it actually safe to do this kind of parallel memory accumulation..?
-    @sync @distributed for i in 1:length(stimStartIdx)
+    @showprogress @distributed for i in 1:length(stimStartIdx)
         thread_tseries = LazyTy5(tseries.tyh5_path, tseries.dset_str)
         start = stimStartIdx[i]
         stop = start - pre + trialTime - 1
         trialType = trialOrder[i]
         @views avgStim[:,:,:,trialType,:] .+= thread_tseries[:,:,:,start - pre:stop]
-        # next!(p)
         close(thread_tseries)
         thread_tseries = nothing
         GC.gc()
@@ -720,7 +715,7 @@ function calc_trial_average(tseries::Array{<:Real}, stimStartIdx,
     trialTime = maximum(stim_trial_lens) + pre + post + 1
     # HWZCT
     avgStim = zeros(tseriesH, tseriesW, tseriesZ, nStimuli, trialTime)
-    p = Progress(length(stimStartIdx), 1, "trial average:")
+    p = Progress(length(stimStartIdx); desc="trial average:")
     for i in 1:length(stimStartIdx)
         start = stimStartIdx[i]
         stop = start - pre + trialTime - 1
@@ -785,61 +780,84 @@ function make_joinpath(parts...)
     path
 end
 
+"""
+Using two channels to sync, write sparse datasets to HDF5.
+
+Needed as HDF5 chokes with multithreading.
+"""
+function write_n_sparse_datasets(h5path, n, dset_size, channel,blocker)
+    h5 = h5open(h5path, "w")
+    h5["size"] = dset_size
+    p = Progress(n; desc="Write masks:")
+    while n > 0
+        dset_name, data = take!(channel)
+        take!(blocker)
+        if length(data.nzval) == 0
+            # all zero
+            h5[dset_name] = 0
+        else
+            H5SparseMatrixCSC(h5, dset_name, data)
+        end
+        n -= 1
+        next!(p)
+    end
+    h5
+end
+
+
 """"
 Save sparse CSC arrays in h5 file.
 
-ants_warps: [affine, SyN] or [affine]
+ants_transforms: [affine, SyN] or [affine]
 """
-# function save_region_masks(region_mask_dir, zseries, zbrain_masks, ants_warps,
-function save_region_masks(region_mask_path, zseries, zbrain_masks, ants_warps,
-        zbrain_units)
-    mask_names = zbrain_masks["MaskDatabaseNames"][1,:]
-    nMasks = length(mask_names)
+function save_region_masks(region_mask_path, zseries, zbrain_masks, ants_transforms;
+    nprocs = 10, rostral=:right, dorsal=:up
+)
     H, W, Z = size(zseries)
-    # mkdir(region_mask_dir)
-    Lensman.HDF5ThreadSafe.h5server(region_mask_path, "w") do h5
-    # h5open(region_mask_path, "w") do h5
-        # h5["/size"] = collect(size(zseries))
-        p = Progress(nMasks, 1, "Register:")
-        # for i in 1:1
-        # @threads for i in 1:nMasks
-        # @threads for i in 1:1
-        for i in 1:1
-        # @sync @distributed for i in 1:nMasks
-        # @sync @distributed for i in 1:nMasks
-            # _save_one_region_mask(i, p, region_mask_dir, zseries, zbrain_masks,
-            # ants_warps, zbrain_units)
-            _save_one_region_mask(i, p, zseries, zbrain_masks,
-                ants_warps, zbrain_units, h5)
+    mask_names = zbrain_masks["MaskDatabaseNames"][1,:]
+    # nMasks = 10
+    nMasks = length(mask_names)
+    to_write = RemoteChannel(()->Channel(Inf))
+    blocker = RemoteChannel(()->Channel(nprocs))
+    @distributed for i in 1:nMasks
+        @async begin
+            put!(blocker, i)
+            assignment = _region_mask(i, zseries, zbrain_masks, ants_transforms, rostral, dorsal)
+            put!(to_write, assignment)
+            assignment = nothing
             GC.gc()
+            next!(p)
         end
     end
+    # TODO: perhaps we should use threads for producers, and one process for the consumer
+    # should be an easy switch @distributed => @Threads
+    # and remotecall_fetch for write_n_sparse_datasets
+    # https://docs.julialang.org/en/v1/manual/distributed-computing/#Multi-processing-and-Distributed-Computing
+    # currently, 1 hour 15 minutes for all masks.
+    h5 = write_n_sparse_datasets(region_mask_path, nMasks, [H,W,Z], to_write, blocker)
+    @everywhere GC.gc()
+    return h5
 end
 
-# function _save_one_region_mask(i, p, region_mask_dir, zseries, zbrain_masks,
-    # ants_warps, zbrain_units, h5
-function _save_one_region_mask(i, p, zseries, zbrain_masks,
-        ants_warps, zbrain_units, h5
-)
-    # or else a h5 path..
+function _region_mask(i, zseries, zbrain_masks, ants_transforms, rostral, dorsal)
+    H, W, Z = size(zseries)
+    # get rid of `/` so not interpreted as a h5 path
     name = replace(zbrain_masks["MaskDatabaseNames"][1,i], "/" => "_")
-    # h5open(region_mask_path, "w") do h5
-    begin
-        h5["/size"] = collect(size(zseries))
-        mask = read_mask(zbrain_masks, i)
-        mask = AxisArray(Float32.(mask), AxisArrays.axes(mask))
-        GC.gc()
-        mask = antsApplyTransforms(zseries, mask,
-            ants_warps...) .> 0
-        # save sparse vector
-        mask = sparse(reshape(mask,length(mask),1))
-        GC.gc()
-        # TODO: or we could save as a .mat file for more standard format..?
-        # https://github.com/JuliaIO/MAT.jl/blob/3ed629c05f7261e86c0dde0869d265e99a265efb/src/MAT_HDF5.jl
-        # should work with abstract HDF5DataStore in hdf5_threads
-        # mask = H5SparseMatrixCSC(region_mask_path, name, mask)
-        mask = H5SparseMatrixCSC(h5, name, mask; chunk=nothing)
-        next!(p)
-    end
-    nothing    
+
+    mask = read_mask(zbrain_masks, i; rostral=rostral, dorsal=dorsal)
+    mask = AxisArray(Float32.(mask), AxisArrays.axes(mask))
+    mask = antsApplyTransforms(zseries, mask,
+        ants_transforms...) .> 0
+    # TODO: or we could save as a .mat file for more standard format..?
+    # https://github.com/JuliaIO/MAT.jl/blob/3ed629c05f7261e86c0dde0869d265e99a265efb/src/MAT_HDF5.jl
+    mask = sparse(reshape(mask,length(mask),1))
+    name => mask
+end
+
+function read_registered_mask(region_masks_h5, name)
+    shape = region_masks_h5["size"][:]
+    reshape(
+        collect(sparse(H5SparseMatrixCSC(region_masks_h5, name))),
+        shape...
+    )
 end

@@ -25,6 +25,7 @@ include("distributed.jl")
 include("dataframes.jl")
 include("Bruker.jl")
 include("core.jl")
+include("tidying.jl")
 include("resources.jl")
 include("recording_dag.jl")
 include("recordings.jl")
@@ -144,5 +145,8 @@ export read_microns_per_pixel,
     stim_roi_threshold,
     Recordings,
     trial_average_from_h5,
-    Resources
+    Resources,
+    read_registered_mask,
+    influence_map,
+    LazyTy5
 end

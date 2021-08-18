@@ -40,11 +40,37 @@ catch
 end
 
 "Read (sparse) mask from Zbrain atlas and reshape to dense Array."
-function read_mask(masks, idx; W=621, H=1406, Z=138, units=zbrain_units)
-    example_mask = reshape(Array(masks["MaskDatabase"][:,idx]), (H, W, Z))
+function read_mask(masks, idx::Int; W=621, H=1406, Z=138, units=zbrain_units,
+        rostral=:left, dorsal=:down)
+    mask = reshape(Array(masks["MaskDatabase"][:,idx]), (H, W, Z))
     # reshape as [621, 1406, 138]
-    example_mask = permutedims(example_mask, (2, 1, 3))
-    AxisArray(example_mask, (:y, :x, :z), units)
+    mask = permutedims(mask, (2, 1, 3))
+    # zbrain is facing left and bottom to top, meaning idx 1 is deepest plane
+    if rostral == :right
+        mask = reverse(mask,dims=2);
+    end
+    if dorsal == :up
+        mask = reverse(mask,dims=3);
+    end
+    AxisArray(mask, (:y, :x, :z), units)
+end
+
+function read_mask(masks, names::AbstractString; kwargs...)
+    mask_names = masks["MaskDatabaseNames"][1,:]
+    # we change name when resaving h5 file
+    new_mask_names = replace.(mask_names, "/" => "_")[1,:]
+    # lets resolve for either
+    is_name = mask_names .== names
+    new_is_name = new_mask_names .== names
+    if sum(is_name) == 1
+        idx = findall(is_name)[1]
+    elseif sum(new_is_name) == 1
+        idx = findall(new_is_name)[1]
+    else
+        error("could not find (unique) name, $name")
+    end
+
+    read_mask(masks, idx; kwargs...)
 end
 
 "Combine Zbrain masks whose name includes the given string."
