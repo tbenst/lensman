@@ -41,7 +41,8 @@ function update_recording_dag(recording::DAG)
     @pun (uri, rel_plot_dir, tseries_dset, zseries_name, tseries_root_dirs,
         slm_dir, slm_root_dirs, lazy_tyh5, window_secs, zbrain_dir,
         oir_dir, warp_prefix, oir_920_name, oir_820_name, tyh5_path,
-        h2b_zbrain, zbrain_units, rostral, dorsal, suite2p_dir
+        h2b_zbrain, zbrain_units, rostral, dorsal, suite2p_dir, zbrain_masks,
+        zbrain_mask_names
     ) = recording
     # procutil=Dict(Dagger.ThreadProc => 36.0)
     
@@ -171,8 +172,6 @@ function update_recording_dag(recording::DAG)
             mm_transform_affine, mm_transform_SyN)
         region_mask_path = joinpath(fish_dir, "region_masks.h5")
         region_mask_dir = joinpath(fish_dir, "region_masks")
-        zbrain_masks = matread("$zbrain_dir/MaskDatabase.mat")
-        zbrain_mask_names = replace.(zbrain_masks["MaskDatabaseNames"], "/" => "_")[1,:]
         region_masks_h5 = if isfile(region_mask_path)
             h5open(region_mask_path, "r", swmr=true)
         else

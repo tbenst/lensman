@@ -736,6 +736,7 @@ read_zbrain_line("\$zbrain_dir/AnatomyLabelDatabase.hdf5",
     "Elavl3-H2BRFP_6dpf_MeanImageOf10Fish")
 """
 function read_zbrain_line(anatomy_label_h5_path, fishline, zbrain_units=zbrain_units)
+    @info "reading so facing right, and dorsal at z=1."
     volume = AxisArray(permutedims(
     h5read(anatomy_label_h5_path,
         fishline),

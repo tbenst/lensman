@@ -5,6 +5,7 @@ using Lensman, Images, Glob, NPZ, DataFrames, ImageSegmentation,
       Random, Statistics, PyCall, ProgressMeter, HDF5, Distributed,
       H5Sparse, SparseArrays, CategoricalArrays
 import Lensman: @pun, @assign
+using ImageView
 # import PyPlot
 # plt = PyPlot
 # matplotlib = plt.matplotlib
@@ -19,11 +20,17 @@ aog = AlgebraOfGraphics
 Data = aog.data
 set_aog_theme!() #src
 init_workers(36)
-# using ImageView
+
 
 ##
 resources = Resources();
+##
+@pun h2b_zbrain = resources
+imshow(h2b_zbrain)
+
+
 ## TODO: takes 20 seconds due to precompilation
+
 r = Recordings[
         "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
     ](;resources...);

@@ -469,7 +469,6 @@ function find_imaging_planes(zseries, avg_imaging)
     end
     matching_zplanes = Tuple.(argmax(mi,dims=1)[1,:])
     map(x->x[1], matching_zplanes)
-
 end
 
 "Given a threshould, find the lowest stim number where all df_f are above"

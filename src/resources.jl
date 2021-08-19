@@ -13,8 +13,11 @@ function update_resource_dag(resource)
     @lazy begin
         h2b_zbrain = read_zbrain_line("$zbrain_dir/AnatomyLabelDatabase.hdf5",
             "Elavl3-H2BRFP_6dpf_MeanImageOf10Fish")
+        zbrain_masks = matread("$zbrain_dir/MaskDatabase.mat")
+        zbrain_mask_names = replace.(zbrain_masks["MaskDatabaseNames"], "/" => "_")[1,:]
+
     end
 
-    @assign resource = h2b_zbrain
+    @assign resource = (h2b_zbrain, zbrain_masks, zbrain_mask_names)
     resource
 end
