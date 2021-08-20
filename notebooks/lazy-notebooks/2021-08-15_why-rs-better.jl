@@ -20,7 +20,7 @@ L = Lensman
 aog = AlgebraOfGraphics
 Data = aog.data
 set_aog_theme!() #src
-init_workers(36)
+# init_workers(36)
 
 
 ##
@@ -34,11 +34,10 @@ recording = Recordings[
         "2021-06-01_wt-chrmine_h2b6s/fish4/TSeries-lrhab-control-118trial-061"
     ](;options...,
     resources...);
-recording.nodes[:zbrain_registered].restore
-recording.nodes[:zbrain_registered].checkpoint
 # recording.nodes[:zbrain_registered].wrapped_thunk
 ##
-@pun region_masks_h5 = recording
+# @pun region_masks_h5 = recording
+@pun zbrain_restore = recording
 # @pun (nCells, cell_centers, cells_mask, iscell) = r
 ##
 @pun (region_masks_h5, imaging2zseries_plane,

@@ -34,7 +34,7 @@ using Lensman.DictThreadSafe
 # tseries_dir = thunk(find_folder)(uri, tseries_root_dirs)
 # r[:tseries_dir] = tseries_dir
 # is this too much metaprogramming...? Harder for others to read...
-function checkpointable(args....)
+function checkpointable(args...)
     println([typeof(a) for a in args])
     Checkpointable(args...)
 end

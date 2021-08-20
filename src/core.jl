@@ -26,10 +26,6 @@ function __init__()
 end
 
 
-include("Bruker.jl")
-include("files.jl")
-# include("segment.jl")
-
 zbrain_units = (0.798μm, 0.798μm, 2μm)
 
 try
