@@ -80,3 +80,91 @@ if ~in(:df_f_per_trial_dataframe, keys(r.thunks))
     @assign r.thunks = df_f_per_trial_dataframe
 end
 @pun df_f_per_trial_dataframe = r;
+
+
+
+############## dead code from 2021-08-18_hemisphere_zbrain.jl
+
+# stim_names = nothing
+smallmasks= 
+df = imap_DF_by_region(imap, masks, region_names, imaging2zseries_plane,
+    512, 512, 151, stim_names)
+# df = imap_DF_by_region(imap, region_masks_h5, regions, imaging2zseries_plane,
+#     stim_names, pretty_region_names)
+##
+# plot(df, x="df_f", color="region", Geom.density, Scale.y_log10)
+# Data(df) * visual(Violin) * mapping(:region, :df_f) |> aog.draw
+# categorical: 37s
+# strings: 18s
+# one char string: 1.8s
+# one char CategoricalArray, string: 6.8s
+# two col, long CategoricalArray: 35s
+# p0 = Data(df[1:100,:]) * visual(Violin) *
+    # mapping(:region, :df_f, color=:stim, dodge=:stim)
+p1 =  Data(df) * visual(Violin) *
+    mapping(:region, "Δf/f", color=:stim, dodge=:stim)
+    
+# aog.draw(p0, axis=(xscale=log,))
+# aog.draw(p0, axis=(xscale=log,))
+# aog.draw(p1, axis=(xscale=log,))
+d1 = aog.draw(p1)
+ppath = joinpath(plot_dir, "voxel_df_f_by-region.png")
+save(ppath, d1)
+# aog.draw(p1; axis=(xscale=log,))
+
+##
+# Gadfly.plot(df, x="df_f", color="region", Geom.density, Scale.y_log10)
+# Gadfly.plot(df, x="df_f", color="region", Geom.violin, Scale.y_log10)
+Gadfly.plot(df, x=:stim, y=:df_f, color=:region,
+    Geom.violin)
+
+
+
+
+
+
+## not finished
+figB = 1.6
+figW,figH = (figB*Z, figB)
+fig = plt.figure(figsize=(figW,figH))
+fig, axs = plt.subplots(1,Z, figsize=(figW,figH))
+imap_cmap = transparent_cmap(plt.cm.Greens, max_alpha=1.0)
+for z in 1:Z
+    ax = axs[z]
+    match_z = imaging2zseries_plane[z]
+    df_size = size(trial_average)[1:2]
+    zseriesSize = size(zseries)[1:2]
+    
+    global cim = ax.imshow(imresize(df_f[:,:,z], zseriesSize), cmap=imap_cmap,
+        clim=(tseries_cmin,tseries_cmax))
+    zs = ez_gamma(zseries[:,:,match_z])
+    # ax.imshow(zs, cmap=bg_cmap)
+    # ax.imshow(mm820_registered[:,:,4,match_z], cmap=mm4_cmap,
+    #     clim=(mm4_cmin,mm4_cmax))
+    # ax.imshow(mm820_registered[:,:,1,match_z], cmap=mm1_cmap,
+    #     clim=(mm1_cmin,mm1_cmax))
+    ax.set_axis_off()
+    ax.set_xlim(xrange)
+    ax.set_ylim(yrange)
+    ax.set_title("$(Int(round(etlVals[z],digits=0)))μm")
+    # this will make extra circles (1 extra per repetition...)
+    for (x,y,targetZ) in eachrow(unique(cells[cells.stimNum .== stimNum,[:x,:y,:z]]))
+        if z == targetZ
+            circle = matplotlib.patches.Circle((x,y), targetSizePx, color="k",
+                fill=false, lw=0.4, alpha=0.3)
+            ax.add_patch(circle)
+        end
+    end
+end
+
+# may need to adjust if colorbar is cutoff
+fig.subplots_adjust(right=0.9)
+cbar_ax = fig.add_axes([0.91, 0.15, 0.0075, 0.7])
+cbar = fig.colorbar(cim, cax=cbar_ax)
+# path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)_$(analysis_name)_stim$stimNum")
+# @show path*".svg"
+# fig.savefig(path*".svg", dpi=1200)
+# fig.savefig(path*".png", dpi=1200)
+fig
+
+#################

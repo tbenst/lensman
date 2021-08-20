@@ -551,10 +551,19 @@ function read_oir_units(oir_file)
 end
 
 "Glob one and only one file."
-function glob_one_file(pattern, dir)
+function glob_one_file(pattern, dir; nofail=false)
     files = glob(pattern, dir)
-    @assert length(files)==1 "Expecting exactly one file for $dir/$pattern: $files"
-    files[1]
+    if nofail
+        if length(files) == 1
+            return files[1]
+        else
+            return nothing
+        end
+    else
+        @assert length(files)==1 "Expecting exactly one file for $dir/$pattern: $files"
+        return files[1]
+    end
+
 end
 
 function read_xml(xml_file)
@@ -735,14 +744,18 @@ e.g.
 read_zbrain_line("\$zbrain_dir/AnatomyLabelDatabase.hdf5",
     "Elavl3-H2BRFP_6dpf_MeanImageOf10Fish")
 """
-function read_zbrain_line(anatomy_label_h5_path, fishline, zbrain_units=zbrain_units)
-    @info "reading so facing right, and dorsal at z=1."
+function read_zbrain_line(anatomy_label_h5_path, fishline, zbrain_units=zbrain_units;
+        rostral=:left, dorsal=:down)
     volume = AxisArray(permutedims(
     h5read(anatomy_label_h5_path,
         fishline),
         (2,1,3)), (:y, :x, :z), zbrain_units)
-    volume = reverse(volume,dims=2); # face right
-    volume = reverse(volume,dims=3); # bottom to top
+    if rostral == :right
+        volume = reverse(volume,dims=2);
+    end
+    if dorsal == :up
+        volume = reverse(volume,dims=3);
+    end
     volume
 end
 
@@ -776,7 +789,7 @@ end
 function make_joinpath(parts...)
     path = joinpath(parts...)
     if ~isdir(path)
-        mkdir(path)
+        mkpath(path)
     end
     path
 end
@@ -815,7 +828,7 @@ function save_region_masks(region_mask_path, zseries, zbrain_masks, ants_transfo
     nprocs = 10, rostral=:right, dorsal=:up
 )
     H, W, Z = size(zseries)
-    mask_names = zbrain_masks["MaskDatabaseNames"][1,:]
+    mask_names = zbrain_masks["MaskDatabaseNames"]
     # nMasks = 10
     nMasks = length(mask_names)
     to_write = RemoteChannel(()->Channel(Inf))
@@ -843,7 +856,7 @@ end
 function _region_mask(i, zseries, zbrain_masks, ants_transforms, rostral, dorsal)
     H, W, Z = size(zseries)
     # get rid of `/` so not interpreted as a h5 path
-    name = replace(zbrain_masks["MaskDatabaseNames"][1,i], "/" => "_")
+    name = replace(zbrain_masks["MaskDatabaseNames"][i], "/" => "_")
 
     mask = read_mask(zbrain_masks, i; rostral=rostral, dorsal=dorsal)
     mask = AxisArray(Float32.(mask), AxisArrays.axes(mask))
@@ -856,9 +869,29 @@ function _region_mask(i, zseries, zbrain_masks, ants_transforms, rostral, dorsal
 end
 
 function read_registered_mask(region_masks_h5, name)
+    @show name
     shape = region_masks_h5["size"][:]
     reshape(
-        collect(sparse(H5SparseMatrixCSC(region_masks_h5, name))),
+        Array(sparse(H5SparseMatrixCSC(region_masks_h5, name))),
+        # TODO benchmark
+        # collect(sparse(H5SparseMatrixCSC(region_masks_h5, name))),
         shape...
     )
 end
+
+function read_zbrain_masks(zbrain_dir; read_hemisphere=false)
+    zbrain_masks = matread("$zbrain_dir/MaskDatabase.mat")
+    zbrain_masks["MaskDatabaseNames"] = vec(zbrain_masks["MaskDatabaseNames"])
+    if read_hemisphere
+        left = sparse(H5SparseMatrixCSC("$zbrain_dir/hemisphere_masks.h5", "left"))
+        right = sparse(H5SparseMatrixCSC("$zbrain_dir/hemisphere_masks.h5", "right"))
+        push!(zbrain_masks["MaskDatabaseNames"], "Left hemisphere")
+        push!(zbrain_masks["MaskDatabaseNames"], "Right hemisphere")
+        zbrain_masks["MaskDatabase"] = hcat(zbrain_masks["MaskDatabase"], left, right)
+        @warn "no outline for left/right hemisphere."
+    end
+    zbrain_masks["MaskDatabaseNames"] = replace.(zbrain_masks["MaskDatabaseNames"],
+        "/" => "_")
+    zbrain_masks
+end
+

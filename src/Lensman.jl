@@ -5,10 +5,12 @@ using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     Statistics, SharedArrays, CSV, DataFrames, Suppressor, Plots,
     LinearAlgebra, LibExpat, LightXML, RollingFunctions, HypothesisTests,
     EllipsisNotation, HDF5, Distributed, Thunks, NPZ, SparseArrays,
-    H5Sparse
+    H5Sparse, Folds, Arrow, ProgressMeter, JuMP
 import Base.Threads: @threads, @spawn, @sync
 using Distributed
 import Unitful: μm
+import Base.Threads.@threads
+sio = pyimport("scipy.io")
 # using Dagger
 # https://github.com/JuliaPy/PyCall.jl#using-pycall-from-julia-modules
 

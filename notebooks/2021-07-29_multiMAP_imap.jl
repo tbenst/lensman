@@ -136,7 +136,7 @@ if length(warps)==0
     cmd = ants_register(fixed, moving; interpolation = "WelchWindowedSinc",
         histmatch = 0, sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
         use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
-        save_dir=fishDir, dont_run = true)
+        save_dir=fishDir, run = false)
 else
     cmd = "using cached ANTs for zbrain registration"
 end
@@ -219,7 +219,7 @@ if length(warps) == 0
     cmd = ants_register(fixed, moving; interpolation = "WelchWindowedSinc",
         histmatch = 0, sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
         use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
-        save_dir=oir_dir, dont_run = true)
+        save_dir=oir_dir, run = false)
 else
     cmd = "using cached ANTs for multiMAP registration"
 end

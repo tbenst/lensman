@@ -39,10 +39,9 @@ catch
     global tmppath = mktemp()
 end
 
-"Read (sparse) mask from Zbrain atlas and reshape to dense Array."
-function read_mask(masks, idx::Int; W=621, H=1406, Z=138, units=zbrain_units,
+function zbrain_vec2mat(sparse_vec; W=621, H=1406, Z=138, units=zbrain_units,
         rostral=:left, dorsal=:down)
-    mask = reshape(Array(masks["MaskDatabase"][:,idx]), (H, W, Z))
+    mask = reshape(Array(sparse_vec), (H, W, Z))
     # reshape as [621, 1406, 138]
     mask = permutedims(mask, (2, 1, 3))
     # zbrain is facing left and bottom to top, meaning idx 1 is deepest plane
@@ -55,8 +54,15 @@ function read_mask(masks, idx::Int; W=621, H=1406, Z=138, units=zbrain_units,
     AxisArray(mask, (:y, :x, :z), units)
 end
 
+"Read (sparse) mask from Zbrain atlas and reshape to dense Array."
+function read_mask(masks, idx::Int; W=621, H=1406, Z=138, units=zbrain_units,
+        rostral=:left, dorsal=:down)
+    zbrain_vec2mat(masks["MaskDatabase"][:,idx];
+        W=W, H=H, Z=Z, units=units, rostral=rostral,dorsal=dorsal)
+end
+
 function read_mask(masks, names::AbstractString; kwargs...)
-    mask_names = masks["MaskDatabaseNames"][1,:]
+    mask_names = masks["MaskDatabaseNames"]
     # we change name when resaving h5 file
     new_mask_names = replace.(mask_names, "/" => "_")[1,:]
     # lets resolve for either
@@ -858,7 +864,9 @@ end
 
 rectangle(w, h, x, y) = Shape(x .+ [0,w,w,0], y .+ [0,0,h,h])
 
+"Array of arrays to array."
 aa2a(array) = copy(hcat(array...)')
+# aa2a(array) = collect(Iterators.flatten(array))
 
 function findIdxOfClosestElem(elem, array)
     dist = @. (array - elem)^2

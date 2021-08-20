@@ -1,8 +1,3 @@
-using LinearAlgebra, StatsBase, ProgressMeter, JuMP, ANTsRegistration, Dates,
-    NIfTI
-import Base.Threads.@threads
-sio = pyimport("scipy.io")
-
 """Sparse (min L1) solution to Y=AX for unknown A.
     
 Pass ie `optimizer=Gurobi.Optimizer`
@@ -410,13 +405,13 @@ function ants_register(fixed, moving; interpolation = "BSpline",
         use_syn = false, synThreshold = 1e-7, synMaxIter = 200,
         ants_path = "/opt/ANTs/install/bin/antsRegistration",
         save_dir = ANTsRegistration.userpath(),
-        dont_run = false)
+        run = false)
     if use_syn
         mstr = "_SyN"
     else
         mstr = "_affine"
     end
-    outprefix = Dates.format(DateTime(now()), DateFormat("YmmddTHHMMSSsZ"))
+    outprefix = Dates.format(DateTime(now()), DateFormat("YmmddTHHMMSSs"))
     fixedname = joinpath(save_dir, "$(outprefix)_fixed.nrrd")
     save(fixedname, fixed)
     movingname = joinpath(save_dir, "$(outprefix)_moving.nrrd")
@@ -432,14 +427,14 @@ function ants_register(fixed, moving; interpolation = "BSpline",
     affine_cmd = `$(ants_path) -d 3 --float -o \[$outname\_, $outname\_Warped.nii.gz, $outname\_WarpedInv.nii.gz\] --interpolation $interpolation --use-histogram-matching $histmatch -r \[$fixedname, $movingname,$initial_moving_type\] -t rigid\[0.1\] -m MI\[$fixedname, $movingname,1,32, Regular,    $sampling_frac\] -c \[$maxiter\x$maxiter\x$maxiter\x0,$threshold,10\] --shrink-factors 12x8x4x2 --smoothing-sigmas 4x3x2x1vox -t Affine\[0.1\] -m MI\[$fixedname, $movingname,1,32, Regular,$sampling_frac\] -c \[$maxiter\x$maxiter\x$maxiter\x0,$threshold,10\] --shrink-factors 12x8x4x2 --smoothing-sigmas 4x3x2x1vox`
     cmd = `$(affine_cmd) $(syn_cmd)`
 
-    if dont_run
+    if ~run
         return cmd
     end
 
     println("calling ANTs...")
     @time println(read(cmd, String))
 
-    affine_transform_path = glob(outprefix*"*GenericAffine.mat", save_dir)[1]
+    affine_transform_path = glob_one_file(outprefix*"*GenericAffine.mat", save_dir)
     affine_transform = sio.loadmat(affine_transform_path)
     warpedname = joinpath(outname*"_Warped.nii.gz")
 

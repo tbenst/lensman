@@ -20,7 +20,7 @@ DEFAULT_RECORDING_SETTINGS = Dict(
         "/mnt/deissero/users/tyler/b115/SLM_files/",
         "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
     ],
-    :rel_plot_dir => "denoised-plots",
+    :rel_analysis_dir => "raw",
     :tseries_dset => nothing,
     :tyh5_path => nothing,
     :slm_dir => "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/",
@@ -32,7 +32,8 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     :ants_no_run => true, # TODO: make false once tested
     :oir_920_name => "",
     :oir_820_name => "",
-    :warp_prefix => "",
+    :zbrain_warp_prefix => "",
+    :mm_warp_prefix => "",
     :rostral => :right,
     :dorsal => :up,
     :notes => "",
@@ -45,6 +46,9 @@ DEFAULT_RECORDING_SETTINGS = Dict(
 # set tseries_dset = nothing to force use of tiff files
 
 Recordings = Dict(
+    modifiable_recording("2021-06-01_wt-chrmine_h2b6s/fish4/TSeries-lrhab-control-118trial-061";
+        zseries_name="ZSeries-structural-840nm-057"
+    ),
     modifiable_recording("2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061";
         tseries_dset = "/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden_init_from_pretrained-2021-06-21_6pm",
         tyh5_path="/scratch/b115/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061.ty.h5",
@@ -75,7 +79,7 @@ Recordings = Dict(
         oir_920_name="multimap_zseries_920nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom.oir",
         oir_820_name="multimap_zseries_820nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom-take2.oir",
         lazy_tyh5=true,
-        warp_prefix="20210729T154219098Z"
+        # zbrain_warp_prefix="20210729T154219098Z" # TODO: is this zbrain or for multimap...?
     ),
     modifiable_recording("2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061";
         zseries_name="ZSeries-structural-840nm-048",
@@ -85,6 +89,6 @@ Recordings = Dict(
         oir_920_name="multimap_zseries_920nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom.oir",
         oir_820_name="multimap_zseries_820nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom-take2.oir",
         lazy_tyh5=true,
-        warp_prefix="20210727T204656077Z"
+        # zbrain_warp_prefix="20210727T204656077Z" # TODO: is this zbrain or for multimap...?
     ),
 )

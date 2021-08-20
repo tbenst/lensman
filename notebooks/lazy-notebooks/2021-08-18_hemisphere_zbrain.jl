@@ -1,8 +1,12 @@
-"Save .h5 file with left & right hemishpere masks."
+# "Save .h5 file with left & right hemishpere masks."
 using AlgebraOfGraphics, CairoMakie
 using Lensman, Images, Glob, NPZ, DataFrames, ImageSegmentation, 
       Random, Statistics, PyCall, ProgressMeter, HDF5, Distributed,
       H5Sparse, SparseArrays, CategoricalArrays
+using Polynomials, LsqFit
+using FixedPolynomials
+import DynamicPolynomials: @polyvar, polynomial, monomials
+
 import Lensman: @pun, @assign
 using ImageView
 # import PyPlot
@@ -19,10 +23,10 @@ aog = AlgebraOfGraphics
 Data = aog.data
 set_aog_theme!() #src
 ##
-# resources = Resources();
+resources = Resources();
 ##
 @pun (h2b_zbrain, zbrain_masks, zbrain_mask_names, zbrain_dir) = resources
-# imshow(h2b_zbrain)
+imshow(h2b_zbrain)
 ##
 hprofile = mean(collect(h2b_zbrain), dims=(2,3))[:,1,1];
 data((x=hprofile,)) * mapping(:x) * visual(Lines) |> draw
@@ -63,6 +67,7 @@ function tidy_3d(tensor)
     end
     DataFrame(y=ys, x=xs, z=zs, value=values)
 end
+# TODO: first use running union mask 
 tidy_3d(h2b_zbrain[1:10,1:10,1:10])
 h2b_df = tidy_3d(h2b_zbrain)
 
@@ -78,9 +83,6 @@ avgcols_df = tidy_matrix(avgcols)
 #      visual(Heatmap)
 # ) + data(df2) * visual(Lines)|> draw
 
-using Polynomials, LsqFit
-using FixedPolynomials
-import DynamicPolynomials: @polyvar, polynomial, monomials
 ##
 # model(x,p) = Polynomial(p).(x)
 # p0 = [311, 0.5, 0.5, 0.5]
@@ -110,7 +112,7 @@ fit = curve_fit(model, Array(df[:,[:x,:z]]), df[:,:y], df[:,:value], p0)
 # xs = collect
 # best = Polynomial(fit.param)
 fit.param
-# deg 3 x,y:
+# deg 3 x,y. From when ran rostral=:right, dorsal=:top
 # 313.8306435446811
 # 0.03162144712562135
 # -0.07162310094386597
@@ -183,10 +185,57 @@ imshow(im2)
 ##
 using H5Sparse
 h5path = "$zbrain_dir/hemisphere_masks.h5"
-h5 = h5open(h5path, "w")
+h5 = h5open(h5path, "r")
 ##
 # h5["size"] = collect(size(left_mask))
-mask2vec(x) = sparse(reshape(x, prod(size(left_mask)),1))
-H5SparseMatrixCSC(h5, "left", mask2vec(left_mask))
-H5SparseMatrixCSC(h5, "right", mask2vec(right_mask))
+# mask2vec(x) = sparse(reshape(x, prod(size(left_mask)),1))
+# H5SparseMatrixCSC(h5, "left", mask2vec(left_mask))
+# H5SparseMatrixCSC(h5, "right", mask2vec(right_mask))
+H5SparseMatrixCSC(h5, "left")
+right = L.zbrain_vec2mat(sparse(H5SparseMatrixCSC(h5, "right")))
+close(h5)
+
+##
+right = sparse(H5SparseMatrixCSC("$zbrain_dir/hemisphere_masks.h5", "right"))
+
+
+## fix left/right registered mask for a fish
+@pun (zbrain_dir, zbrain_masks) = resources
+recording = Recordings[
+        "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
+    ](;resources...);
+
+## debug l/r mask
+@pun region_mask_path = recording
+##
+h5path = "$zbrain_dir/hemisphere_masks.h5"
+h5 = h5open(h5path, "r", swmr=true)
+
+# these are correct
+right = L.zbrain_vec2mat(sparse(H5SparseMatrixCSC(h5, "right")), rostral=:right, dorsal=:up)
+left = L.zbrain_vec2mat(sparse(H5SparseMatrixCSC(h5, "left")), rostral=:right, dorsal=:up)
+habenula_name, habenula = L.read_first_mask(region_masks_h5, zbrain_mask_names,
+    imaging2zseries_plane,"Habenula")
+
+hab = L.read_mask(zbrain_masks, habenula_name; rostral=rostral, dorsal=dorsal)
+@show size(hab), size(left)
+imshow(hab)
+## transform
+rmask = AxisArray(Float32.(right), AxisArrays.axes(right))
+rmask = antsApplyTransforms(zseries, rmask,
+    zbrain_transforms...) .> 0
+
+lmask = AxisArray(Float32.(left), AxisArrays.axes(left))
+lmask = antsApplyTransforms(zseries, lmask,
+    zbrain_transforms...) .> 0
+imshow(rmask)
+
+##  
+using H5Sparse
+h5 = h5open(region_mask_path, "cw")
+##
+# h5["size"] = collect(size(lmask))
+mask2vec(x) = sparse(reshape(x, prod(size(lmask)),1))
+H5SparseMatrixCSC(h5, "Left hemisphere", mask2vec(lmask))
+H5SparseMatrixCSC(h5, "Right hemisphere", mask2vec(rmask))
 close(h5)

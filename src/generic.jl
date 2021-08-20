@@ -68,3 +68,8 @@ macro assign(ex)
         esc(:($left = $vars))
     end
 end
+
+"No operation."
+function noop()
+    nothing
+end

@@ -34,16 +34,19 @@ using Lensman.DictThreadSafe
 # tseries_dir = thunk(find_folder)(uri, tseries_root_dirs)
 # r[:tseries_dir] = tseries_dir
 # is this too much metaprogramming...? Harder for others to read...
-
+function checkpointable(args....)
+    println([typeof(a) for a in args])
+    Checkpointable(args...)
+end
 
 "Master DAG for all computations on a recording."
 function update_recording_dag(recording::DAG)
-    @pun (uri, rel_plot_dir, tseries_dset, zseries_name, tseries_root_dirs,
+    @pun (uri, rel_analysis_dir, tseries_dset, zseries_name, tseries_root_dirs,
         slm_dir, slm_root_dirs, lazy_tyh5, window_secs, zbrain_dir,
-        oir_dir, warp_prefix, oir_920_name, oir_820_name, tyh5_path,
+        oir_dir, zbrain_warp_prefix, mm_warp_prefix, oir_920_name, oir_820_name, tyh5_path,
         h2b_zbrain, zbrain_units, rostral, dorsal, suite2p_dir, zbrain_masks,
         zbrain_mask_names
-    ) = recording
+    ) = recording.nodes
     # procutil=Dict(Dagger.ThreadProc => 36.0)
     
     # TODO: figure out how to read slmTxtFile when multiple options...
@@ -57,10 +60,11 @@ function update_recording_dag(recording::DAG)
         tseries_dir = find_folder(uri, tseries_root_dirs)
         fish_dir = get_fish_dir(tseries_dir)
         zseries_dir = joinpath(fish_dir, zseries_name)
-        expName = (x->splitpath(x)[end])(tseries_dir)
+        exp_name = (x->splitpath(x)[end])(tseries_dir)
         recording_folder = (x->splitpath(x)[end-2])(tseries_dir)
         fish_name = (x->splitpath(x)[end-1])(tseries_dir)
-        plot_dir = make_joinpath(fish_dir, rel_plot_dir)
+        plot_dir = make_joinpath(fish_dir, rel_analysis_dir, "plots")
+        df_dir = make_joinpath(fish_dir, rel_analysis_dir, "dataframes")
         local_slm_dir = joinpath(fish_dir, "slm")
         tyh5_path = get_tyh5_path(tyh5_path, tseries_dir)
         test = count_threads()
@@ -139,34 +143,44 @@ function update_recording_dag(recording::DAG)
             pre=window_len, post=window_len)
         lateral_unit = microscope_lateral_unit(tseriesZ)
         target_size_px = spiral_size(exp_date, lateral_unit)
-        zbrain_warps = glob("*SyN_Warped.nii.gz", fish_dir)
-        zbrain_ants_cmd = (zbrain_warps -> length(zbrain_warps)==0
-            ? ants_register(zseries, h2b_zbrain;
+        # will make into checkpoint
+
+        # checkpoint for `zbrain_registered`
+        zbrain_restore() = (() -> begin
+            # zbrain_warpedname = glob_one_file("*SyN_Warped.nii.gz", fish_dir; nofail=true)
+            zbrain_warpedname = glob_one_file("*Warped.nii.gz", fish_dir; nofail=true)
+            niread(zbrain_warpedname)
+        end)
+
+        _zbrain_registered = ants_register(zseries, h2b_zbrain;
             interpolation = "WelchWindowedSinc", histmatch = 0,
             sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
-            use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
-            save_dir=fish_dir, dont_run = true)
-            : "using cached ANTs for zbrain registration")(zbrain_warps)
-        # TODO: should first try reading settings
-        zbrain_warpedname = glob_one_file("*SyN_Warped.nii.gz", fish_dir)
-        zbrain_transform_affine = glob_one_file("$warp_prefix*GenericAffine.mat", fish_dir)
-        zbrain_transform_SyN = glob_one_file("$warp_prefix*SyN_1Warp.nii.gz", fish_dir)
-        zbrain_transforms = [zbrain_transform_affine, zbrain_transform_SyN]
-        zbrain_registered = niread(zbrain_warpedname)
+            use_syn = false, synThreshold = 1e-7, synMaxIter = 200,
+            save_dir=fish_dir, run = false)
+            # use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
+            # save_dir=fish_dir, dont_run = true)
+        # TODO: this does force potentially unecessary read of zbrain_registered
+        # zbrain_registered = checkpointable(_zbrain_registered, zbrain_restore)
+
+        zbrain_warps = glob("*SyN_Warped.nii.gz", fish_dir)
+        zbrain_transform_affine = parent_of(zbrain_registered, glob_one_file("$zbrain_warp_prefix*GenericAffine.mat", fish_dir))
+        zbrain_transform_SyN = parent_of(zbrain_registered, glob_one_file("$zbrain_warp_prefix*SyN_1Warp.nii.gz", fish_dir, nofail=true))
+        zbrain_transforms = parent_of(zbrain_registered, [zbrain_transform_affine, zbrain_transform_SyN])
         oir_920_file = joinpath(oir_dir, oir_920_name)
         oir_820_file = joinpath(oir_dir, oir_820_name)
         multimap_920 = read_olympus(oir_920_file)
         multimap_820 = read_olympus(oir_820_file)
+        # TODO add parent_of(multimap_ckpt, [...])
         multimap_warps = glob("*SyN_Warped.nii.gz", fish_dir)
         multimap_ants_cmd = (multimap_warps -> length(multimap_warps)==0
             ? ants_register(zseries, multimap_920; interpolation = "WelchWindowedSinc",
             histmatch = 0, sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
             use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
             save_dir=fish_dir, dont_run = true) : "using cached ANTs for multimap registration")(zbrain_warps)
-        multimap_warpedname = glob_one_file("$warp_prefix*SyN_Warped.nii.gz", oir_dir)
+        multimap_warpedname = glob_one_file("$mm_warp_prefix*SyN_Warped.nii.gz", oir_dir)
         mm920_registered = niread(multimap_warpedname)
-        mm_transform_affine = glob_one_file("$warp_prefix*GenericAffine.mat", oir_dir)
-        mm_transform_SyN = glob_one_file("$warp_prefix*SyN_1Warp.nii.gz", oir_dir)
+        mm_transform_affine = glob_one_file("$mm_warp_prefix*GenericAffine.mat", oir_dir)
+        mm_transform_SyN = glob_one_file("$mm_warp_prefix*SyN_1Warp.nii.gz", oir_dir)
         mm_transforms = [mm_transform_affine, mm_transform_SyN]
         mm820_registered = multimap_transforms(zseries, multimap_820,
             mm_transform_affine, mm_transform_SyN)
@@ -190,6 +204,7 @@ function update_recording_dag(recording::DAG)
         # assigned all above
 
     end
+    # zbrain_registered = Checkpointable(zbrain_registered, zbrain_restore, noop)
     # if slm_num == 1
     #     slmpower_per_cell = @lazy slm1Power * power_per_cell / 1000
     # elseif slm_num == 2
@@ -203,7 +218,7 @@ function update_recording_dag(recording::DAG)
     #     get_tseries(tseries_dir, tyh5_path, tseries_dset)
 
     @assign recording = (
-        tseries_dir, fish_dir, zseries_dir, expName, recording_folder,
+        tseries_dir, fish_dir, zseries_dir, exp_name, recording_folder,
         fish_name, plot_dir, local_slm_dir, tyh5_path, test, tseries, zseries,
         zseries_xml, tseries_xml, zseries_zaxes, tseries_zaxis, result,
         exp_date, frame_rate, etl_vals, tseriesH, tseriesW, tseriesZ, tseriesT,
@@ -215,11 +230,12 @@ function update_recording_dag(recording::DAG)
         used_slm_dir, vol_rate, imaging2zseries_plane, zseries_xml,
         df_f_per_voxel_per_trial, df_f_per_trial_dataframe, lateral_unit,
         targets_with_plane_index, cells, trial_average, window_len,
-        target_size_px, zbrain_registered, zbrain_ants_cmd,
+        target_size_px, zbrain_registered,
         zbrain_registered, mm920_registered, mm820_registered, nstim_pulses,
         mm_transform_affine, mm_transform_SyN, zbrain_transforms,
         region_mask_path, zbrain_masks, region_masks_h5, zbrain_mask_names,
-        nCells, cell_centers, cells_mask, iscell
+        nCells, cell_centers, cells_mask, iscell,
+        zbrain_restore
     )
 
     recording
@@ -227,7 +243,7 @@ end
 
 function update_dag(r)
     @pun (
-        tseries_dir, fish_dir, zseries_dir, expName, recording_folder,
+        tseries_dir, fish_dir, zseries_dir, exp_name, recording_folder,
         fish_name, plot_dir, slm_dir, tyh5_path, test, tseries, zseries,
         zseries_xml, tseries_xml, zseries_zaxes, tseries_zaxis, result,
         exp_date, frame_rate, etl_vals, tseriesH, tseriesW, tseriesZ, tseriesT,
@@ -346,4 +362,30 @@ function read_rec_xml(recording_dir)
     datafolders = splitpath(recording_dir)
     xmlPath = joinpath(datafolders..., datafolders[end] * ".xml")
     read_xml(xmlPath)
+end
+
+function read_first_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_plane,
+        mask_name)
+    name = zbrain_mask_names[occursin.(mask_name, zbrain_mask_names)][1]
+    name, read_registered_mask(region_masks_h5,
+        name)[:,:,imaging2zseries_plane];
+end
+
+function read_matching_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_plane, mask_name)
+    names = zbrain_mask_names[occursin.(mask_name, zbrain_mask_names)]
+    ret = nothing
+    for name in names
+        new = read_registered_mask(region_masks_h5, name)[:,:,imaging2zseries_plane]
+        if isnothing(ret)
+            ret = new
+        else
+            ret = ret .+ new
+        end
+    end
+    names, ret
+end
+
+"Add dependency (for use with thunks / laxy evaluation)."
+function parent_of(parent, child)
+    return child
 end
