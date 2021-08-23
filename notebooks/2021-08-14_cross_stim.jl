@@ -116,7 +116,7 @@ meanDF = combine(groupby(crossStimDF[:, ["time", "Region 1", "trial_num", "genot
 
 ##
 
-chrmine_paper = Theme(
+chrmine_paper = Gadfly.Theme(
     line_width=1mm,
     minor_label_font="Arial",
     major_label_font="Arial",
@@ -129,7 +129,7 @@ chrmine_paper = Theme(
 )
 
 
-line = plot(meanDF[meanDF.roi .== 100, :], x=:time,
+line = Gadfly.plot(meanDF[meanDF.roi .== 100, :], x=:time,
     xgroup=:genotype,
     y="Region 1_mean",
     # ymin="Region 1_minimum",
@@ -195,12 +195,12 @@ mean_cross_stim_df_f = combine(groupby(cross_stim_df_f[:, ["time", "df_f", "tria
     "df_f" => std_plus, "df_f" => std_minus, "df_f" => sem_plus, "df_f" => sem_minus)
 
 ##
-# sz = 100
+sz = 100
 # sz = 512
-sz = 5120
+# sz = 5120
 df = mean_cross_stim_df_f[mean_cross_stim_df_f.roi .== sz, :]
 df = df[df.genotype .!= "H33R", :]
-line = plot(df, x=:time,
+line = Gadfly.plot(df, x=:time,
     xgroup=:genotype,
     y="df_f_mean",
     # ymin="df_f_minimum",
@@ -220,7 +220,7 @@ line = plot(df, x=:time,
 
 
 plot_path = joinpath(plotDir,"cross-stim-df_f-$sz.svg")
-# Gadfly.draw(SVG(plot_path, 13.5cm, 6cm), line)
+Gadfly.draw(SVG(plot_path, 13.5cm, 6cm), line)
 @show plot_path
 # Gadfly.draw(PNG(joinpath(plotDir,"$savePrefix.png"), 12cm, 4cm), line)
 line

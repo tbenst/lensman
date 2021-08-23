@@ -1,14 +1,18 @@
 module Lensman
 
+using ReusePatterns, HDF5
+
 using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
-    ImageDraw, ImageFiltering, PyCall, MAT, Dates, DataStructures,
+    ImageDraw, ImageFiltering, PyCall, MAT, Dates,
+    # DataStructures,
     Statistics, SharedArrays, CSV, DataFrames, Suppressor, Plots,
     LinearAlgebra, LibExpat, LightXML, RollingFunctions, HypothesisTests,
     EllipsisNotation, HDF5, Distributed, Thunks, NPZ, SparseArrays,
-    H5Sparse, Folds, Arrow, ProgressMeter, JuMP
+    H5Sparse, Folds, Arrow, ProgressMeter, JuMP, ReusePatterns
 import Base.Threads: @threads, @spawn, @sync
 using Distributed
 import Unitful: μm
+import ReusePatterns: @forward
 import Base.Threads.@threads
 sio = pyimport("scipy.io")
 # using Dagger
@@ -31,6 +35,7 @@ include("tidying.jl")
 include("resources.jl")
 include("recording_dag.jl")
 include("recordings.jl")
+
 
 export read_microns_per_pixel,
     read_mask,
@@ -150,5 +155,6 @@ export read_microns_per_pixel,
     Resources,
     read_registered_mask,
     influence_map,
-    LazyTy5
+    LazyTy5,
+    noop, LazyTiff
 end

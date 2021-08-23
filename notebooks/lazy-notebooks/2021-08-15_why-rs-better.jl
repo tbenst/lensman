@@ -34,10 +34,13 @@ recording = Recordings[
         "2021-06-01_wt-chrmine_h2b6s/fish4/TSeries-lrhab-control-118trial-061"
     ](;options...,
     resources...);
-# recording.nodes[:zbrain_registered].wrapped_thunk
 ##
+# TODO: checkpoint not using restore properly...
+@pun region_mask_path = recording
+@assert recording.nodes[:region_mask_path].evaluated
+@assert recording.nodes[:zbrain_registered].wrapped_thunk.evaluated
 # @pun region_masks_h5 = recording
-@pun zbrain_restore = recording
+# @pun zbrain_restore = recording
 # @pun (nCells, cell_centers, cells_mask, iscell) = r
 ##
 @pun (region_masks_h5, imaging2zseries_plane,

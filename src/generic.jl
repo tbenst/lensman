@@ -70,6 +70,6 @@ macro assign(ex)
 end
 
 "No operation."
-function noop()
+function noop(args...; kwargs...)
     nothing
 end

@@ -435,6 +435,7 @@ function ants_register(fixed, moving; interpolation = "BSpline",
     @time println(read(cmd, String))
 
     affine_transform_path = glob_one_file(outprefix*"*GenericAffine.mat", save_dir)
+    sio = pyimport("scipy.io")
     affine_transform = sio.loadmat(affine_transform_path)
     warpedname = joinpath(outname*"_Warped.nii.gz")
 

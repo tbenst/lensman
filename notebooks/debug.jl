@@ -1,6 +1,10 @@
-using AlgebraOfGraphics, CairoMakie, PalmerPenguins, DataFrames
+module TestPatterns
+using HDF5, ReusePatterns
+# import ReusePatterns: @forward
 
-penguins = dropmissing(DataFrame(PalmerPenguins.load()))
+struct DsetWrapper
+    dset::HDF5.Dataset
+end
 
-data(penguins) * visual(Violin) *
-    mapping(:species, :bill_depth_mm, color=:sex, dodge=:sex) |> draw
+@forward((DsetWrapper,:dset),HDF5.Dataset)
+end

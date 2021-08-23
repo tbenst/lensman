@@ -1996,6 +1996,12 @@ git-tree-sha1 = "41ac127cd281bb33e42aba46a9d3b25cd35fc6d5"
 uuid = "20febd7b-183b-5ae2-ac4a-720e7ce64774"
 version = "0.4.1"
 
+[[ReusePatterns]]
+deps = ["Combinatorics", "InteractiveUtils", "Statistics", "Test"]
+git-tree-sha1 = "76692fe909161659abb9af58e9ee0cca33172f16"
+uuid = "a39b5e78-89b5-562b-97d8-70689129df0c"
+version = "0.2.0"
+
 [[Revise]]
 deps = ["CodeTracking", "Distributed", "FileWatching", "JuliaInterpreter", "LibGit2", "LoweredCodeUtils", "OrderedCollections", "Pkg", "REPL", "Requires", "UUIDs", "Unicode"]
 git-tree-sha1 = "1947d2d75463bd86d87eaba7265b0721598dd803"
@@ -2294,7 +2300,7 @@ uuid = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 version = "0.1.7"
 
 [[Thunks]]
-git-tree-sha1 = "0c9ca20324e3f013d6d5d0e0905e488115a39df4"
+git-tree-sha1 = "6c6fcc582f107d2765de05fa1e4baa5656784e77"
 repo-rev = "master"
 repo-url = "https://github.com/tbenst/Thunks.jl"
 uuid = "490da00b-a60c-4ded-a4cf-df7cded56bfa"

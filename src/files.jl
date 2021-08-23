@@ -205,6 +205,9 @@ function tseriesTiffDirMetadata(tifdir, containsStr="Ch3")
         occursin(containsStr, x), readdir(tifdir)))
     framePlane2tiffPath = Dict(getFramePlane(tp) => tp for tp in tiff_files)
     framePlanes = hcat(collect.(keys(framePlane2tiffPath))...)
+    if length(tiff_files) == 0
+        error("No tif files found in $tifdir")
+    end
     T = maximum(framePlanes[1,:])
     Z = maximum(framePlanes[2,:])
     if T == 1

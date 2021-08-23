@@ -28,6 +28,7 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     :suite2p_dir => nothing,
     :warp_prefix => "",
     :lazy_tyh5 => true,
+    :lazy_tiff => true,
     :window_secs => 5,
     :ants_no_run => true, # TODO: make false once tested
     :oir_920_name => "",
@@ -37,15 +38,22 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     :rostral => :right,
     :dorsal => :up,
     :notes => "",
+    :zseries_name => "",
+    :genotype => "", # not yet used
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment",
 )
 
+struct RecordingsWrapper
+    dict::Dict
+    RecordingsWrapper(args...;kwargs...) = new(Dict(args...;kwargs...))
+end
+
+Base.getindex(r::RecordingsWrapper, uri) = uri in keys(r.dict) ? r.dict[uri] : modifiable_recording(uri)[2]
 
 # set tseries_dset = nothing to force use of tiff files
-
-Recordings = Dict(
+Recordings = RecordingsWrapper(
     modifiable_recording("2021-06-01_wt-chrmine_h2b6s/fish4/TSeries-lrhab-control-118trial-061";
         zseries_name="ZSeries-structural-840nm-057"
     ),
@@ -91,4 +99,7 @@ Recordings = Dict(
         lazy_tyh5=true,
         # zbrain_warp_prefix="20210727T204656077Z" # TODO: is this zbrain or for multimap...?
     ),
+    modifiable_recording("2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-046";
+        tseries_dset="/imaging/raw"
+    )
 )
