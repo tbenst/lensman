@@ -35,6 +35,7 @@ include("tidying.jl")
 include("resources.jl")
 include("recording_dag.jl")
 include("recordings.jl")
+include("stats.jl")
 
 
 export read_microns_per_pixel,

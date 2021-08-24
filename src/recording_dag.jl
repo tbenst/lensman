@@ -352,7 +352,7 @@ function get_tseries(tseries_dir, tyh5_path, tseries_dset, lazy_tyh5, lazy_tiff)
         end
     else
         if lazy_tiff
-            LazyTiff(tseries_dir)
+            tseries = LazyTiff(tseries_dir)
         else
             tseries = loadTseries(tseries_dir);
         end

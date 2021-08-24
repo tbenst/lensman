@@ -148,3 +148,41 @@ function _proc_region_df_f(tseries::Array, masks, region_names, stim_name,
     end
     df
 end
+
+"Make dataframe showing first f1_end seconds."
+function tseries_ramping_df(tseries, genotype, fish; vol_rate = 3, f0_end=6,
+     f1_end=72
+)
+    df = DataFrame()
+    f0 = mean(tseries[:,:,:,1:f0_end])
+    f = mean(tseries[:,:,:,1:f1_end], dims=[1,2,3])[1,1,1,:]
+    rel_time = collect(1:length(f))
+    time = rel_time./vol_rate
+    df_f = @. (f-f0)/f0
+    df = DataFrame(
+        rel_time=rel_time,
+        time= time,
+        df_f= df_f,
+        genotype=genotype,
+        fish=fish
+    )
+end
+
+"Make dataframe showing first f1_end seconds."
+function recording_to_df_df(recording, genotype)
+    try
+        @pun (tseries, vol_rate, uri) = recording
+        # f0_end = Int(round(vol_rate * 2))
+        f0_end=3
+        f1_end = Int(round(vol_rate * 20))-1
+        fish = uri
+        tseries_ramping_df(tseries, genotype, fish; vol_rate = vol_rate, f0_end=f0_end,
+            f1_end=f1_end)
+    catch
+        for (exc, bt) in Base.catch_stack()
+            showerror(stdout, exc, bt)
+            println(stdout)
+        end
+        DataFrame()
+    end
+end

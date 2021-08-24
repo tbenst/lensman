@@ -81,7 +81,7 @@ Recordings = RecordingsWrapper(
     ),
     modifiable_recording("2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062";
         zseries_name="ZSeries-structural-840nm-048",
-        tseries_dset = "/imaging/LSTM_per-voxel-state_divide8192-2021-07-02",
+        # tseries_dset = "/imaging/LSTM_per-voxel-state_divide8192-2021-07-02",
         tyh5_path="/scratch/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062lstm_divide8192_avgStim.h5",
         oir_dir="/data/dlab/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fishfrom_2021-07-13_rschrmine_h2b6s/fish1",
         oir_920_name="multimap_zseries_920nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom.oir",
@@ -91,7 +91,7 @@ Recordings = RecordingsWrapper(
     ),
     modifiable_recording("2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061";
         zseries_name="ZSeries-structural-840nm-048",
-        tseries_dset = "/imaging/LSTM_per-voxel-state_divide2048-2021-07-02",
+        # tseries_dset = "/imaging/LSTM_per-voxel-state_divide2048-2021-07-02",
         tyh5_path="/data/dlab/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061.ty.h5",
         oir_dir="/data/dlab/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fishfrom_2021-07-13_rschrmine_h2b6s/fish1",
         oir_920_name="multimap_zseries_920nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom.oir",
@@ -100,6 +100,12 @@ Recordings = RecordingsWrapper(
         # zbrain_warp_prefix="20210727T204656077Z" # TODO: is this zbrain or for multimap...?
     ),
     modifiable_recording("2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-046";
+        tseries_dset="/imaging/raw"
+    ),
+    modifiable_recording("2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/TSeries-1024cell-32concurrent-5ppc-048";
+        tseries_dset="/imaging/raw"
+    ),
+    modifiable_recording("2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/TSeries-1024cell-32concurrent-047";
         tseries_dset="/imaging/raw"
     )
 )
