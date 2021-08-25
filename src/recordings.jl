@@ -107,5 +107,8 @@ Recordings = RecordingsWrapper(
     ),
     modifiable_recording("2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/TSeries-1024cell-32concurrent-047";
         tseries_dset="/imaging/raw"
+    ),
+    modifiable_recording("2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish2_nochrmine/TSeries-1024cell-32concurrent-4power-048";
+        tseries_dset="/imaging/raw"
     )
 )

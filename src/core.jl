@@ -84,7 +84,11 @@ function getMaskNameIncludes(masks, maskNameIncludes, units=zbrain_units)
     mask = AxisArray(Float32.(mask), (:y, :x, :z), zbrain_units)
 end
 
-"Apply one transform, and write moving to a tmp file."
+"""Apply one transform, and write moving to a tmp file.
+
+5 different methods, depending on if 1 transform (rigid only) or 2
+transforms (rigid + nonrigid), and if passing a filepath or an array.
+"""
 function antsApplyTransforms(fixedPath::String, moving::AxisArray, transformPath::String)
     movingPath = joinpath(tmppath, ANTsRegistration.write_nrrd(moving))
     result = antsApplyTransforms(fixedPath, movingPath, transformPath)

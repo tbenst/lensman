@@ -126,3 +126,15 @@ end
 #     key_title_font_size=10pt,
 #     key_label_font_size=10pt
 # )
+
+mm2px = x -> Int(round(uconvert(u"inch",Quantity(x.value,u"mm"))*200/1u"inch",digits=0))
+
+function inkscape_make_png(svg_fn, H, W;
+        inkscape_path="/home/tyler/.nix-profile/bin/inkscape")
+    png_fn = replace(svg_fn, ".svg" => ".png")
+    px_w = mm2px(W)
+    px_h = mm2px(H)
+    
+    cmd = `$inkscape_path -w $px_w -h $px_h $svg_fn --export-filename $png_fn`
+    read(cmd, String)
+end

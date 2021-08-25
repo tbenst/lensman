@@ -809,12 +809,10 @@ function write_n_sparse_datasets(h5path, n, dset_size, channel,blocker)
     while n > 0
         dset_name, data = take!(channel)
         take!(blocker)
-        if length(data.nzval) == 0
-            # all zero
-            h5[dset_name] = 0
-        else
-            H5SparseMatrixCSC(h5, dset_name, data)
-        end
+        # save the sparse array
+        # this used to sometimes error on all-zero arrays, but should
+        # be fixed as of https://github.com/severinson/H5Sparse.jl/issues/5
+        H5SparseMatrixCSC(h5, dset_name, data)
         n -= 1
         next!(p)
     end
@@ -823,9 +821,37 @@ end
 
 
 """"
-Save sparse CSC arrays in h5 file.
+Apply transform on Zbrain masks, and save sparse CSC arrays in h5 file.
 
 ants_transforms: [affine, SyN] or [affine]
+
+warping a single masks involves:
+    1. read mask from database
+    2. save mask as .nrrd
+    3. apply the transform from ANTs (in my case) or CMTK (in your case) by calling the relevant shell command
+    4. read in the warped result (likely a .nrrd file)
+    5. save the warped result in a .h5 file
+
+We want to do this for all masks--and there's ~300 of them. Fortunately, warping
+using a known transform is pretty fast. Warping 300 masks with known transform is also
+an embarrassingly parallel problem. Unfortunately, HDF5 as a format is a nightmare to
+work on in parallel. the library segfaults unless extreme precautions are taken.
+Basically, can only have one process write to a single .h5 file.
+
+TO sovle, we use `nprocs` producers and a single consumer. Each producer writes the mask
+name & the result of the warp into a channel. The consumer waits for the channel to fill,
+and writes the result to the .h5 channel. Only the consumer has write access to the .h5
+file.
+
+The consumer is write_n_sparse_datasets and the producers are in the @distributed  block.
+The bottleneck is actually the single consumer that writes to the .h5 file. this can
+result in out of memory since 300 masks * 1024 * 1024 * 151 * sizeof(Float64) = 353 GB
+
+Thus, a second channel is used, blocker. this channel has a capacity of `nprocs`,
+which stops a consumer from proceeding if it is at capacity.
+
+Approximately, we cap memory usage at nprocs * 1024 * 1024 * 151 * sizeof(Float64),
+or say 21GB for 18 processes.
 """
 function save_region_masks(region_mask_path, zseries, zbrain_masks, ants_transforms;
     nprocs = 10, rostral=:right, dorsal=:up
@@ -882,7 +908,11 @@ function read_registered_mask(region_masks_h5, name)
     )
 end
 
-function read_zbrain_masks(zbrain_dir; read_hemisphere=false)
+"""Read all zbrain masks into sparse arrays.
+
+Optionally read Tyler's hemisphere masks.
+"""
+function read_zbrain_masks(zbrain_dir; read_hemisphere=true)
     zbrain_masks = matread("$zbrain_dir/MaskDatabase.mat")
     zbrain_masks["MaskDatabaseNames"] = vec(zbrain_masks["MaskDatabaseNames"])
     if read_hemisphere

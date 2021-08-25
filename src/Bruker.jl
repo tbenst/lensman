@@ -28,3 +28,17 @@ function read_all_zaxis(xml::ETree, device="Z")
     parse.(Float64, xml[xpath"""/PVScan/Sequence/Frame/PVStateShard/PVStateValue[@key="positionCurrent"]/SubindexedValues[@index="ZAxis"]/SubindexedValue[@description="$device"]/@value"""])
 end
 
+function ms_to_days(ms)
+    Float64(Dates.value(ms)) / Dates.toms(Day(1))
+end
+"Estimate age, assuming born e.g. Wednesday 9am."
+function est_age(date, bornday=Wednesday, borntime=9, minage=4)
+    birthday = toprev(date, bornday)
+    birthdate = DateTime(year(birthday), month(birthday), day(birthday), borntime)
+    age = Float64(Dates.value(date - birthdate)) / Dates.toms(Day(1))
+    if age < minage
+        birthdate = toprev(birthdate, bornday)
+        age = Float64(Dates.value(date - birthdate)) / Dates.toms(Day(1))
+    end
+    age
+end
