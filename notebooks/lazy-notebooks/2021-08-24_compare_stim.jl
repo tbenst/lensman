@@ -24,8 +24,10 @@ wt_tseries = vcat(
     "2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044",
     "2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish2/TSeries-lrhab_raphe_stim-40trial-proper-zoffset-034",
     "2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish1/TSeries-lrhab_raphe_40trial-023",
-    # was this 4Mhz?,
+    # was this 4Mhz? also, started slm 1100 seconds before...suspicious...
+    # see /mnt/deissero/users/tyler/b115/SLM_files/18-May-2021
     "2021-04-13_wt-chrmine_6dpf_h2b6s/fish1/TSeries-4region-lrhab-raphe-control-129trial-145",
+
     "2021-06-01_wt-chrmine_h2b6s/fish4/TSeries-lrhab-control-118trial-061"
 )
 
@@ -87,6 +89,33 @@ ages = [L.est_age(r[:exp_date]) for r in recordings]
 ##
 # one of these files "started SLM 1100 seconds seconds before imaging
 # ... we should figure out which one & maybe fix..?
+
+# reify not being called on zOffset ..?
 targets = L.thread_safe_map(r-> r[:targets_with_plane_index],
     threads_ok_recordings, nothreads_recordings)
 ##
+isevaluated(t::Think) = t.evaluated
+isevaluated(t) = true
+[isevaluated(a) for a in recordings[3].nodes[:targets_with_plane_index].args]
+[isevaluated(a) for a in recordings[3].nodes[:targets_with_plane_index].args[1].args]
+Meta.@lower recordings[3].nodes[:targets_with_plane_index].args[1].f
+length(recordings[3].nodes[:targets_with_plane_index].args[1].args)
+##
+recordings[3][:targets_with_plane_index]
+isevaluated(recordings[3].nodes[:slm_exp_dir]) # true
+isevaluated(recordings[3].nodes[:first_target_group]) # false
+isevaluated(recordings[3].nodes[:slm_num]) # false
+# mystery--why is zOffset not evaluated before call to mapTargetGroupsToPlane?
+# possibly related to Oak being unavailable..?
+isevaluated(recordings[3].nodes[:zOffset]) # false
+isevaluated(recordings[3].nodes[:exp_date]) # true
+recordings[3][:zOffset]
+##
+# yet this works fine?!?
+@pun (target_groups, etl_vals, tseriesW, zOffset
+
+) = threads_ok_recordings[1];
+tseries_is1024 = (tseriesW==1024)
+#
+twp1 = mapTargetGroupsToPlane(target_groups, etl_vals,
+    is1024=tseries_is1024, zOffset=zOffset)

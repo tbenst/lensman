@@ -384,7 +384,8 @@ the RUN are copied to the same subfolder
 (trialOrder_2020_11_02___22h04m47s.txt)
 """
 function getTrialOrder(slm_dir, expDate)
-    slmExpDir = joinpath(slm_dir,Dates.format(expDate, "dd-u-Y"))
+    date_str = Dates.format(expDate, "dd-u-Y")
+    slmExpDir = joinpath(slm_dir,date_str)
     slmRunDirs = joinpath.(slmExpDir,
         filter(x -> isdir(joinpath(slmExpDir, x)), readdir(slmExpDir)))
 
@@ -399,9 +400,8 @@ function getTrialOrder(slm_dir, expDate)
     dtIdx = searchsortedfirst(availableDateTimes, expDate) - 1
     slmDateTime = availableDateTimes[dtIdx]
     timeDiff = Dates.Second(expDate - slmDateTime)
-    println("started SLM $(timeDiff) seconds before imaging")
     if (timeDiff > Second(120)) | (timeDiff < Second(0))
-        @warn "timeDiff looks funky...verify we have correct trial"
+        @warn "started SLM $(timeDiff) seconds before imaging on $date_str. Is this correct?"
     end
     trialOrderTxt = trialOrderTxts[dtIdx]
 
@@ -889,11 +889,18 @@ zOffset is subtracted off. eg holes burn 45um above, so +45*1e-6 zOffset in .mat
 and pass 45 to this function.
 """
 function mapTargetGroupsToPlane(target_groups, etlVals; is1024=true, zOffset=0.)
+    # @show typeof(target_groups), typeof(etlVals), typeof(is1024), typeof(z_offset)
+    
+    # TODO: bizarre bug in Thunks...?
+    # totally unknown why this reify call is needed
+    # this is a total hack
+    z_offset = reify(zOffset)
+    # maybe deepcopy is breaking...?
     newTargetGroups = deepcopy(target_groups)
     for g in 1:size(target_groups, 1)
         for i in 1:size(target_groups[g], 1)
         # in sean's code, units in meters, so *1e6
-            adjustedZ = newTargetGroups[g][i,3] * 1e6 - zOffset
+            adjustedZ = newTargetGroups[g][i,3] * 1e6 - z_offset
             idx = findIdxOfClosestElem(adjustedZ, etlVals)
             newTargetGroups[g][i,3] = idx
         end

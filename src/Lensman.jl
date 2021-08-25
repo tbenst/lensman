@@ -3,7 +3,7 @@ module Lensman
 using ReusePatterns, HDF5
 
 using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
-    ImageDraw, ImageFiltering, PyCall, MAT, Dates,
+    ImageDraw, ImageFiltering, PyCall, MAT, Dates, Unitful,
     # DataStructures,
     Statistics, SharedArrays, CSV, DataFrames, Suppressor, Plots,
     LinearAlgebra, LibExpat, LightXML, RollingFunctions, HypothesisTests,
