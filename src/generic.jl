@@ -75,8 +75,13 @@ function noop(args...; kwargs...)
 end
 
 "Map with threads where safe, sequential where not."
-function thread_safe_map(f, threads_ok, nothreads)
-    t = Folds.map(f, threads_ok)
-    nt = map(f, nothreads)
-    vcat(t..., nt...)
+function thread_safe_map(f, threads_ok, nothreads; noerror=false)
+    if noerror
+        func(args...; kwargs...) = try f(args...; kwargs...) catch end
+    else
+        func = f
+    end
+    t = Folds.map(func, threads_ok)
+    nt = map(func, nothreads)
+    [t..., nt...]
 end

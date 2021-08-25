@@ -20,6 +20,29 @@ struct LazyTiff
     end
 end
 
+function Base.ndims(x::LazyTiff)
+    length(x.tseries_size)
+end
+
+function Base.ndims(x::LazyTy5)
+    ndims(x.dset)
+end
+
+"Returns (copy) of LazyTiff at dim d = i ."
+function Base.selectdim(x::LazyTiff, d, i)
+    nd = ndims(x)
+    idxs = [n==d ? i : Colon() for n=1:nd]
+    x[idxs...]
+end
+
+"Returns (copy) of LazyTy5 at dim d = i ."
+function Base.selectdim(x::LazyTy5, d, i)
+    nd = ndims(x)
+    idxs = [n==d ? i : Colon() for n=1:nd]
+    x[idxs...]
+end
+
+
 """
 Index by HWZT & read from .ty.h5 file.
 

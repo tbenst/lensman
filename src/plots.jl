@@ -138,3 +138,12 @@ function inkscape_make_png(svg_fn, H, W;
     cmd = `$inkscape_path -w $px_w -h $px_h $svg_fn --export-filename $png_fn`
     read(cmd, String)
 end
+
+
+
+"Symmetric log-like function."
+function symlog(x,c=1/np.log(10))
+    orig_sign = sign(x)
+    out = log10(1 + abs(x/c))
+    out * orig_sign
+end

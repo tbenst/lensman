@@ -227,7 +227,8 @@ function extractTrace(tseries, cartIdxs::Array{T,1}) where T <: CartesianIndex
     trace = zeros(Float64, nT)
     for t in 1:nT
         # trace[t] = mean(reinterpret(UInt16, view(tseries, cartIdxs, t)))
-        trace[t] = mean(view(tseries, cartIdxs, t))
+        # trace[t] = mean(view(tseries, cartIdxs, t))
+        trace[t] = mean(selectdim(tseries, 4, t)[cartIdxs])
     end
     trace
 end
@@ -366,6 +367,7 @@ function getExpData(tseries_xml::LibExpat.ETree)
     try
         etlVals = getPlaneETLvals(tseries_xml)
     catch
+        # TODO: should print exception
         etlVals = nothing
     end
     expDate, frameRate, etlVals
@@ -731,31 +733,58 @@ end
 
 
 "Add stim-evoked df/f to cells DataFrame."
-function makeCellsDF(tseries, cells, roiMask; winSize=15, delay=0)
-    cellDf_f = zeros(size(cells, 1))
-    for (i,cell) in enumerate(eachrow(cells))
-        x, y, z, stimStart, stimStop, cellID = cell[[:x, :y, :z, :stimStart, :stimStop, :cellID]]
-        mask = roiMask[cellID]
-        neuronTrace = extractTrace(tseries, mask)
-        neuronTrace = imageJkalmanFilter(neuronTrace)
-        theStart = maximum([stimStart - winSize, 1])
-        theEnd = minimum([stimStop + winSize, size(tseries, ndims(tseries))])
-        f = mean(neuronTrace[stimStop + delay:theEnd])
-        
-        # problem: if neuron happens to be active and declining before stim,
-        # we may miss
-        f0 = mean(neuronTrace[theStart:stimStart - 1])
+function add_df_f_to_cells(tseries, cells, roiMask;
+    winSize=15, delay=0, threads=false, ϵ=1.0
+)
+    cellDf_f = Float64[]
+    stim_grouped_df = groupby(cells, :stimStart)
+    # we use to calculate the row in cellDf_f
+    lengths = combine(stim_grouped_df, :x => length).x_length
+    T = size(tseries, ndims(tseries))
+    kalman_burnin = 5
+    # we don't use @threads in case tseries isn't thread-safe
+    p = Progress(length(stim_grouped_df); desc="df/f:")
+    # @showprogress for (g, grouped_df) in enumerate(stim_grouped_df)
+    if threads
+        mapper = Folds.map
+    else
+        mapper = map
+    end
+    mapper(1:length(stim_grouped_df)) do g
+        grouped_df = stim_grouped_df[g]
+        stimStart, stimStop = grouped_df[1, [:stimStart, :stimStop,]]
+        # theStart = maximum([stimStart - winSize - kalman_burnin, 1])
+        theStart = stimStart - winSize - kalman_burnin
+        @assert theStart >= 1
+        theEnd = minimum([stimStop + winSize, T])
+        duration = theEnd - theStart
+        # indexing can be slow for some types, so do in outer loop
+        tseries_trial = tseries[:, :, :, theStart:theEnd]
+        for i in 1:size(grouped_df, 1)
+            x, y, z, cellID = grouped_df[i, [:x, :y, :z, :cellID]]
+            mask = roiMask[cellID]
+            neuronTrace = extractTrace(tseries_trial, mask)
+            neuronTrace = imageJkalmanFilter(neuronTrace)[kalman_burnin+1:end]
+            f = mean(neuronTrace[end-winSize+1:end])
+            
+            # problem: if neuron happens to be active and declining before stim,
+            # we may miss
+            f0 = mean(neuronTrace[1:winSize])
 
-        # solution: use percentile f0
-        # f0 = percentile(neuronTrace,0.1)
-        df_f = (f - f0) / (f0 + 1e-8)
-        if isnan(df_f)
-            @show f, f0, i, x, y, z, stimStart, stimStop, theStart, stimStart - 1
+            # solution: use percentile f0
+            # f0 = percentile(neuronTrace,0.1)
+            df_f = (f - f0) / (f0 + ϵ)
+            if isnan(df_f)
+                @show f, f0, i, x, y, z, stimStart, stimStop, theStart, stimStart - 1
+            end
+            push!(cellDf_f, df_f)
         end
-        cellDf_f[i] = df_f
+        next!(p)
+        nothing
     end
 
-    newCells = copy(cells)
+    # ensure same row order as cellDf_f
+    newCells = transform(stim_grouped_df)
     if "df_f" in names(cells)
         newCells.df_f = cellDf_f
         return newCells
@@ -764,59 +793,17 @@ function makeCellsDF(tseries, cells, roiMask; winSize=15, delay=0)
     end
 end
 
-"Add stim-evoked df/f to cells DataFrame."
-function makeCellsDF(tseries, cells, roiMask, trials::Bool; winSize=15, delay=0)
-    if trials == false
-        makeCellsDF(tseries, cells, roiMask; winSize=winSize, delay=delay)
-    end
-    cellDf_f = zeros(size(cells,1))
-    p = Progress(size(cells,1), 1, "Calc df/f: ")
-
-    # for (i, (x,y,z,trialNum,stimStart,stimStop)) in enumerate(eachrow(cells))
-    @threads for i in 1:size(cells,1)
-        (x,y,z,trialNum,stimStart,stimStop) = cells[i,:]
-        @error "need to update to index by cellID"
-        mask = roiMask[i] 
-        neuronTrace = extractTrace(tseries[:,:,:,trialNum], mask)
-        neuronTrace = imageJkalmanFilter(neuronTrace)
-        theStart = maximum([stimStart-winSize, 1])
-        # minus one since last dim of tseries is trialNum
-        theEnd = minimum([stimStop+winSize, size(tseries, ndims(tseries)-1)])
-        f = mean(neuronTrace[stimStop+delay:theEnd])
-        
-        # problem: if neuron happens to be active and declining before stim,
-        # we may miss
-        f0 = mean(neuronTrace[theStart:stimStart-1])
-
-        # solution: use percentile f0
-        # f0 = percentile(neuronTrace,0.1)
-        df_f = (f-f0)/(f0+1e-8)
-        if isnan(df_f)
-            @show f, f0, i, x, y, z, stimStart, stimStop, theStart, stimStart-1
-        end
-        cellDf_f[i] = df_f
-        next!(p)
-    end
-
-    newCells = copy(cells)
-    if "df_f" in names(cells)
-        newCells.df_f = cellDf_f
-        return newCells
-    else
-        return insertcols!(newCells, size(cells,2)+1, :df_f => cellDf_f)
-    end
-end
-
-
-"Create binary mask of HxWxZ for each neuron location."
+"""Create binary mask of HxWxZ for each neuron location.
+"""
 function constructROImasks(cells, H, W, Z, targetSizePx)
     @warn "now must index by cellID"
     nCells = maximum(cells.cellID)
     roiMask = Dict()
-    for cell in eachrow(cells)
+    @threads for cell in eachrow(cells)
         (x, y, z, group, stimStart, stimStop, cellID) = cell[[:x,:y,:z,:stimGroup,:stimStart,:stimStop,:cellID]]
         mask = Gray.(zeros(Bool, H, W, Z))
         draw!(view(mask, :, :, z), Ellipse(CirclePointRadius(x, y, targetSizePx)))
+        # TODO: should we replace this with sparse array..? Prob should benchmark.
         mask = findall(channelview(mask))
         roiMask[cellID] = mask
     end
@@ -827,7 +814,7 @@ function constructROImasks(cells::DataFrame, H, W, targetSizePx)
     @warn "now must index by cellID"
     nCells = maximum(cells.cellID)
     roiMask = Dict()
-    for cell in eachrow(cells)
+    @threads for cell in eachrow(cells)
         (x,y,z,trialNum,stimStart,stimStop, cellID) = cell[[:x,:y,:z,:trialNum,:stimStart,:stimStop,:cellID]]
         mask = Gray.(zeros(Bool, H,W))
         draw!(view(mask,:,:), Ellipse(CirclePointRadius(x,y,targetSizePx)))
@@ -894,6 +881,7 @@ function mapTargetGroupsToPlane(target_groups, etlVals; is1024=true, zOffset=0.)
     # TODO: bizarre bug in Thunks...?
     # totally unknown why this reify call is needed
     # this is a total hack
+    @show typeof(etlVals)
     z_offset = reify(zOffset)
     # maybe deepcopy is breaking...?
     newTargetGroups = deepcopy(target_groups)

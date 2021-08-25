@@ -48,7 +48,7 @@ function update_recording_dag(recording::DAG)
         slm_dir, slm_root_dirs, lazy_tyh5, window_secs, zbrain_dir,
         oir_dir, zbrain_warp_prefix, mm_warp_prefix, oir_920_name, oir_820_name, tyh5_path,
         h2b_zbrain, zbrain_units, rostral, dorsal, suite2p_dir, zbrain_masks,
-        zbrain_mask_names, lazy_tiff
+        zbrain_mask_names, lazy_tiff, cells_df_f_win_secs, cells_df_f_delay
     ) = recording.nodes
     # procutil=Dict(Dagger.ThreadProc => 36.0)
     
@@ -137,11 +137,15 @@ function update_recording_dag(recording::DAG)
         targets_with_plane_index = map(x->Int.(round.(x, digits=0)), twp1)
         cells = makeCellsDF(targets_with_plane_index, stim_start_idx, stim_end_idx,
             trial_order, group_stim_freq)
+        lateral_unit = microscope_lateral_unit(tseriesZ)
+        target_size_px = spiral_size(exp_date, lateral_unit)
+        cell_masks = constructROImasks(cells, tseriesH, tseriesW, tseriesZ, target_size_px)
+        cells_df_f_winsize = Int(ceil(cells_df_f_win_secs*vol_rate))
+        cells_df_f = add_df_f_to_cells(tseries, cells, cell_masks,
+            winSize=cells_df_f_winsize, delay=cells_df_f_delay);
         trial_average = calc_trial_average(tseries, stim_start_idx,
             stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
             pre=window_len, post=window_len)
-        lateral_unit = microscope_lateral_unit(tseriesZ)
-        target_size_px = spiral_size(exp_date, lateral_unit)
         # will make into checkpoint
         zbrain_warpedname = glob_one_file("*Warped.nii.gz", fish_dir; nofail=true)
 
@@ -231,7 +235,7 @@ function update_recording_dag(recording::DAG)
         target_size_px, zbrain_registered, mm920_registered, mm820_registered, nstim_pulses,
         mm_transform_affine, mm_transform_SyN, zbrain_transforms,
         region_mask_path, zbrain_masks, region_masks_h5, zbrain_mask_names,
-        nCells, cell_centers, cells_mask, iscell,
+        nCells, cell_centers, cells_mask, iscell, cells_df_f,
         zbrain_restore, _zbrain_registered
     )
 
