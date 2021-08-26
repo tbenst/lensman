@@ -23,7 +23,8 @@ wt_tseries = vcat(
     "2020-11-02_elavl3-chrmine-Kv2.1_h2b6s_5dpf/fish2/TSeries-lrhab-raphe-20trial-part2-047",
     "2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish1/TSeries-lrhab_raphe_stim-40trial-038",
     "2020-10-28_elavl3-chrmine-Kv2.1_h2b6s_8dpf/fish2/TSeries_lrhab_raphe_40trial-044",
-    "2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish2/TSeries-lrhab_raphe_stim-40trial-proper-zoffset-034",
+    # making cells_df_f array fails..?
+    # "2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish2/TSeries-lrhab_raphe_stim-40trial-proper-zoffset-034",
     "2020-10-26_elavl3-chrmine-Kv2.1_h2b6s_6dpf/fish1/TSeries-lrhab_raphe_40trial-023",
     # was this 4Mhz? also, started slm 1100 seconds before...suspicious...
     # see /mnt/deissero/users/tyler/b115/SLM_files/18-May-2021
@@ -40,6 +41,7 @@ rs_tseries = vcat(
     "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-lrhab-118trial-060",
     "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061",
     "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061",
+    # for some reason this also fails for df_f...?
     "2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069"
 )
 gcamp_tseries = vcat(
@@ -70,6 +72,9 @@ thread_ok_genotypes = recording_genotypes[threads_ok]
 nothread_genotypes = recording_genotypes[(~).(threads_ok)]
 recording_genotypes = vcat(thread_ok_genotypes..., nothread_genotypes...)
 uris = [r[:uri] for r in recordings]
+
+# df = recordings[1][:cells_df_f];
+"done"
 ## make sure similar recording settings
 vol_rates = L.thread_safe_map(r-> r[:vol_rate],
     threads_ok_recordings, nothreads_recordings)
@@ -117,40 +122,22 @@ end
 ##
 good_idxs = (~).(isnothing.(cells_df_f))
 cells_df_f_combined = vcat(cells_df_f[good_idxs]...)
-open(joinpath(save_dir, "cells_df_f.arrow"), "w") do io
+open(joinpath(save_dir, "cells_df_f_f0_nokalman.arrow"), "w") do io
     Arrow.write(io, cells_df_f_combined)
 end;
-# TODO: need to add "fish" & "genotype" to each row. can count rows in the
-# non-vcat version. Also, some stims are outside of the brain and those cells
+# Also, some stims are outside of the brain and those cells
 # need to be excluded. can look at x,y location as a heuristic for each group
 # of stims..? or just always select stim_group == 1 or 2?
-
 ##
-recording = recordings[1];
-getExpData(recording[:tseries_xml]) # etl_vals is nothing???
-@pun (
-    cells, tseriesH, tseriesW, tseriesZ, target_size_px, vol_rate,
-    tseries
-) = recording;
-
-cell_masks = constructROImasks(cells, tseriesH, tseriesW, tseriesZ, target_size_px)
+df = cells_df_f_combined[cells_df_f_combined.stimGroup .<= 2, :]
 ##
-cells_df_f_win_secs = 2
-cells_df_f_delay = 0
-cells_df_f_winsize = Int(ceil(cells_df_f_win_secs*vol_rate));
-# TODO check if this worked..?
-# was 16minutes without threads...
-# with threads it's ~20min even though we are slamming CPU...?
-cells_df_f = L.add_df_f_to_cells(tseries, cells, cell_masks,
-    winSize=cells_df_f_winsize, delay=cells_df_f_delay, threads=false);
+median_df = transform(groupby(df, [:uri, :cellID]), "df_f" => median)
 ##
-cells_df_f # TODO: why is stimFeq an array..?
-# also TODO why are some df_f values crazy outlier
-cells_df_f[:,7:10]
-##
-cells_df_f[:,:df_f_symlog] .= L.symlog.(cells_df_f[:,:df_f])
-##
-plot(cells_df_f, y=:df_f_symlog, Geom.violin)
+# dff = median_df[median_df.df_f_median .>= 0.2, :]
+dff = median_df
+plot(dff, x=:genotype, y=:df_f_median, Geom.beeswarm,
+    Coord.cartesian(;ymin=-3, ymax=5))
+##,
 ##
 mean_cells = combine(groupby(cells_df_f,:cellID), "df_f" => mean)
 mean_cells[:,:df_f_symlog] .= L.symlog.(mean_cells[:,:df_f_mean])

@@ -732,16 +732,22 @@ function makeCellsDF(target_groups, stimStartIdx::Int, stimEndIdx::Int, trialOrd
 end
 
 
-"Add stim-evoked df/f to cells DataFrame."
+"""Add stim-evoked df/f to cells DataFrame.
+
+padding: ignore +/- that amount around time of stim
+"""
 function add_df_f_to_cells(tseries, cells, roiMask;
-    winSize=15, delay=0, threads=false, ϵ=1.0
+    winSize=3, padding=2, threads=false, ϵ=1.0
 )
     cellDf_f = Float64[]
+    cell_f = Float64[]
+    cell_f0 = Float64[]
+    cell_area = Float64[]
     stim_grouped_df = groupby(cells, :stimStart)
     # we use to calculate the row in cellDf_f
     lengths = combine(stim_grouped_df, :x => length).x_length
     T = size(tseries, ndims(tseries))
-    kalman_burnin = 5
+    # kalman_burnin = 5
     # we don't use @threads in case tseries isn't thread-safe
     p = Progress(length(stim_grouped_df); desc="df/f:")
     # @showprogress for (g, grouped_df) in enumerate(stim_grouped_df)
@@ -753,10 +759,11 @@ function add_df_f_to_cells(tseries, cells, roiMask;
     mapper(1:length(stim_grouped_df)) do g
         grouped_df = stim_grouped_df[g]
         stimStart, stimStop = grouped_df[1, [:stimStart, :stimStop,]]
-        # theStart = maximum([stimStart - winSize - kalman_burnin, 1])
-        theStart = stimStart - winSize - kalman_burnin
+        # theStart = stimStart - winSize - kalman_burnin - padding
+        theStart = stimStart - winSize - padding
         @assert theStart >= 1
-        theEnd = minimum([stimStop + winSize, T])
+        theEnd = stimStop + winSize + padding
+        @assert theEnd <= T
         duration = theEnd - theStart
         # indexing can be slow for some types, so do in outer loop
         tseries_trial = tseries[:, :, :, theStart:theEnd]
@@ -764,7 +771,7 @@ function add_df_f_to_cells(tseries, cells, roiMask;
             x, y, z, cellID = grouped_df[i, [:x, :y, :z, :cellID]]
             mask = roiMask[cellID]
             neuronTrace = extractTrace(tseries_trial, mask)
-            neuronTrace = imageJkalmanFilter(neuronTrace)[kalman_burnin+1:end]
+            # neuronTrace = imageJkalmanFilter(neuronTrace)[kalman_burnin+1:end]
             f = mean(neuronTrace[end-winSize+1:end])
             
             # problem: if neuron happens to be active and declining before stim,
@@ -777,7 +784,11 @@ function add_df_f_to_cells(tseries, cells, roiMask;
             if isnan(df_f)
                 @show f, f0, i, x, y, z, stimStart, stimStop, theStart, stimStart - 1
             end
+            area = length(mask)
             push!(cellDf_f, df_f)
+            push!(cell_f, f)
+            push!(cell_f0, f0)
+            push!(cell_area, area)
         end
         next!(p)
         nothing
@@ -789,7 +800,8 @@ function add_df_f_to_cells(tseries, cells, roiMask;
         newCells.df_f = cellDf_f
         return newCells
     else
-        return insertcols!(newCells, size(cells, 2) + 1, :df_f => cellDf_f)
+        return insertcols!(newCells, size(cells, 2) + 1,
+            :df_f => cellDf_f, :f => cell_f, :f0 => cell_f0, :area => cell_area)
     end
 end
 

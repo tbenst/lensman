@@ -48,7 +48,7 @@ function update_recording_dag(recording::DAG)
         slm_dir, slm_root_dirs, lazy_tyh5, window_secs, zbrain_dir,
         oir_dir, zbrain_warp_prefix, mm_warp_prefix, oir_920_name, oir_820_name, tyh5_path,
         h2b_zbrain, zbrain_units, rostral, dorsal, suite2p_dir, zbrain_masks,
-        zbrain_mask_names, lazy_tiff, cells_df_f_win_secs, cells_df_f_delay
+        zbrain_mask_names, lazy_tiff, cells_df_f_win_secs, cells_df_f_padding
     ) = recording.nodes
     # procutil=Dict(Dagger.ThreadProc => 36.0)
     
@@ -142,7 +142,7 @@ function update_recording_dag(recording::DAG)
         cell_masks = constructROImasks(cells, tseriesH, tseriesW, tseriesZ, target_size_px)
         cells_df_f_winsize = Int(ceil(cells_df_f_win_secs*vol_rate))
         cells_df_f = add_df_f_to_cells(tseries, cells, cell_masks,
-            winSize=cells_df_f_winsize, delay=cells_df_f_delay);
+            winSize=cells_df_f_winsize, padding=cells_df_f_padding);
         trial_average = calc_trial_average(tseries, stim_start_idx,
             stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
             pre=window_len, post=window_len)

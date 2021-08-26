@@ -11,6 +11,7 @@ DEFAULT_RECORDING_SETTINGS = Dict(
         "/scratch/b115",
         "/scratch2",
         "/data/dlab/b115",
+        "/data/b115",
         "/mnt/deissero/users/tyler/b115"
     ],
     :slm_root_dirs => [
@@ -32,7 +33,7 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     :lazy_tiff => true,
     :window_secs => 5,
     :cells_df_f_win_secs => 2,
-    :cells_df_f_delay => 0,
+    :cells_df_f_padding => 2,
     :ants_no_run => true, # TODO: make false once tested
     :oir_920_name => "OIR_920_NAME_NOT_DEFINED",
     :oir_820_name => "OIR_820_NAME_NOT_DEFINED",
