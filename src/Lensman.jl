@@ -1,7 +1,5 @@
 module Lensman
 
-using ReusePatterns, HDF5
-
 using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     ImageDraw, ImageFiltering, PyCall, MAT, Dates, Unitful,
     # DataStructures,
@@ -12,7 +10,6 @@ using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
 import Base.Threads: @threads, @spawn, @sync
 using Distributed
 import Unitful: μm
-import ReusePatterns: @forward
 import Base.Threads.@threads
 sio = pyimport("scipy.io")
 # using Dagger
