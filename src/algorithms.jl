@@ -397,7 +397,8 @@ Tyler previously used affine + sampling_frac=1.0 for faster online registration.
 
 SyN took 9487s for a MultiMAP 
 
-Writes intermediate data to tmp directory.
+Writes intermediate data to tmp directory. To register/morph Zbrain onto our Zseries,
+set fixed = zseries, moving = zbrain.
 """
 function ants_register(fixed, moving; interpolation = "BSpline",
         histmatch = 1, maxiter = 200, threshold = "1e-6",

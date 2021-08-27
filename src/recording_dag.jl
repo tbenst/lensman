@@ -48,7 +48,8 @@ function update_recording_dag(recording::DAG)
         slm_dir, slm_root_dirs, lazy_tyh5, window_secs, zbrain_dir,
         oir_dir, zbrain_warp_prefix, mm_warp_prefix, oir_920_name, oir_820_name, tyh5_path,
         h2b_zbrain, zbrain_units, rostral, dorsal, suite2p_dir, zbrain_masks,
-        zbrain_mask_names, lazy_tiff, cells_df_f_win_secs, cells_df_f_padding
+        zbrain_mask_names, lazy_tiff, cells_df_f_win_secs, cells_df_f_padding,
+        registration_type
     ) = recording.nodes
     # procutil=Dict(Dagger.ThreadProc => 36.0)
     
@@ -151,12 +152,12 @@ function update_recording_dag(recording::DAG)
 
         # checkpoint for `zbrain_registered`
         zbrain_restore = niread(zbrain_warpedname)
-
+        b_run = registration_type != :dont_run
         _zbrain_registered = ants_register(zseries, h2b_zbrain;
             interpolation = "WelchWindowedSinc", histmatch = 0,
             sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
             use_syn = false, synThreshold = 1e-7, synMaxIter = 200,
-            save_dir=fish_dir, run=true)
+            save_dir=fish_dir, run=b_run)
             # use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
             # save_dir=fish_dir, dont_run = true)
         # TODO: this does force potentially unecessary read of zbrain_registered

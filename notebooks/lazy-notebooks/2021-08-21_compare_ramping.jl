@@ -1,4 +1,6 @@
 ENV["DISPLAY"] = "localhost:13"
+# this notebook calculates mean +/- sem of ramping 
+# and also for targeted cell df/f
 ##
 # using AlgebraOfGraphics, CairoMakie
 # aog = AlgebraOfGraphics
@@ -189,7 +191,21 @@ open(joinpath(save_dir, "ramp_df_f0=1_eps=1.arrow"), "w") do io
     Arrow.write(io, ramp_df)
 end;
 
+##
+@error "read in"
+ramp_df = DataFrame(Arrow.Table(joinpath(save_dir, "ramp_df_f0=1_eps=1.arrow")))
+ramp_wt, ramp_rs, ramp_gcamp = groupby(ramp_df, :genotype)
 
+f0_wt = combine(groupby(ramp_wt[ramp_wt.rel_time .<= 3,:], :fish), :f => mean)
+f0_rs = combine(groupby(ramp_rs[ramp_rs.rel_time .<= 3,:], :fish), :f => mean)
+last_wt_idxs = (ramp_wt.rel_time .>= 54) .& (ramp_wt.rel_time .< 57)
+f_wt = combine(groupby(ramp_wt[last_wt_idxs,:], :fish), :f => mean)
+last_rs_idxs = (ramp_rs.rel_time .>= 54) .& (ramp_rs.rel_time .< 57)
+f_rs = combine(groupby(ramp_rs[last_rs_idxs,:], :fish), :f => mean)
+df_f_wt = @. (f_wt.f_mean - f0_wt.f_mean) / f0_wt.f_mean
+df_f_rs = @. (f_rs.f_mean - f0_rs.f_mean) / f0_rs.f_mean
+@show mean(df_f_wt), sem(df_f_rs)
+@show mean(df_f_rs), sem(df_f_wt)
 ##
 
 the_count = combine(groupby(ramp_df, ["rel_time"]), :df_f => length)

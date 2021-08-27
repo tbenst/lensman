@@ -139,11 +139,14 @@ function inkscape_make_png(svg_fn, H, W;
     read(cmd, String)
 end
 
-
-
 "Symmetric log-like function."
 function symlog(x,c=1/np.log(10))
     orig_sign = sign(x)
     out = log10(1 + abs(x/c))
     out * orig_sign
 end
+
+plus_sem(x) = mean(x)+sem(x)
+minus_sem(x) = mean(x)-sem(x)
+plus_std(x) = mean(x)+std(x)
+minus_std(x) = mean(x)-std(x)

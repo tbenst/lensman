@@ -129,15 +129,64 @@ end;
 # need to be excluded. can look at x,y location as a heuristic for each group
 # of stims..? or just always select stim_group == 1 or 2?
 ##
-df = cells_df_f_combined[cells_df_f_combined.stimGroup .<= 2, :]
+df = cells_df_f_combined[cells_df_f_combined.stimNum .<= 2, :]
 ##
-median_df = transform(groupby(df, [:uri, :cellID]), "df_f" => median)
+tenpercentile(x) = quantile(x, 0.1)
+median_df = combine(groupby(df, [:uri, :cellID, :genotype]),
+    "df_f" => median, "f" => median, "f0" => tenpercentile)
+@. median_df[:,:perc_df_f] = (median_df[:,:f_median] - median_df[:,:f0_tenpercentile]) / (median_df[:,:f0_tenpercentile]+10)
+
+# this does the best job of denoising
+sum_df = combine(groupby(df, [:uri, :cellID, :genotype]),
+    "f" => sum, "f0" => sum)
+region_df = combine(groupby(df, [:uri, :stimGroup, :genotype]),
+    "f" => sum, "f0" => sum)
+@. region_df[:,:region_df_f] = (region_df[:,:f_sum] - region_df[:,:f0_sum]) / (region_df[:,:f0_sum]+10)
+region_df_err = combine(groupby(region_df, [:genotype]),
+    "region_df_f" => mean,
+    "region_df_f" => sem, "region_df_f" => L.plus_sem, "region_df_f" => L.minus_sem,
+    "region_df_f" => std, "region_df_f" => L.plus_std, "region_df_f" => L.minus_std)
+@show region_df_err[:,[:region_df_f_mean, :region_df_f_sem]]
+n_wt_trials = size(region_df[region_df[:,:genotype].=="wt",:], 1)
+n_rs_trials = size(region_df[region_df[:,:genotype].=="rs",:], 1)
+n_rs_fish = size(unique(region_df[region_df[:,:genotype].=="rs",:uri]), 1)
+n_wt_fish = size(unique(region_df[region_df[:,:genotype].=="wt",:uri]), 1)
+@show n_wt_trials, n_rs_trials, n_rs_fish, n_wt_fish
+
 ##
 # dff = median_df[median_df.df_f_median .>= 0.2, :]
 dff = median_df
-plot(dff, x=:genotype, y=:df_f_median, Geom.beeswarm,
-    Coord.cartesian(;ymin=-3, ymax=5))
+# plot(dff, x=:genotype, y=:df_f_median, Geom.boxplot,
+#     Coord.cartesian(;ymin=-1, ymax=7))
+# plot(sum_df, color=:genotype, x=:sum_df_f, Geom.density,)
+# plot(sum_df, color=:genotype, x=:sum_df_f, Geom.density,)
+# plot(region_df, color=:genotype, x=:region_df_f, Geom.density,)
+plot(region_df, color=:genotype, x=:genotype, y=:region_df_f, Geom.boxplot,
+    Coord.cartesian(;ymin=-1, ymax=5))
+plot(region_df_err, x=:genotype, y=:region_df_f_mean,
+    # ymin=:region_df_f_minus_sem, ymax=:region_df_f_plus_sem,
+    ymin=:region_df_f_minus_std, ymax=:region_df_f_plus_std,
+    color=:genotype, Geom.point, Geom.errorbar,
+    Coord.cartesian(;ymin=-1, ymax=2))
 ##,
+med_per_fish = combine(groupby(median_df, [:uri, :genotype]),
+    "df_f_median" => median, "f_median" => median, "f0_median" => median)[:,2:end]
+##
+f = med_per_fish.f_median_median
+f0 = med_per_fish.f0_median_median
+
+@. (f-f0)/f
+# .83 wt; .36 rs
+##
+# 4 Mhz
+idxs = (
+        median_df.uri .== "2021-06-01_wt-chrmine_h2b6s/fish4/TSeries-lrhab-control-118trial-061"
+    ) .| (
+        median_df.uri .== "2021-04-13_wt-chrmine_6dpf_h2b6s/fish1/TSeries-4region-lrhab-raphe-control-129trial-145"
+    )
+
+mean(median_df[idxs,:df_f_median])
+# .27
 ##
 mean_cells = combine(groupby(cells_df_f,:cellID), "df_f" => mean)
 mean_cells[:,:df_f_symlog] .= L.symlog.(mean_cells[:,:df_f_mean])

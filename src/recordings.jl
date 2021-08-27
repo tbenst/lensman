@@ -44,6 +44,7 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     :notes => "",
     :zseries_name => "ZSERIES_NAME_NOT_DEFINED",
     :genotype => "", # not yet used
+    :registration_type => :dont_run,
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment",
