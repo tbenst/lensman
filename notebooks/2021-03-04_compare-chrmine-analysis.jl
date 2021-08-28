@@ -1,4 +1,6 @@
-
+ENV["DISPLAY"] = "localhost:11"
+##
+import Cairo, Fontconfig
 using Sockets, Observables, Statistics, Images, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
@@ -7,8 +9,6 @@ using Sockets, Observables, Statistics, Images, Lensman,
 import Gadfly
 using Unitful: μm, m, s
 # PNG
-import Cairo,
-Fontconfig
 
 chrmine_paper = Gadfly.Theme(
     line_width=1mm,
@@ -76,7 +76,8 @@ rs_cells, rs = readExp(rs_path, "rsChRmine", 2e4)
 # fluor = vcat(h33r, rs, wt, gcamp);
 fluor = vcat(h33r, rs, wt);
 # plotDir = "$tseriesRootDir/../plots/2021-03-16"
-plotDir = "/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure/v3"
+# plotDir = "/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure/v3"
+plotDir = "/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure/2021-08-27_panels"
 
 ##
 

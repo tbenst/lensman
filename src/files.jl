@@ -712,7 +712,7 @@ function calc_trial_average(tseries::LazyTy5, stimStartIdx,
 end
 
 "Calculate average response for each unique stimuli"
-function calc_trial_average(tseries::Array{<:Real}, stimStartIdx,
+function calc_trial_average(tseries::Union{Array{<:Real},LazyTiff}, stimStartIdx,
         stimEndIdx, tseriesH, tseriesW, tseriesZ, trialOrder;
         pre=16, post=16)
     nStimuli = maximum(trialOrder)
@@ -780,6 +780,7 @@ end
 # end
 
 function read_olympus(oir_file)
+    tifffile = pyimport("tifffile")
     x_um, y_um, z_um = read_oir_units(oir_file)
     @assert z_um == 1.0 # make sure not a eg 10um, quick-pan goof
     oir_img = tifffile.imread(replace(oir_file, "oir" => "ome.btf"));

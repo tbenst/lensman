@@ -22,7 +22,7 @@ DEFAULT_RECORDING_SETTINGS = Dict(
         "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
     ],
     :rel_analysis_dir => "raw",
-    :tseries_dset => nothing,
+    :tseries_dset => nothing, # if nothing, use raw tiffs
     :tyh5_path => nothing,
     :slm_dir => "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/",
     # TODO: should we use `missing` instead of these strings..?
@@ -38,7 +38,7 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     :oir_920_name => "OIR_920_NAME_NOT_DEFINED",
     :oir_820_name => "OIR_820_NAME_NOT_DEFINED",
     :zbrain_warp_prefix => "ZBRAIN_WARP_PREFIX_NOT_DEFINED",
-    :mm_warp_prefix => "MM_WARP_PREFIX_NOT_DEFINED",
+    :mm_warp_prefix => "",
     :rostral => :right,
     :dorsal => :up,
     :notes => "",
@@ -92,16 +92,17 @@ Recordings = RecordingsWrapper(
         oir_920_name="multimap_zseries_920nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom.oir",
         oir_820_name="multimap_zseries_820nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom-take2.oir",
         lazy_tyh5=true,
-        # zbrain_warp_prefix="20210729T154219098Z" # TODO: is this zbrain or for multimap...?
+        mm_warp_prefix="20210729T154219098Z"
     ),
     modifiable_recording("2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061";
         zseries_name="ZSeries-structural-840nm-048",
         # tseries_dset = "/imaging/LSTM_per-voxel-state_divide2048-2021-07-02",
+        # lazy_tyh5=true,
+        lazy_tiff=true,
         tyh5_path="/data/dlab/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061.ty.h5",
         oir_dir="/data/dlab/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fishfrom_2021-07-13_rschrmine_h2b6s/fish1",
         oir_920_name="multimap_zseries_920nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom.oir",
         oir_820_name="multimap_zseries_820nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom-take2.oir",
-        lazy_tyh5=true,
         # zbrain_warp_prefix="20210727T204656077Z" # TODO: is this zbrain or for multimap...?
     ),
     modifiable_recording("2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-046";
@@ -114,6 +115,9 @@ Recordings = RecordingsWrapper(
         tseries_dset="/imaging/raw"
     ),
     modifiable_recording("2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish2_nochrmine/TSeries-1024cell-32concurrent-4power-048";
-        tseries_dset="/imaging/raw"
-    )
+    tseries_dset="/imaging/raw"
+    ),
+    modifiable_recording("2021-06-01_rsChRmine_h2b6s/fish3/TSeries-titration-192trial-061";
+        zseries_name="ZSeries-structural-056"
+    ),
 )

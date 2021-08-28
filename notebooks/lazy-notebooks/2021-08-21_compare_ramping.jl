@@ -1,4 +1,4 @@
-ENV["DISPLAY"] = "localhost:13"
+ENV["DISPLAY"] = "localhost:11"
 # this notebook calculates mean +/- sem of ramping 
 # and also for targeted cell df/f
 ##
@@ -10,7 +10,7 @@ ENV["DISPLAY"] = "localhost:13"
 using Lensman, Images, Glob, NPZ, DataFrames, ImageSegmentation, 
       Random, Statistics, PyCall, ProgressMeter, HDF5, Distributed,
       Dates, Arrow, StatsBase, Folds, HypothesisTests
-using Gadfly
+using Gadfly, Compose
 import Lensman: @pun, @assign
 # using ImageView # sometimes hard to load over ssh
 using AxisArrays
@@ -227,7 +227,7 @@ outlier_fish = fishes[(fs .> outlier_upper_thresh) .| (fs .< outlier_lower_thres
 ##
 # we keep first 58 to avoid stim artifact / account for vol_rate differences
 df = ramp_df[map(f-> ~in(f, outlier_fish), ramp_df.fish), :]
-df = df[df.genotype .!= "gcamp", :] # N is too low to 
+df = df[df.genotype .!= "gcamp", :] # N is too low
 meanDF =combine(groupby(df[df.rel_time .<= 58,:], ["rel_time", "genotype"]),
     "df_f" => mean, "df_f" => plus_sem, "df_f" => minus_sem)
 meanDF[:,:time] = meanDF[:,:rel_time]/mean(vol_rates)
@@ -249,6 +249,7 @@ pband = Gadfly.layer(meanDF, x=:time, ymin=:df_f_minus_sem, ymax=:df_f_plus_sem,
 
 p_cross = Gadfly.plot(Geom.subplot_grid(pmean, pband), Guide.xlabel("time (s)"),
     Guide.ylabel("Δf/f"))
+##
 # Gadfly.plot(ramp_df, x=:rel_time, y=:df_f, color=:fish, Geom.point, Guide.colorkey(labels=string.(collect(1:9))))
 # Gadfly.plot(df[df.rel_time .== 58, :], x=:genotype, y=:df_f, color=:genotype, Geom.boxplot)
 svg_fn = joinpath(save_dir, "16fish-cross-stim_rs-vs-wt.svg")
