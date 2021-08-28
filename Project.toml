@@ -1,7 +1,7 @@
 name = "Lensman"
 uuid = "689de0eb-15d7-4085-9ca0-978c860488ce"
 authors = ["Tyler Benster <lensman@tylerbenster.com>"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 ANTsRegistration = "084f3631-7eb2-446c-b8ed-543d1c4bdaa0"
