@@ -63,7 +63,7 @@ function update_recording_dag(recording::DAG)
     @reversible begin
         tseries_dir = find_folder(uri, tseries_root_dirs)
         fish_dir = get_fish_dir(tseries_dir)
-        zseries_dir = joinpath(fish_dir, zseries_name)
+        zseries_dir = lookup_zeseries_path(fish_dir, zseries_name)
         exp_name = (x->splitpath(x)[end])(tseries_dir)
         recording_folder = (x->splitpath(x)[end-2])(tseries_dir)
         fish_name = (x->splitpath(x)[end-1])(tseries_dir)
@@ -394,4 +394,12 @@ end
 "Add dependency (for use with thunks / laxy evaluation)."
 function parentof(parent, child)
     return child
+end
+
+function lookup_zeseries_path(fish_dir, zseries_name)
+    if ismissing(zseries_name)
+        glob("ZSeries*", fish_dir)[end]
+    else
+        joinpath(fish_dir, zseries_name)
+    end
 end

@@ -14,6 +14,7 @@ L = Lensman
 init_workers()
 ##
 resource = Resources()
+# TODO: also plot fish2..?
 r = Recordings["2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"](
     ;resource...);
 @pun (tseries, tseriesT, nStimuli, etl_vals, cells) = r;

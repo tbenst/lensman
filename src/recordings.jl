@@ -42,7 +42,7 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     :rostral => :right,
     :dorsal => :up,
     :notes => "",
-    :zseries_name => "ZSERIES_NAME_NOT_DEFINED",
+    :zseries_name => missing,
     :genotype => "", # not yet used
     :registration_type => :dont_run,
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
@@ -116,6 +116,9 @@ Recordings = RecordingsWrapper(
     ),
     modifiable_recording("2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish2_nochrmine/TSeries-1024cell-32concurrent-4power-048";
     tseries_dset="/imaging/raw"
+    ),
+    modifiable_recording("2021-06-01_rsChRmine_h2b6s/fish3/TSeries-titration-192trial-061";
+        zseries_name="ZSeries-structural-056"
     ),
     modifiable_recording("2021-06-01_rsChRmine_h2b6s/fish3/TSeries-titration-192trial-061";
         zseries_name="ZSeries-structural-056"
