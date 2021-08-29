@@ -64,9 +64,9 @@ function update_recording_dag(recording::DAG)
         tseries_dir = find_folder(uri, tseries_root_dirs)
         fish_dir = get_fish_dir(tseries_dir)
         zseries_dir = lookup_zeseries_path(fish_dir, zseries_name)
-        exp_name = (x->splitpath(x)[end])(tseries_dir)
-        recording_folder = (x->splitpath(x)[end-2])(tseries_dir)
-        fish_name = (x->splitpath(x)[end-1])(tseries_dir)
+        exp_name = splitpath(tseries_dir)[end]
+        recording_folder = splitpath(tseries_dir)[end-2]
+        fish_name = splitpath(tseries_dir)[end-1]
         plot_dir = make_joinpath(fish_dir, rel_analysis_dir, "plots")
         df_dir = make_joinpath(fish_dir, rel_analysis_dir, "dataframes")
         local_slm_dir = joinpath(fish_dir, "slm")
@@ -176,7 +176,9 @@ function update_recording_dag(recording::DAG)
         # TODO add parentof(multimap_ckpt, [...])
         multimap_warps = glob("*SyN_Warped.nii.gz", fish_dir)
         multimap_ants_cmd = (multimap_warps -> length(multimap_warps)==0
-            ? ants_register(zseries, multimap_920; interpolation = "WelchWindowedSinc",
+            # pre 2021-08-28
+            # ? ants_register(zseries, multimap_920; interpolation = "WelchWindowedSinc",
+            ? ants_register(zseries, multimap_820[:,:,3,:]; interpolation = "WelchWindowedSinc",
             histmatch = 0, sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
             use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
             save_dir=fish_dir, dont_run = true) : "using cached ANTs for multimap registration")(zbrain_warps)
@@ -237,7 +239,7 @@ function update_recording_dag(recording::DAG)
         mm_transform_affine, mm_transform_SyN, zbrain_transforms,
         region_mask_path, zbrain_masks, region_masks_h5, zbrain_mask_names,
         nCells, cell_centers, cells_mask, iscell, cells_df_f,
-        zbrain_restore, _zbrain_registered
+        zbrain_restore, _zbrain_registered, multimap_920, multimap_820, multimap_ants_cmd
     )
 
     recording
@@ -322,13 +324,15 @@ function find_folder(name, root_dirs)
         catch
         end
     end
-    @error "could not find folder $name"
+    error("could not find folder $name")
 end
 
 
 function get_fish_dir(tseries_dir)
     sp = splitpath(tseries_dir)[1:end-1]
-    joinpath(sp...)
+    fishdir = joinpath(sp...)
+    @assert isdir(fishdir)
+    fishdir
 end
 
 function get_suite2p_dir(tseries_dir)

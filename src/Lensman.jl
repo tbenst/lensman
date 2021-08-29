@@ -154,5 +154,6 @@ export read_microns_per_pixel,
     read_registered_mask,
     influence_map,
     LazyTy5,
-    noop, LazyTiff
+    noop, LazyTiff,
+    opening_median, opening_nonbool
 end

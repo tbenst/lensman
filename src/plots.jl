@@ -150,3 +150,17 @@ plus_sem(x) = mean(x)+sem(x)
 minus_sem(x) = mean(x)-sem(x)
 plus_std(x) = mean(x)+std(x)
 minus_std(x) = mean(x)-std(x)
+
+erodeN(n) = n == 1 ? erode : erode ∘ erodeN(n-1)
+dilateN(n) = n == 1 ? dilate : dilate ∘ dilateN(n-1)
+openingN(n) = dilateN(n) ∘ erodeN(n)
+
+function opening_nonbool(x; N=1)
+    nonzero = x .> 0
+    nonzero = openingN(N)(nonzero)
+    new = copy(x)
+    new[(~).(nonzero)] .= 0
+    new
+end
+
+opening_median = (x -> mapwindow(median!, x, (3,3))) ∘ opening_nonbool
