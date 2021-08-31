@@ -17,13 +17,13 @@ resource = Resources()
 ##
 # TODO: also plot fish2..?
 r = Recordings[
-    # "2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069"
-    "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
+    # "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
+    "2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069"
     ](
     ;resource...);
 ##
 # analysis_name = "lstm-multiMAP-zoom3x-2021-08-28"
-analysis_name = "multiMAP-2021-08-28"
+analysis_name = "multiMAP-2021-08-29"
 # analysis_name = "lstm-multiMAP-zoom1x-2021-08-28"
 
 ##
@@ -46,7 +46,7 @@ figB = 1.6
 
 # imap_cmap = transparent_cmap(plt.cm.Reds, max_alpha=1.0)
 imap_cmap = transparent_cmap(plt.cm.Greens, max_alpha=1.0)
-# bg_cmap = transparent_cmap(plt.cm.gray, max_alpha=0.5)
+bg_cmap = transparent_cmap(plt.cm.gray, max_alpha=0.5)
 mm4_cmap = transparent_cmap(plt.cm.Reds, max_alpha=0.5)
 mm1_cmap = transparent_cmap(plt.cm.Reds, max_alpha=0.5)
 # mm4_cmap = transparent_cmap(plt.cm.Blues, max_alpha=0.5)
@@ -165,12 +165,13 @@ ax.set_ylim(yrange)
 fig
 
 ## check registration
-z = 1
+# registration looks decent/mediocre for fish 1...
+z = 9
 # mm=4
 mm=3
 match_z = imaging2zseries_plane[z]
-fig, ax = plt.subplots(1,1, figsize=(figW,figH))
-zplane = imresize(Array(zseries[:,:,imaging2zseries_plane][:,:,z]), df_size)
+fig, ax = plt.subplots(1,1)
+zplane = Array(zseries[:,:,imaging2zseries_plane][:,:,z])
 im = imadjustintensity(zplane)
 # im = imadjustintensity(zplane, (tseries_cmin,tseries_cmax))
 im = opening_nonbool(im)
@@ -185,7 +186,7 @@ im = mapwindow(median!, im, (3,3))
 im = RGB.(im)
 im = adjust_histogram(im, GammaCorrection(0.5))
 channelview(im)[[1,3],:,:] .= 0
-channelview(im) .= 0
+# channelview(im) .= 0
 
 # multimap
 if mm==4
@@ -209,13 +210,14 @@ end
 
 # im820 = imresize(mm820_registered[:,:,mm,match_z],
 #         df_size)
+im820 = mm820_registered[:,:,mm,match_z]
 im820 = opening_median(im820)
-# cmin, cmax = otsu_threshold(im820[:])*2, quantile(im820[:], 0.99)
-# im820 = adjust_histogram(im820, GammaCorrection(0.5))
-cmin, cmax = minimum(im820[:]), minimum(im820[:])
-im820 = imadjustintensity(im820, (cmin, cmax))
-
-
+# cmin, cmax = otsu_threshold(im820[:]), quantile(im820[:], 0.99)
+# cmin, cmax = otsu_threshold(im820[:]), quantile(im820[:], 0.999)
+im820 = adjust_histogram(im820, GammaCorrection(0.5))
+# cmin, cmax = minimum(im820[:]), maximum(im820[:])
+# im820 = imadjustintensity(im820, (cmin, cmax))
+im820 = imadjustintensity(im820, extrema(im820))
 
 # im820 .= 0
 channelview(im)[1,:,:] .= im820
@@ -223,8 +225,8 @@ channelview(im)[1,:,:] .= im820
 py_im = permutedims(channelview(im),[2,3,1])
 cim = ax.imshow(py_im)
 ax.set_axis_off()
-ax.set_xlim(xrange)
-ax.set_ylim(yrange)
+ax.set_xlim(xrange .* 2)
+ax.set_ylim(yrange .* 2)
 
 fig
 
@@ -304,4 +306,78 @@ for stimNum in nStimuli:-1:1
     fig.savefig(path*".svg", dpi=1200)
     fig.savefig(path*".png", dpi=1200)
 end
+fig
+
+
+## three-panel only...
+# FINALFIG
+stimNum = 1
+f = mean(trial_average[:,:,:,stimNum,end-window+1:end],dims=4)[:,:,:,1]
+f0 = mean(trial_average[:,:,:,stimNum,1:window],dims=4)[:,:,:,1]
+df = f - f0
+df_f = df./(f0 .+ 0.001)
+
+figW,figH = (figB*3, figB*2)
+fig, axs = plt.subplots(1,3, figsize=(figW,figH))
+
+yrange = (240-plus_minus, 240+plus_minus)
+# yrange = yrange .* 2
+xrange = (225-plus_minus, 225+plus_minus)
+
+
+
+# TODO: fix plus artifact (from opening_median) with convolution
+# OR: run after denoising...
+# TODO add scalebar...
+# https://github.com/ppinard/matplotlib-scalebar
+for (i, (mm,z)) in enumerate([(gad_z,2), (gad_z,2), (1,8)])
+    ax = axs[i]
+    match_z = imaging2zseries_plane[z]
+    # fix scaling issue
+    df_size = size(trial_average)[1:2]
+    zseriesSize = size(zseries)[1:2]
+    
+    # influence map
+    im = df_f[:,:,z]
+    im = opening_median(im)
+    cmin, cmax = quantile(im[:], 0.01), quantile(im[:], 0.99)
+    im = imadjustintensity(im, (cmin, cmax))
+    im = RGB.(im)
+    channelview(im)[[1,3],:,:] .= 0
+
+    # multimap
+    if mm==4
+        cmin, cmax = mm4_cmin, mm4_cmax
+        celltype = "GAD"
+    elseif mm==1
+        cmin, cmax = mm1_cmin, mm1_cmax
+        celltype = "Sert"
+    end
+    im820 = imresize(mm820_registered[:,:,mm,match_z],
+        df_size)
+    cmin = otsu_threshold(im820[:])*2
+    cmax = quantile(im820[:], 0.99)
+    im820 = imadjustintensity(im820, (cmin, cmax))
+    im820 = opening_median(im820)
+
+    channelview(im)[1,:,:] .= im820
+
+    py_im = permutedims(channelview(im),[2,3,1])
+
+    ax.set_axis_off()
+    if i == 1
+        rect = matplotlib.patches.Rectangle((xrange[1], yrange[1]),
+            xrange[2]-xrange[1], yrange[2]-yrange[1], linewidth=1, edgecolor="w", facecolor="none")
+        ax.add_patch(rect)
+        cim = ax.imshow(py_im)
+    else
+        cim = ax.imshow(py_im[yrange[1]:yrange[2], xrange[1]:xrange[2], :])
+    end
+    ax.set_title("$celltype ($(Int(round(etl_vals[z],digits=0)))μm)")
+end
+
+path = joinpath(plot_dir,"2panel_multimap")
+@show path*".svg"
+fig.savefig(path*".svg", dpi=1200)
+fig.savefig(path*".png", dpi=1200)
 fig

@@ -929,3 +929,16 @@ function read_zbrain_masks(zbrain_dir; read_hemisphere=true)
     zbrain_masks
 end
 
+function read_cellpose_dir(directory)
+    files = glob("MASK_plane_*.tif", directory)
+    tifs = []
+    startnum = 0
+    for f in files
+        tif = convert(Array{UInt32}, reinterpret(UInt16, ImageMagick.load(f)))
+        nonzero_idxs = tif .> 0
+        tif[nonzero_idxs] .+= startnum
+        startnum = maximum(tif)
+        push!(tifs,tif)
+    end
+    cat(tifs...; dims=3)
+end

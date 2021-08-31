@@ -16,6 +16,14 @@ function per_trial_regions_df(tseries::Array, window_len, stim_start_idx, stim_e
     df
 end
 
+
+function per_trial_regions_df(tseries::LazyTy5, window_len, stim_start_idx, stim_end_idx, trial_order,
+    masks, region_names, stim_names=nothing
+)
+    per_trial_regions_df(tseries.tyh5_path, tseries.dset_str, window_len, stim_start_idx, stim_end_idx,
+        trial_order, masks, region_names, stim_names)
+end
+
 function per_trial_regions_df(tyh5_path::AbstractString, tseries_dset::AbstractString, window_len, stim_start_idx, stim_end_idx, trial_order,
     masks, region_names, stim_names=nothing
 )

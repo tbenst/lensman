@@ -68,18 +68,8 @@ function Base.size(X::LazyTy5)
     H, W, Z, T
 end
 
-# function Base.axes(X::LazyTiff, args...)
-#     Base.axes(X.dest, args...)
-# end
-
-function Base.axes(X::LazyTy5, args...)
-    Base.axes(X.dest, args...)
-end
-
-
-function Base.axes(X::Union{LazyTy5,LazyTiff},i)
-    # Base.axes(Base.OneTo(size(X,i)))
-    Base.axes(X.dset,i)
+function Base.axes(X::Union{LazyTy5,LazyTiff},args...)
+    Base.axes(X.dset,args...)
 end
 
 function Base.close(X::LazyTy5)

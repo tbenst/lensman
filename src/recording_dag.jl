@@ -49,7 +49,7 @@ function update_recording_dag(recording::DAG)
         oir_dir, zbrain_warp_prefix, mm_warp_prefix, oir_920_name, oir_820_name, tyh5_path,
         h2b_zbrain, zbrain_units, rostral, dorsal, suite2p_dir, zbrain_masks,
         zbrain_mask_names, lazy_tiff, cells_df_f_win_secs, cells_df_f_padding,
-        registration_type
+        registration_type, roi_method
     ) = recording.nodes
     # procutil=Dict(Dagger.ThreadProc => 36.0)
     
@@ -65,7 +65,7 @@ function update_recording_dag(recording::DAG)
         fish_dir = get_fish_dir(tseries_dir)
         zseries_dir = lookup_zeseries_path(fish_dir, zseries_name)
         exp_name = splitpath(tseries_dir)[end]
-        recording_folder = splitpath(tseries_dir)[end-2]
+        recording_folder = splitpath(tseries_dir)[end-2] # rename..?
         fish_name = splitpath(tseries_dir)[end-1]
         plot_dir = make_joinpath(fish_dir, rel_analysis_dir, "plots")
         df_dir = make_joinpath(fish_dir, rel_analysis_dir, "dataframes")
@@ -115,7 +115,7 @@ function update_recording_dag(recording::DAG)
         nwb_path = joinpath(suite2p_dir, "ophys.nwb")
         ndict = read_nwb_rois(nwb_path)
         cell_traces = getindex(ndict,:cell_traces)
-        cell_masks = getindex(ndict,:cell_masks)
+        s2p_cell_masks = getindex(ndict,:cell_masks)
         iscell = getindex(ndict,:iscell)
         nCells = getindex(ndict,:nCells)
         d0 = splitpath(zseries_dir)
@@ -238,7 +238,7 @@ function update_recording_dag(recording::DAG)
         target_size_px, zbrain_registered, mm920_registered, mm820_registered, nstim_pulses,
         mm_transform_affine, mm_transform_SyN, zbrain_transforms,
         region_mask_path, zbrain_masks, region_masks_h5, zbrain_mask_names,
-        nCells, cell_centers, cells_mask, iscell, cells_df_f,
+        nCells, cell_centers, cells_mask, iscell, cells_df_f, s2p_cell_masks, 
         zbrain_restore, _zbrain_registered, multimap_920, multimap_820, multimap_ants_cmd
     )
 
