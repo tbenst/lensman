@@ -1,6 +1,9 @@
 # TODO: could we use https://juliaio.github.io/HDF5.jl/stable/#Memory-mapping
 # + multithreading?
-struct LazyTy5
+
+abstract type LazyHDF5 end
+
+struct LazyTy5 <: LazyHDF5
     tyh5_path::String
     dset_str::String
     h5::HDF5.File
@@ -11,6 +14,18 @@ struct LazyTy5
         new(tyh5_path, dset_str, h5, dset)
     end
 end
+struct LazyH5 <: LazyHDF5
+    tyh5_path::String
+    dset_str::String
+    h5::HDF5.File
+    dset::HDF5.Dataset
+    function LazyH5(tyh5_path, dset_str; mode="r", swmr=true)
+        h5 = h5open(tyh5_path, mode, swmr=swmr)
+        dset = h5[dset_str]
+        new(tyh5_path, dset_str, h5, dset)
+    end
+end
+
 
 
 struct LazyTiff
@@ -26,7 +41,7 @@ function Base.ndims(x::LazyTiff)
     length(x.tseries_size)
 end
 
-function Base.ndims(x::LazyTy5)
+function Base.ndims(x::LazyHDF5)
     ndims(x.dset)
 end
 
@@ -38,7 +53,7 @@ function Base.selectdim(x::LazyTiff, d, i)
 end
 
 "Returns (copy) of LazyTy5 at dim d = i ."
-function Base.selectdim(x::LazyTy5, d, i)
+function Base.selectdim(x::LazyHDF5, d, i)
     nd = ndims(x)
     idxs = [n==d ? i : Colon() for n=1:nd]
     x[idxs...]
@@ -62,6 +77,15 @@ function Base.getindex(X::LazyTy5,i...)
         res
     end
 end
+function noop2()
+    2
+end
+function Base.getindex(X::LazyH5,i...)
+    h,w,z,t = i
+    res = X.dset[w, h, z, t]
+    nd = ndims(res)
+    res
+end
 
 # TODO: try ReusePatterns to make this DRY
 
@@ -70,17 +94,30 @@ function Base.size(X::LazyTy5)
     H, W, Z, T
 end
 
-function Base.axes(X::Union{LazyTy5,LazyTiff},args...)
-    Base.axes(X.dset,args...)
-end
-
-function Base.close(X::LazyTy5)
-    close(X.h5)
-end
-
+<<<<<<< HEAD
 function Base.size(X::LazyTy5, i)
     W, H, Z, C, T = size(X.dset)
     (H, W, Z, T)[i]
+end
+
+function Base.size(X::LazyH5, i)
+    W, H, Z, T = size(X.dset)
+    (H, W, Z, T)[i]
+end
+
+
+function Base.size(X::LazyH5)
+    W, H, Z, T = size(X.dset)
+    H, W, Z, T
+end
+
+function Base.axes(X::Union{LazyTy5,LazyH5}, args...)
+    Base.axes(X.dset, args...)
+end
+
+
+function Base.close(X::LazyHDF5)
+    close(X.h5)
 end
 
 """
