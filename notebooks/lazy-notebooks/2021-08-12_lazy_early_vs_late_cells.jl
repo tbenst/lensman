@@ -14,14 +14,16 @@ L = Lensman
 # import Dagger.Sch: ThunkOptions
 init_workers()
 ##
-r = Recordings["2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"]()
+resources = Resources();
+r = Recordings["2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"](;resources...)
 # @pun df_f_per_voxel_per_trial = r;
 ##
 
 @pun (nCells, cell_masks, tseries_dir, suite2p_dir, cell_traces,
-      trial_order, stimStartIdx, stimEndIdx, tseriesH, tseriesW,
+      trial_order, stim_start_idx, stim_end_idx, tseriesH, tseriesW,
       tseriesZ, vol_rate, nStimuli, nTrials, zseries, imaging2zseries_plane,
-      zseriesH, zseriesW, tseries, tyh5_path, df_f_per_trial_dataframe
+      zseriesH, zseriesW, tseries, tyh5_path, df_f_per_trial_dataframe,
+      cell_masks, nwb_path, tseriesT
       ) = r;
 
 ## pattern for extending DAG (ugly! ergonomics should be improved..macro?)
@@ -145,11 +147,17 @@ colored_neurons = map(get_random_color, (neuron_labels[:,:,6]));
 # colored_neurons
 shift_every_other_row(colored_neurons,-3)
 
+
+
+
+
+
+
 ## Suite2P based cell activation threshold
 # ntime x nCells
 size(cell_traces)
 df_f_per_cell_per_trial = zeros(nTrials, nCells)
-for (i,(st,en)) in enumerate(zip(stimStartIdx,stimEndIdx))
+for (i,(st,en)) in enumerate(zip(stim_start_idx,stim_end_idx))
     window_len = Int(floor(5 * vol_rate)) - 1
     s = st - 1
     e = en + 1
@@ -223,6 +231,8 @@ stimthresh_df = combine(c->stim_threshold(c,:df_f_minimum, thresh, nStimuli),
 # stimthresh_df = combine(c->stim_threshold(c,:df_f_mean, thresh, nStimuli),
 #     groupby(avg_stim_df, :cell_id))
 
+cell_masks = L.read_nwb_rois(nwb_path)[:cell_masks]
+##
 sum((~).(isnothing.(stimthresh_df.x1)))
 idxs = stimthresh_df.x1 .>= 0
 recruited_stimthresh_df = stimthresh_df[idxs,:]
@@ -246,10 +256,20 @@ end
 recruited_labels = label_by_cellid(recruited_cell_masks,tseriesH, tseriesW, tseriesZ,
     c->getindex(Dict(eachrow(recruited_stimthresh_df[:,[:cell_id, :x1]])) ,c));
 
-     
+##
+tseries_subset = tseries[:,:,:,1:20:tseriesT];
+maxTproj = mapslices(x->quantile(x[:],0.90), tseries_subset,dims=4);
+shiftedmaxTproj = shift_every_other_row(maxTproj,-3);
+shiftedmaxTproj = shiftedmaxTproj[:,:,:,1];
+
 
 ##
 fig, ax = plt.subplots(1,dpi=600)
+
+im = maximum(shiftedmaxTproj[175:310,100:235,:], dims=3)[:,:,1]
+im = L.adjust_histogram(im, GammaCorrection(0.2))
+ax.imshow(im, cmap=plt.cm.gray)
+
 p = 7
 # ax.imshow(zseries[:,:,imaging2zseries_plane[p]], cmap=plt.cm.gray)
 # ax.imshow(maximum(zseries[:,:,imaging2zseries_plane], dims=3),
@@ -260,14 +280,14 @@ rl = shift_every_other_row(recruited_labels,-2)
 rl = maximum(rl, dims=3)[175:310,100:235,1] .* 2
 rl = pycall(np.ma.masked_where, Any, rl .== -2, rl)
 
-cim = ax.imshow(rl, cmap=plt.cm.magma_r)
+cim = ax.imshow(rl, cmap=plt.cm.magma_r, alpha=0.6)
 cbar = plt.colorbar(cim)
 cbar.set_label("# of stimulated targets")
 ax.set_xticks([])
 ax.set_xticks([], minor=true)
 ax.set_yticks([])
 ax.set_yticks([], minor=true)
-# fig.savefig("/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure/2021-06-08_rsChRmine_titration/cell-stim-threshold.png")
+fig.savefig("/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure/2021-06-08_rsChRmine_titration/cell-stim-threshold.png")
 fig
 
 

@@ -1,5 +1,11 @@
 using Random
 
+function get_random_color(seed::Float64)
+    seed = reinterpret(Int64, seed)
+    Random.seed!(seed)
+    rand(RGB{N0f8})
+end
+
 function get_random_color(seed)
     Random.seed!(seed)
     rand(RGB{N0f8})

@@ -49,6 +49,7 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     :zseries_name => missing,
     :genotype => "", # not yet used
     :registration_type => :dont_run,
+    :roi_method => :suite2p, # or :cellpose
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment",
@@ -69,7 +70,7 @@ Recordings = RecordingsWrapper(
     ),
     modifiable_recording(
         "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061";
-        tseries_dset = "/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden_init_from_pretrained-2021-06-21_6pm",
+        tseries_dset = "/imaging/PerVoxelLST1M_actually_shared-separate_bias_hidden_init_from_pretrained-2021-06-21_6pm",
         tyh5_path="/scratch/b115/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061.ty.h5",
         lazy_tyh5=true
     ),
@@ -101,7 +102,8 @@ Recordings = RecordingsWrapper(
         oir_920_name="multimap_zseries_920nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom.oir",
         oir_820_name="multimap_zseries_820nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom-take2.oir",
         lazy_tyh5=true,
-        mm_warp_prefix="20210729T154219098Z"
+        mm_warp_prefix="20210829T042045359"
+        # mm_warp_prefix="20210729T154219098Z"
     ),
     modifiable_recording(
         "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061";
@@ -113,7 +115,8 @@ Recordings = RecordingsWrapper(
         oir_dir="/data/dlab/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fishfrom_2021-07-13_rschrmine_h2b6s/fish1",
         oir_920_name="multimap_zseries_920nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom.oir",
         oir_820_name="multimap_zseries_820nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom-take2.oir",
-        mm_warp_prefix="20210729T154219098Z"
+        mm_warp_prefix="20210829T042045359"
+        # mm_warp_prefix="20210729T154219098Z"
         # zbrain_warp_prefix="20210727T204656077Z" # TODO: is this zbrain or for multimap...?
     ),
     modifiable_recording(
