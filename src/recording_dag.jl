@@ -45,7 +45,7 @@ noop(`ni`)
 "Master DAG for all computations on a recording."
 function update_recording_dag(recording::DAG)
     @pun (uri, rel_analysis_dir, tseries_dset, zseries_name, tseries_root_dirs,
-        slm_dir, slm_root_dirs, lazy_tyh5, window_secs, zbrain_dir,
+        slm_dir, slm_root_dirs, h5_read_strategy, window_secs, zbrain_dir,
         oir_dir, zbrain_warp_prefix, mm_warp_prefix, oir_920_name, oir_820_name, tyh5_path,
         h2b_zbrain, zbrain_units, rostral, dorsal, suite2p_dir, zbrain_masks,
         zbrain_mask_names, lazy_tiff, cells_df_f_win_secs, cells_df_f_padding,
@@ -65,83 +65,83 @@ function update_recording_dag(recording::DAG)
         fish_dir = get_fish_dir(tseries_dir)
         zseries_dir = lookup_zeseries_path(fish_dir, zseries_name)
         exp_name = splitpath(tseries_dir)[end]
-        recording_folder = splitpath(tseries_dir)[end-2]
-        fish_name = splitpath(tseries_dir)[end-1]
+        recording_folder = splitpath(tseries_dir)[end - 2]
+        fish_name = splitpath(tseries_dir)[end - 1]
         plot_dir = make_joinpath(fish_dir, rel_analysis_dir, "plots")
         df_dir = make_joinpath(fish_dir, rel_analysis_dir, "dataframes")
         local_slm_dir = joinpath(fish_dir, "slm")
         tyh5_path = get_tyh5_path(tyh5_path, tseries_dir)
         test = count_threads()
-        tseries = get_tseries(tseries_dir, tyh5_path, tseries_dset, lazy_tyh5, lazy_tiff)
+        tseries = get_tseries(tseries_dir, tyh5_path, tseries_dset, h5_read_strategy, lazy_tiff)
         zseries = load_zseries(zseries_dir)
         zseries_xml = read_rec_xml(zseries_dir)
         tseries_xml = read_rec_xml(tseries_dir)
         zseries_zaxes = read_all_zaxis(zseries_xml)
         tseries_zaxis = read_first_zaxis(tseries_xml)   
         result = getExpData(tseries_xml)
-        exp_date = ((x)->x[1])(result)
-        frame_rate = ((x)->x[2])(result)
-        etl_vals = ((x)->x[3])(result)
+        exp_date = ((x) -> x[1])(result)
+        frame_rate = ((x) -> x[2])(result)
+        etl_vals = ((x) -> x[3])(result)
         tseriesH, tseriesW, tseriesZ, tseriesT = size(tseries)
-        zseriesH = size(zseries,1)
-        zseriesW = size(zseries,2)
-        zseriesZ = size(zseries,3)
+        zseriesH = size(zseries, 1)
+        zseriesW = size(zseries, 2)
+        zseriesZ = size(zseries, 3)
         vol_rate = frame_rate / tseriesZ
         date_str = Dates.format(exp_date, "dd-u-Y")
         tmp = find_folder(date_str, slm_root_dirs)
-        used_slm_dir = (x->joinpath(splitpath(x)[1:end-1]...))(tmp)
+        used_slm_dir = (x -> joinpath(splitpath(x)[1:end - 1]...))(tmp)
         res = getTrialOrder(used_slm_dir, exp_date)
-        trial_order = getindex(res,1)
-        slm_exp_dir = getindex(res,2)
-        first_target_group = ((x)->matread.(findMatGroups(x)[1]))(slm_exp_dir)
+        trial_order = getindex(res, 1)
+        slm_exp_dir = getindex(res, 2)
+        first_target_group = ((x) -> matread.(findMatGroups(x)[1]))(slm_exp_dir)
         slm_num = getSLMnum(first_target_group) # we assume same SLM for all groups
-        power_per_cell = ((x)->first_target_group["cfg"]["mode"]["BHV001"]["FOV"]["PowerPerCell"])(first_target_group)
+        power_per_cell = ((x) -> first_target_group["cfg"]["mode"]["BHV001"]["FOV"]["PowerPerCell"])(first_target_group)
         res2 = slmpower(exp_date) # TODO: auto read from Oak..?
-        slm1_power = getindex(res2,1)
-        slm2_power = getindex(res2,2)
+        slm1_power = getindex(res2, 1)
+        slm2_power = getindex(res2, 2)
         voltageFile = glob_one_file("*VoltageRecording*.csv", tseries_dir)
         res3 = getStimTimesFromVoltages(voltageFile, tseriesZ)
-        stim_start_idx = getindex(res3,1)
-        stim_end_idx = getindex(res3,2)
-        frameStartIdx = getindex(res3,3)
-        nstim_pulses = getindex(res3,4)
+        stim_start_idx = getindex(res3, 1)
+        stim_end_idx = getindex(res3, 2)
+        frameStartIdx = getindex(res3, 3)
+        nstim_pulses = getindex(res3, 4)
         res4 = get_target_groups(slm_exp_dir)
-        target_groups = getindex(res4,1)
-        group_stim_freq = getindex(res4,1)
+        target_groups = getindex(res4, 1)
+        group_stim_freq = getindex(res4, 1)
         nStimuli = maximum(trial_order)
-        nTrials = size(trial_order,1)
+        nTrials = size(trial_order, 1)
         zOffset = getzoffset(exp_date, slm_num)
         suite2p_dir = isnothing(suite2p_dir) ? get_suite2p_dir(tseries_dir) : suite2p_dir
         nwb_path = joinpath(suite2p_dir, "ophys.nwb")
         ndict = read_nwb_rois(nwb_path)
-        cell_traces = getindex(ndict,:cell_traces)
-        cell_masks = getindex(ndict,:cell_masks)
-        iscell = getindex(ndict,:iscell)
-        nCells = getindex(ndict,:nCells)
+        cell_traces = getindex(ndict, :cell_traces)
+        cell_masks = getindex(ndict, :cell_masks)
+        iscell = getindex(ndict, :iscell)
+        nCells = getindex(ndict, :nCells)
         d0 = splitpath(zseries_dir)
-        zseries_xml_path = (d->joinpath(d..., d[lastindex(d)] * ".xml"))(d0)
+        zseries_xml_path = (d -> joinpath(d..., d[lastindex(d)] * ".xml"))(d0)
         zseries_xml = read_xml(zseries_xml_path);
         zseries_zaxes = read_all_zaxis(zseries_xml)
         # this is ugly, should fix with macro...
-        et = ((e,t)-> e .+t)(etl_vals, tseries_zaxis)
-        f = (x->z->searchsortedfirst(x, z))(zseries_zaxes)
+        et = ((e, t) -> e .+ t)(etl_vals, tseries_zaxis)
+        f = (x -> z -> searchsortedfirst(x, z))(zseries_zaxes)
         imaging2zseries_plane = map(f, et)
-        window_len = ((vol_rate)->Int(round(window_secs * vol_rate)))(vol_rate)
+        window_len = ((vol_rate) -> Int(round(window_secs * vol_rate)))(vol_rate)
         df_f_per_voxel_per_trial = get_df_f_per_voxel_per_trial_from_h5(
             tyh5_path, tseries_dset, stim_start_idx, stim_end_idx, window_len,
             tseriesH, tseriesW, tseriesZ)
         df_f_per_trial_dataframe = get_df_f_per_trial_dataframe(
             df_f_per_voxel_per_trial, trial_order)
-        tseries_is1024 = (tseriesW==1024)
+        tseries_is1024 = (tseriesW == 1024)
         twp1 = mapTargetGroupsToPlane(target_groups, etl_vals,
             is1024=tseries_is1024, zOffset=zOffset)
-        targets_with_plane_index = map(x->Int.(round.(x, digits=0)), twp1)
+        targets_with_plane_index = map(x -> Int.(round.(x, digits=0)), twp1)
         cells = makeCellsDF(targets_with_plane_index, stim_start_idx, stim_end_idx,
             trial_order, group_stim_freq)
         lateral_unit = microscope_lateral_unit(tseriesZ)
         target_size_px = spiral_size(exp_date, lateral_unit)
         cell_masks = constructROImasks(cells, tseriesH, tseriesW, tseriesZ, target_size_px)
-        cells_df_f_winsize = Int(ceil(cells_df_f_win_secs*vol_rate))
+        cells_df_f_winsize = Int(ceil(cells_df_f_win_secs * vol_rate))
         cells_df_f = add_df_f_to_cells(tseries, cells, cell_masks,
             winSize=cells_df_f_winsize, padding=cells_df_f_padding);
         trial_average = calc_trial_average(tseries, stim_start_idx,
@@ -154,9 +154,9 @@ function update_recording_dag(recording::DAG)
         zbrain_restore = niread(zbrain_warpedname)
         b_run = registration_type != :dont_run
         _zbrain_registered = ants_register(zseries, h2b_zbrain;
-            interpolation = "WelchWindowedSinc", histmatch = 0,
-            sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
-            use_syn = false, synThreshold = 1e-7, synMaxIter = 200,
+            interpolation="WelchWindowedSinc", histmatch=0,
+            sampling_frac=0.25, maxiter=200, threshold=1e-8,
+            use_syn=false, synThreshold=1e-7, synMaxIter=200,
             save_dir=fish_dir, run=b_run)
             # use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
             # save_dir=fish_dir, dont_run = true)
@@ -175,13 +175,13 @@ function update_recording_dag(recording::DAG)
         multimap_820 = read_olympus(oir_820_file)
         # TODO add parentof(multimap_ckpt, [...])
         multimap_warps = glob("*SyN_Warped.nii.gz", fish_dir)
-        multimap_ants_cmd = (multimap_warps -> length(multimap_warps)==0
+        multimap_ants_cmd = (multimap_warps -> length(multimap_warps) == 0
             # pre 2021-08-28
             # ? ants_register(zseries, multimap_920; interpolation = "WelchWindowedSinc",
-            ? ants_register(zseries, multimap_820[:,:,3,:]; interpolation = "WelchWindowedSinc",
-            histmatch = 0, sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
-            use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
-            save_dir=fish_dir, dont_run = true) : "using cached ANTs for multimap registration")(zbrain_warps)
+            ? ants_register(zseries, multimap_820[:,:,3,:]; interpolation="WelchWindowedSinc",
+            histmatch=0, sampling_frac=0.25, maxiter=200, threshold=1e-8,
+            use_syn=true, synThreshold=1e-7, synMaxIter=200,
+            save_dir=fish_dir, dont_run=true) : "using cached ANTs for multimap registration")(zbrain_warps)
         multimap_warpedname = glob_one_file("$mm_warp_prefix*SyN_Warped.nii.gz", oir_dir)
         mm920_registered = niread(multimap_warpedname)
         mm_transform_affine = glob_one_file("$mm_warp_prefix*GenericAffine.mat", oir_dir)
@@ -200,10 +200,10 @@ function update_recording_dag(recording::DAG)
         end
 
         sdict = read_suite2p(suite2p_dir)
-        nCells = getindex(sdict,:nCells)
-        cell_centers = getindex(sdict,:cell_centers)
-        cells_mask = getindex(sdict,:cells_mask)
-        iscell = getindex(sdict,:iscell)
+        nCells = getindex(sdict, :nCells)
+        cell_centers = getindex(sdict, :cell_centers)
+        cells_mask = getindex(sdict, :cells_mask)
+        iscell = getindex(sdict, :iscell)
 
         # targetsWithPlaneIndex = mapTargetGroupsToPlane(target_groups, etl_vals; is1024=(tseriesW==1024), zOffset=zOffset)
         # assigned all above
@@ -329,36 +329,38 @@ end
 
 
 function get_fish_dir(tseries_dir)
-    sp = splitpath(tseries_dir)[1:end-1]
+    sp = splitpath(tseries_dir)[1:end - 1]
     fishdir = joinpath(sp...)
     @assert isdir(fishdir)
     fishdir
 end
 
 function get_suite2p_dir(tseries_dir)
-    sp = splitpath(tseries_dir)[1:end-1]
+    sp = splitpath(tseries_dir)[1:end - 1]
     joinpath(sp...)
 end
 
 function get_tyh5_path(settings_tyh5_path, tseries_dir)
     if isnothing(settings_tyh5_path)
-        tseries_dir*".ty.h5"
+        tseries_dir * ".ty.h5"
     else
         settings_tyh5_path
     end
 end
 
-function get_tseries(tseries_dir, tyh5_path, tseries_dset, lazy_tyh5, lazy_tiff)
+function get_tseries(tseries_dir, tyh5_path, tseries_dset, h5_read_strategy, lazy_tiff)
     if ~isnothing(tseries_dset)
-        if isnothing(tyh5_path)
-            tyh5_path = tseries_dir*".ty.h5"
+            if isnothing(tyh5_path)
+            tyh5_path = tseries_dir * ".ty.h5"
         end
-        if lazy_tyh5
+        if h5_read_strategy == :lazy_tyh5
             tseries = LazyTy5(tyh5_path, tseries_dset);
+        elseif h5_read_strategy == :lazy_hwzt
+            tseries = LazyH5(tyh5_path, tseries_dset);
         else
             tseries = read_tyh5(tyh5_path, tseries_dset)
         end
-    else
+else
         if lazy_tiff
             tseries = LazyTiff(tseries_dir)
         else
@@ -374,11 +376,19 @@ function read_rec_xml(recording_dir)
     read_xml(xmlPath)
 end
 
-function read_first_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_plane,
-        mask_name)
+function read_first_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_plane, mask_name)
     name = zbrain_mask_names[occursin.(mask_name, zbrain_mask_names)][1]
-    name, read_registered_mask(region_masks_h5,
-        name)[:,:,imaging2zseries_plane];
+    # name, read_registered_mask(region_masks_h5,
+    #     name)[:,:,imaging2zseries_plane];
+
+    mask = nothing
+    try
+        mask = read_registered_mask(region_masks_h5, name)[:, :, imaging2zseries_plane]
+    catch e
+        println("We have a problem")
+    end
+    
+    name, mask
 end
 
 function read_matching_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_plane, mask_name)

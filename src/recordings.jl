@@ -33,7 +33,7 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     :oir_dir => "OIR_DIR_NOT_DEFINED",
     :suite2p_dir => nothing,
     :warp_prefix => "WARP_PREFIX_NOT_DEFINED",
-    :lazy_tyh5 => true,
+    :h5_read_strategy => :lazy_ty5,
     :lazy_tiff => true,
     :window_secs => 5,
     :cells_df_f_win_secs => 2,
@@ -69,17 +69,17 @@ Recordings = RecordingsWrapper(
     ),
     modifiable_recording(
         "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061";
-        tseries_dset = "/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden_init_from_pretrained-2021-06-21_6pm",
+        tseries_dset="/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden_init_from_pretrained-2021-06-21_6pm",
         tyh5_path="/scratch/b115/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061.ty.h5",
-        lazy_tyh5=true
+        h5_read_strategy=:lazy_ty5
     ),
     modifiable_recording(
         "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-118trial-122";
         zseries_name="ZSeries-structural-840nm-058",
-        tseries_dset = "/imaging/LSTM_per-voxel-state_divide8192-2021-07-02",
+        tseries_dset="/imaging/LSTM_per-voxel-state_divide8192-2021-07-02",
         tyh5_path="/scratch/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-118trial-122.ty.h5",
         suite2p_dir="/scratch/b115/2021-06-08_rsChRmine_h2b6s/fish2/s2p/suite2p",
-        lazy_tyh5=true,
+        h5_read_strategy=:lazy_ty5,
         notes="""
             Only did one stim pulse??
         """
@@ -87,27 +87,28 @@ Recordings = RecordingsWrapper(
     modifiable_recording(
         "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123";
         zseries_name="ZSeries-structural-840nm-058",
-        tseries_dset = "/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm",
-        tyh5_path="/scratch/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-1232021-06-21_6pm.ty.h5",
+        tseries_dset="/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm",
+        tyh5_path="/data/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-1232021-06-21_6pm.ty.h5",
         suite2p_dir="/scratch/b115/2021-06-08_rsChRmine_h2b6s/fish2/s2p/suite2p",
-        lazy_tyh5=true
+        h5_read_strategy=:lazy_ty5
     ),
     modifiable_recording(
         "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062";
         zseries_name="ZSeries-structural-840nm-048",
         # tseries_dset = "/imaging/LSTM_per-voxel-state_divide8192-2021-07-02",
-        tyh5_path="/scratch/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062lstm_divide8192_avgStim.h5",
+        # tyh5_path="/scratch/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062lstm_divide8192_avgStim.h5",
+        tyh5_path="/data/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062_feng-single-lstm-outputs.ty.h5",
         oir_dir="/data/dlab/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fishfrom_2021-07-13_rschrmine_h2b6s/fish1",
         oir_920_name="multimap_zseries_920nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom.oir",
         oir_820_name="multimap_zseries_820nm_ch4-gad405_ch1-sert647_chr-gcamp_2x-zoom-take2.oir",
-        lazy_tyh5=true,
+        h5_read_strategy=:lazy_ty5,
         mm_warp_prefix="20210729T154219098Z"
     ),
     modifiable_recording(
         "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061";
         zseries_name="ZSeries-structural-840nm-048",
         # tseries_dset = "/imaging/LSTM_per-voxel-state_divide2048-2021-07-02",
-        # lazy_tyh5=true,
+        # h5_read_strategy=:lazy_ty5,
         lazy_tiff=true,
         tyh5_path="/data/dlab/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061.ty.h5",
         oir_dir="/data/dlab/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fishfrom_2021-07-13_rschrmine_h2b6s/fish1",
@@ -150,8 +151,15 @@ Recordings = RecordingsWrapper(
         "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-titration-192trial-061";
         zseries_name="ZSeries-structural-056"
     ),
+    modifiable_recording(  # TODO: run on /imaging/raw or tiffs to see what happens
+        "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-lrhab-118trial-060";
+        tyh5_path="/data/b115/2021-06-01_rsChRmine_h2b6s/fish3/TSeries-lrhab-118trial-060.ty.h5",
+        tseries_dset="/imaging/LSTM_per-voxel-state_divide512-2021-07-02",
+        # tseries_dset="/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm",  # funky negatives
+        zseries_name="ZSeries-structural-056"
+    ),
     modifiable_recording(
-        "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-titration-192trial-061";
+        "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072";
         zseries_name="ZSeries-structural-056"
     ),
 )

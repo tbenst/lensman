@@ -17,7 +17,15 @@ function per_trial_regions_df(tseries::Array, window_len, stim_start_idx, stim_e
 end
 
 function per_trial_regions_df(tyh5_path::AbstractString, tseries_dset::AbstractString, window_len, stim_start_idx, stim_end_idx, trial_order,
-    masks, region_names, stim_names=nothing
+    masks, region_names; stim_names=nothing
+)
+    tseries = LazyTy5(tyh5_path, tseries_dset)
+    _per_trial_regions_df(tseries, window_len, stim_start_idx, stim_end_idx, trial_order,
+    masks, region_names, stim_names)
+end
+
+function per_trial_regions_df(tseries::Union{LazyH5, LazyTy5}, window_len, stim_start_idx, stim_end_idx, trial_order,
+    masks, region_names; stim_names=nothing
 )
     nStimuli = maximum(trial_order)
     nTrials = length(stim_start_idx)
@@ -25,10 +33,11 @@ function per_trial_regions_df(tyh5_path::AbstractString, tseries_dset::AbstractS
         stim_names = string.(collect(1:nStimuli))
     end
 
-    df = @sync @distributed vcat for i in 1:nTrials
+    println("Getting regions_df over $(length(masks)) masks and $nTrials trials")
+    df = @showprogress @distributed vcat for i in 1:nTrials
         start_idx, end_idx = stim_start_idx[i], stim_end_idx[i]
         stim_name = stim_names[trial_order[i]]
-        _proc_region_df_f(tyh5_path, tseries_dset, masks, region_names, stim_name,
+        _proc_region_df_f(tseries, masks, region_names, stim_name,
             start_idx, end_idx, i, window_len)
     end
     df
@@ -38,7 +47,7 @@ end
 function imap_DF_by_region(imap, region_masks_h5::HDF5.File, regions, imaging2zseries_plane,
     stim_names=nothing, pretty_region_names=nothing
 )
-    nStimuli = size(imap,4)
+    nStimuli = size(imap, 4)
     if isnothing(stim_names)
         stim_names = string.(collect(1:nStimuli))
     end
@@ -50,15 +59,15 @@ function imap_DF_by_region(imap, region_masks_h5::HDF5.File, regions, imaging2zs
     for (pretty, region) in zip(pretty_region_names, regions)
         mask = read_registered_mask(region_masks_h5, region)[:,:,imaging2zseries_plane]
         for s in 1:nStimuli
-            voxel_responses = selectdim(imap,4,s)[mask]
+            voxel_responses = selectdim(imap, 4, s)[mask]
             voxel_responses = mean(voxel_responses)
             N = length(voxel_responses)
-            df = vcat(df, DataFrame("Δf/f"=>voxel_responses,
+            df = vcat(df, DataFrame("Δf/f" => voxel_responses,
                 # region=repeat(CategoricalArray([region]),N),
-                "region"=>pretty,
+                "region" => pretty,
                 # stim=repeat(CategoricalArray([stim_names[s]]),N)))
-                "stim"=>stim_names[s]))
-        end
+                "stim" => stim_names[s]))
+end
     end
     df
 end
@@ -66,7 +75,7 @@ end
 function imap_DF_by_region(imap, masks, regions, imaging2zseries_plane,
     H, W, Z, stim_names=nothing
 )
-    nStimuli = size(imap,4)
+    nStimuli = size(imap, 4)
     if isnothing(stim_names)
         stim_names = string.(collect(1:nStimuli))
     end
@@ -76,12 +85,12 @@ function imap_DF_by_region(imap, masks, regions, imaging2zseries_plane,
     df = DataFrame()
     for (region, mask) in zip(regions, masks)
         for s in 1:nStimuli
-            voxel_responses = selectdim(imap,4,s)[mask]
+            voxel_responses = selectdim(imap, 4, s)[mask]
             N = length(voxel_responses)
-            df = vcat(df, DataFrame("Δf/f"=>voxel_responses,
-                "region"=>region,
-                "stim"=>stim_names[s]))
-        end
+            df = vcat(df, DataFrame("Δf/f" => voxel_responses,
+                "region" => region,
+                "stim" => stim_names[s]))
+end
     end
     df
 end
@@ -90,10 +99,33 @@ function _proc_region_df_f(tyh5_path::AbstractString, tseries_dset::AbstractStri
     region_names, stim_name, start_idx, end_idx, trial, window_len, ϵ=0.0
 )
     proc_tseries = LazyTy5(tyh5_path, tseries_dset)
+    _proc_region_df_f(proc_tseries, Val(:helper), masks,
+        region_names, stim_name, start_idx, end_idx, trial, window_len, ϵ)
+end
+
+function _proc_region_df_f(tseries::LazyTy5, masks,
+    region_names, stim_name, start_idx, end_idx, trial, window_len, ϵ=0.0
+)
+    proc_tseries = LazyTy5(tseries.tyh5_path, tseries.dset_str)
+    _proc_region_df_f(proc_tseries, Val(:helper), masks,
+        region_names, stim_name, start_idx, end_idx, trial, window_len, ϵ)
+end
+
+function _proc_region_df_f(tseries::LazyH5, masks,
+    region_names, stim_name, start_idx, end_idx, trial, window_len, ϵ=0.0
+)
+    proc_tseries = LazyH5(tseries.tyh5_path, tseries.dset_str)
+    _proc_region_df_f(proc_tseries, Val(:helper), masks,
+        region_names, stim_name, start_idx, end_idx, trial, window_len, ϵ)
+end
+
+function _proc_region_df_f(proc_tseries, v::Val{:helper}, masks,
+    region_names, stim_name, start_idx, end_idx, trial, window_len, ϵ=0.0
+)
     s = start_idx
     e = end_idx
-    f0 = mean(proc_tseries[:,:,:,s-window_len:s-1],dims=4)[:,:,:,1]
-    f = mean(proc_tseries[:,:,:,e+1:e+window_len],dims=4)[:,:,:,1]
+    f0 = mean(proc_tseries[:, :, :, s - window_len:s - 1], dims=4)[: , :, :, 1]
+    f = mean(proc_tseries[:, :, :, e + 1:e + window_len], dims=4)[:, :, :, 1]
     df = DataFrame()
     for (region_name, mask) in zip(region_names, masks)
         region_f = mean(f[mask])
@@ -101,30 +133,37 @@ function _proc_region_df_f(tyh5_path::AbstractString, tseries_dset::AbstractStri
         region_response = (region_f - region_f0) / (region_f0 + ϵ)
         N = length(region_response)
         if occursin("left ", region_name)
-            hemisphere="left"
+            hemisphere = "left"
             region_name = replace(region_name, "left " => "")
         elseif occursin("right ", region_name)
-            hemisphere="right"
+            hemisphere = "right"
             region_name = replace(region_name, "right " => "")
         else
-            hemisphere="unknown"
+            hemisphere = "unknown"
         end
-        df = vcat(df, DataFrame("Δf/f"=>region_response,
-            "region"=>region_name,
-            "stim"=>stim_name,
-            "trial"=>trial,
-            "hemisphere"=>hemisphere))
+        df = vcat(
+            df, 
+            DataFrame(
+                "Δf/f" => region_response,
+                "f" => region_f,
+                "f0" => region_f0,
+                "area" => sum(mask),  # number of voxels averaged over
+                "region" => region_name,
+                "stim" => stim_name,  # number, e.g. "1" when `stim_names` not passed into `per_trial_regions_df`
+                "trial" => trial,
+                "hemisphere" => hemisphere)
+        )
     end
     df
 end
 
 function _proc_region_df_f(tseries::Array, masks, region_names, stim_name,
     start_idx, end_idx, trial, window_len, ϵ=0.0
-)
+    )
     s = start_idx
     e = end_idx
-    f0 = mean(tseries[:,:,:,s-window_len:s-1],dims=4)[:,:,:,1]
-    f = mean(tseries[:,:,:,e+1:e+window_len],dims=4)[:,:,:,1]
+    f0 = mean(tseries[:,:,:,s - window_len:s - 1], dims=4)[:,:,:,1]
+    f = mean(tseries[:,:,:,e + 1:e + window_len], dims=4)[:,:,:,1]
     df = DataFrame()
     for (region_name, mask) in zip(region_names, masks)
         region_f = mean(f[mask])
@@ -132,38 +171,50 @@ function _proc_region_df_f(tseries::Array, masks, region_names, stim_name,
         region_response = (region_f - region_f0) / (region_f0 + ϵ)
         N = length(region_response)
         if occursin("left", region_name)
-            hemisphere="left"
+            hemisphere = "left"
             region_name = replace(region_name, "left " => "")
         elseif occursin("right", region_name)
-            hemisphere="right"
+            hemisphere = "right"
             region_name = replace(region_name, "right " => "")
         else
-            hemisphere="unknown"
+            hemisphere = "unknown"
         end
-        df = vcat(df, DataFrame("Δf/f"=>region_response,
-            "region"=>region_name,
-            "stim"=>stim_name,
-            "trial"=>trial,
-            "hemisphere"=>hemisphere))
+        # df = vcat(df, DataFrame("Δf/f" => region_response,
+        #     "region" => region_name,
+        #     "stim" => stim_name,
+        #     "trial" => trial,
+        #     "hemisphere" => hemisphere))
+        df = vcat(
+            df, 
+            DataFrame(
+                "Δf/f" => region_response,
+                "f" => region_f,
+                "f0" => region_f0,
+                "area" => sum(mask),  # number of voxels averaged over
+                "region" => region_name,
+                "stim" => stim_name,  # number, e.g. "1" when `stim_names` not passed into `per_trial_regions_df`
+                "trial" => trial,
+                "hemisphere" => hemisphere)
+        )
     end
     df
 end
 
 "Make dataframe showing first f1_end seconds."
-function tseries_ramping_df(tseries, genotype, fish; vol_rate = 3, f0_end=6,
+function tseries_ramping_df(tseries, genotype, fish; vol_rate=3, f0_end=6,
      f1_end=72, ϵ=1
 )
     df = DataFrame()
     f0 = mean(tseries[:,:,:,1:f0_end])
     f = mean(tseries[:,:,:,1:f1_end], dims=[1,2,3])[1,1,1,:]
     rel_time = collect(1:length(f))
-    time = rel_time./vol_rate
-    df_f = @. (f-f0)/(f0 .+ ϵ)
+    time = rel_time ./ vol_rate
+    df_f = @. (f - f0) / (f0 .+ ϵ)
     df = DataFrame(
         rel_time=rel_time,
-        time= time,
-        df_f= df_f,
-        f = f,
+        time=time,
+        df_f=df_f,
+        f=f,
         genotype=genotype,
         fish=fish
     )
@@ -174,12 +225,12 @@ function recording_to_df_df(recording, genotype)
     try
         @pun (tseries, vol_rate, uri) = recording
         # f0_end = Int(round(vol_rate * 2))
-        f0_end=1
-        f1_end = Int(round(vol_rate * 20))-1
+        f0_end = 1
+        f1_end = Int(round(vol_rate * 20)) - 1
         fish = uri
-        tseries_ramping_df(tseries, genotype, fish; vol_rate = vol_rate, f0_end=f0_end,
+        tseries_ramping_df(tseries, genotype, fish; vol_rate=vol_rate, f0_end=f0_end,
             f1_end=f1_end)
-    catch
+        catch
         for (exc, bt) in Base.catch_stack()
             showerror(stdout, exc, bt)
             println(stdout)

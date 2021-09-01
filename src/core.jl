@@ -137,6 +137,36 @@ function antsApplyTransforms(fixedPath::String, movingPath::String, transformPat
     niread(maskoutname)
 end
 
+
+function apply_cmtk_transform(fixed_path::String, moving::AxisArray, transform_path::String)
+    moving_path = joinpath(tmppath, ANTsRegistration.write_nrrd(moving))
+    println("Wrote to '$moving_path'")
+    result = apply_cmtk_transform(fixed_path, moving_path, transform_path)
+    rm(moving_path)
+    result
+end
+
+
+function apply_cmtk_transform(fixed_path::String, moving_path::String, transform_path::String)
+    mask_out_name = joinpath(tmppath, ANTsRegistration.randstring(10) * ".nrrd")
+    println("Will save warped mask to '$mask_out_name'")
+    result = apply_cmtk_transform(fixed_path, moving_path, transform_path, mask_out_name)
+    rm(mask_out_name)
+    result
+end
+
+function apply_cmtk_transform(fixed_path::String, moving_path::String, transform_path::String, mask_out_name::String,
+        cmtk_path = "/home/allan/applications/cmtk-3.3.1p2/build/bin/cmtk")
+    # run(`$ants_path --float -d 3 -i $movingPath -r $fixedPath -t $transformPath -o $maskoutname`)
+
+    # Example: cmtk reformatx -v -o warped_full_new.nrrd --floating zbrain_h2b.nrrd zseries.nrrd warp_out.xform
+    # NOTE: in command line always using zbrain_h2b as `--floating`, so following that here
+    run(`$cmtk_path reformatx -v -o $mask_out_name --floating $moving_path $fixed_path $transform_path`)
+
+    load(mask_out_name)
+end
+
+
 "Tranform all 4 channels from e.g. Olympus."
 function multimap_transforms(fixed, oir_img, mm_affine_transform, mm_SyN_transform)
     registered = zeros(size(fixed)[1:2]...,4,size(fixed,3))
@@ -388,6 +418,7 @@ the RUN are copied to the same subfolder
 function getTrialOrder(slm_dir, expDate)
     date_str = Dates.format(expDate, "dd-u-Y")
     slmExpDir = joinpath(slm_dir,date_str)
+    println("SLM EXP DIR: $slmExpDir")
     slmRunDirs = joinpath.(slmExpDir,
         filter(x -> isdir(joinpath(slmExpDir, x)), readdir(slmExpDir)))
 
@@ -408,6 +439,7 @@ function getTrialOrder(slm_dir, expDate)
     trialOrderTxt = trialOrderTxts[dtIdx]
 
     trialOrder = CSV.File(trialOrderTxt, delim="\t", header=true) |> Tables.matrix
+    println("TRIAL ORDER: $(trialOrderTxt)")
     @assert size(trialOrder, 1) == 1
     trialOrder[1,:], joinpath(splitpath(trialOrderTxt)[1:end - 1]...)
 end
@@ -547,6 +579,7 @@ function get_slm_stim_masks(tif_dir, slm_dir)
     trial_order, slm_exp_dir = getTrialOrder(slm_exp_dir, exp_date)
     n_stimuli = maximum(trial_order)
     n_trials = size(trial_order, 1)
+    println("STIM_START $(size(stim_start_idx))")
     @assert n_trials == size(stim_start_idx, 1)
     target_radius_px = spiral_size(exp_date, lateral_unit)
 
