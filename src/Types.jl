@@ -1,3 +1,5 @@
+# TODO: could we use https://juliaio.github.io/HDF5.jl/stable/#Memory-mapping
+# + multithreading?
 struct LazyTy5
     tyh5_path::String
     dset_str::String
@@ -99,15 +101,22 @@ function Base.getindex(X::LazyTiff,i...)
         T = length(Ts)
     end
 
+    tseries = Array{UInt16}(undef, H, W, Z, T)
+
     # check if iterable
-    if ~applicable(iterate, Ts)
+    if ~applicable(iterate, Ts) | (typeof(Ts) == Int)
         Ts = [Ts]
+        tidx = 1
+    else
+        tidx = Colon()
     end
-    if ~applicable(iterate, Zs)
+    if ~applicable(iterate, Zs) | (typeof(Zs) == Int)
         Zs = [Zs]
+        zidx = 1
+    else
+        zidx = Colon()
     end
 
-    tseries = Array{UInt16}(undef, H, W, Z, T)
     # @threads for (i,t) in enumerate(Ts)
     for (i,t) in enumerate(Ts)
         for (j,z) in enumerate(Zs)
@@ -115,7 +124,7 @@ function Base.getindex(X::LazyTiff,i...)
             tseries[:,:,j,i] .= reinterpret(UInt16, ImageMagick.load(tp))
         end
     end
-    tseries[Hs, Ws, :, :]
+    tseries[Hs, Ws, zidx, tidx]
 end
 
 

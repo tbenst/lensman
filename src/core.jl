@@ -435,9 +435,13 @@ end
 # end
 
 "Read a 4D (HWZT) tiff stack in parallel from a folder."
-function loadTseries(tifdir, containsStr::String="Ch3")
+function loadTseries(tifdir, containsStr::String="Ch3"; missing=false)
     H, W, Z, T, framePlane2tiffPath = tseriesTiffDirMetadata(tifdir, containsStr)
-    tseries = Array{UInt16}(undef, H, W, Z, T)
+    if missing
+        tseries = Array{Union{Missing,UInt16}}(missing, H, W, Z, T)
+    else
+        tseries = Array{UInt16}(undef, H, W, Z, T)
+    end
     memory_size_bytes = prod(size(tseries)) * 2
     memory_size_gb = round(memory_size_bytes / 1024^3, digits=1)
     println("estimated memory usage: $memory_size_gb")

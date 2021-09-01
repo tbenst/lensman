@@ -154,7 +154,8 @@ Recordings = RecordingsWrapper(
         zseries_name="ZSeries-structural-056"
     ),
     modifiable_recording(
-        "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-titration-192trial-061";
+        "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072";
+        tyh5_path="/data/dlab/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061.ty.h5",
         zseries_name="ZSeries-structural-056"
     ),
 )
