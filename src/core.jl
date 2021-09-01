@@ -269,6 +269,7 @@ stripLeadingSpace(s) = (s[1] == ' ') ? s[2:end] : s
 
 function findTTLStarts(voltages)
     frameStarted = diff(voltages .> std(voltages) .* 3)
+    # add one due to diff
     frameStartIdx = findall(frameStarted .== 1) .+ 1
 end
 

@@ -4,6 +4,7 @@ using Lensman, PyCall, DataFrames, Gadfly, Distributed, StatsBase, Folds, Progre
     Images, Statistics
 import PyPlot
 import Lensman: @pun, @assign
+matplotlib = plt.matplotlib
 plt = PyPlot
 np = pyimport("numpy")
 L = Lensman
@@ -19,7 +20,7 @@ recording = Recordings["2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration
       trial_order, stim_start_idx, stim_end_idx, tseriesH, tseriesW,
       tseriesZ, vol_rate, nStimuli, nTrials, zseries, imaging2zseries_plane,
       zseriesH, zseriesW, tseries, tyh5_path, df_f_per_trial_dataframe,
-      fish_dir, tseriesT
+      fish_dir, tseriesT, trial_average, window_len
       ) = recording;
 ##
 # cell_masks = L.read_cellpose_dir(joinpath(fish_dir, "cellpose_masks"));
@@ -177,8 +178,47 @@ fig.savefig("/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure/2021
 fig
 
 ##
+imap = influence_map(trial_average, window_len);
+##
+fig, ax = plt.subplots(1,dpi=600)
+cmax = 0.1
+cmin = -0.1
+cnorm = matplotlib.colors.TwoSlopeNorm(vmin=cmin,vcenter=0,vmax=cmax)
+im = shift_every_other_row(imap[:,:,:,16],-3)
+im = maximum(im, dims=3)[:,:,1]
+cim = ax.imshow(im[175:310,100:235], cmap="RdBu_r",
+            norm=cnorm)
+cbar = plt.colorbar(cim)
+ax.set_xticks([])
+ax.set_xticks([], minor=true)
+ax.set_yticks([])
+ax.set_yticks([], minor=true)
+fig.savefig("/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure/2021-06-08_rsChRmine_titration/stim-16-zoom.png")
+fig
+##
 x = zeros(size(tseries)[1:3])
 for m in mask_idxs[2:end]
     x[m] .= 1
 end
-Gray.(maximum(x,dims=3)[:,:,1])
+mm = shift_every_other_row(x,-3);
+##
+cell_masks_shifted = shift_every_other_row(cell_masks, -3);
+# Gray.(maximum(x[175:310,100:235,:],dims=3)[:,:,1])
+mmm = map(i->get_random_color(i), cell_masks_shifted) .* (cell_masks_shifted .> 0);
+# mmm[(cell_masks_shifted .<= 0)] .= RGB(1,1,1);
+##
+fig, ax = plt.subplots(1,dpi=600)
+im = maximum(shiftedmaxTproj[175:310,100:235,:], dims=3)[:,:,1]
+im = L.adjust_histogram(im, GammaCorrection(0.8))
+# ax.imshow(zseries[:,:,imaging2zseries_plane[p]], cmap=plt.cm.gray, alpha=0.2)
+
+im2 = channelview(mmm[175:310,100:235,5])
+im2 = permutedims(im2,[2,3,1])
+ax.imshow(im2, alpha=0.8)
+ax.imshow(im, cmap=plt.cm.gray, alpha=0.8)
+ax.set_xticks([])
+ax.set_xticks([], minor=true)
+ax.set_yticks([])
+ax.set_yticks([], minor=true)
+fig.savefig("/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure/2021-06-08_rsChRmine_titration/example_cellpose_neruons.png")
+fig
