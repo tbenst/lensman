@@ -6,15 +6,15 @@
 using Lensman, NRRD, FileIO
 import Lensman: @pun
 ##
-resources = Resources()
+resources1 = Resources()
 ##
 recording1 = Recordings[
         # "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-titration-192trial-062"
         # "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-titration-192trial-061"
         # "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-titration-192trial-061"
-        # "2021-06-15_rsChRmine_h2b6s_6dpf/fish1/TSeries-titration-192trial-050"
         # "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
-        "2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069"
+        # "2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069"
+        "2021-06-15_rsChRmine_h2b6s_6dpf/fish1/TSeries-titration-192trial-050"
     ](;resources...,
         registration_type = :dont_run
     );

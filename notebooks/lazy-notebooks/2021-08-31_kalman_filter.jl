@@ -15,15 +15,22 @@ L = Lensman
 ##
 resources = Resources()
 recording = Recordings[
-    # "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+    # "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
+    # "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061"
+    # "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+    # "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-118trial-122"
     # "2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-titration-192trial-070"
     # "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062"
     # "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
-    "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
+    # "2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069"
+    # "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-lrhab-118trial-060"
+    # "2021-06-15_rsChRmine_h2b6s_6dpf/fish1/TSeries-titration-192trial-050"
+    "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
 ](
     ; resources...,
-    tseries_dset=nothing, lazy_tiff=true
+    tseries_read_strategy=:lazy_tiff
 );
+# @pun tyh5_path = recording
 ##
 @pun (tseries, voltageFile, stim_start_idx, stim_end_idx, frameStartIdx,
     tseriesH, tseriesZ, tseriesT, tseries_dir, frame_rate, fish_dir, exp_name,
@@ -90,34 +97,32 @@ end
 s = ttlStarts[rand(1:length(ttlStarts))]
 res = get_ttl_hzt(s, frameStartIdx, tseriesH, tseriesZ, frame_rate)
 @pun (startH,startZ,startT, endH,endZ,endT) = res
-@show (first_pulse_H, first_pulse_Z, first_pulse_T) = first
-@show (firste_pulse_H, firste_pulse_Z, firste_pulse_T) = first_end
 
 
-if (first_pulse_H > 512) .& (firste_pulse_H > 512)
+if (startH > 512) .& (endH > 512)
     println("both")
-    ts = convert(Array{UInt16}, tseries[:,:,first_pulse_Z,first_pulse_T])
+    ts = convert(Array{UInt16}, tseries[:,:,startZ,startT])
     im = imadjustintensity(ts)
     im = RGB.(im)
-elseif first_pulse_H > 512
+elseif startH > 512
     println("first")
-    ts = convert(Array{UInt16}, tseries[:,:,firste_pulse_Z,firste_pulse_T])
+    ts = convert(Array{UInt16}, tseries[:,:,endZ,endT])
     im = imadjustintensity(ts)
     im = RGB.(im)
-    channelview(im)[1,1:firste_pulse_H,:] .= 0.3
-elseif (firste_pulse_H > 512 ) | (first_pulse_H > firste_pulse_H)
+    channelview(im)[1,1:endH,:] .= 0.3
+elseif (endH > 512 ) | (startH > endH)
     println("second")
-    ts = convert(Array{UInt16}, tseries[:,:,first_pulse_Z,first_pulse_T])
+    ts = convert(Array{UInt16}, tseries[:,:,startZ,startT])
     im = imadjustintensity(ts)
     im = RGB.(im)
-    channelview(im)[1,first_pulse_H:tseriesH,:] .= 0.3
+    channelview(im)[1,startH:tseriesH,:] .= 0.3
 else
     println("neither")
-    @show size(tseries[:,:,first_pulse_Z,first_pulse_T])
-    ts = convert(Array{UInt16}, tseries[:,:,first_pulse_Z,first_pulse_T])
+    @show size(tseries[:,:,startZ,startT])
+    ts = convert(Array{UInt16}, tseries[:,:,startZ,startT])
     im = imadjustintensity(ts)
     im = RGB.(im)
-    channelview(im)[1,first_pulse_H:minimum([firste_pulse_H,tseriesH]),:] .= 0.3
+    channelview(im)[1,startH:minimum([endH,tseriesH]),:] .= 0.3
 end
 im
 ##
@@ -184,110 +189,37 @@ new_vol = remove_artifacts_from_vol(old_vol, startT, artifacts; val=0)
 new_vol = convert(Array{UInt16}, new_vol)
 Gray.(imadjustintensity(new_vol[:,:,startZ]))
 
-##  NOT WORKING always
-error("stop")
-function vol_loader(channel,tseries, tseriesT, artifacts)
-    println("vol_loader: init")
-    @threads for t = 1:tseriesT
-        println("vol_loader: $t")
-        vol = Float32.(tseries[:,:,:,t])
-        println("vol_loader: made vol")
-        rem_vol = remove_artifacts_from_vol(vol, t, artifacts)
-        println("vol_loader: blocked on $t")
-        put!(channel, (t, rem_vol))
-        println("vol_loader: sent $t")
-    end
-end
-
-function vol_writer(tyh5_path, tseriesH, tseriesW, tseriesZ, tseriesT, denoised_vols)
-    h5 = h5open(tyh5_path, "w")
-    try
-        dset = create_dataset(h5, "kalman", datatype(Float32), (tseriesH, tseriesW, tseriesZ, tseriesT))
-        for t in 1:tseriesT
-            println("vol_writer: blocked on $t")
-            (tt,vol) = take!(denoised_vols)
-            println("vol_writer: got $t")
-            dset[:,:,:,tt] = vol
-            # println("vol_writer: wrote $t")
-        end
-        close(h5)
-    finally
-        close(h5)
-    end
-    tyh5_path
-end
-
-function denoiser(raw_vols, denoised_vols, artifacts, tseriesT)
-    println("denoiser: init")
-    t, X = take!(raw_vols)
-    first = Float32.(X)
-    @assert t == 1
-    println("denoiser: about to put")
-    put!(denoised_vols, (1, first))
-    println("denoiser: first put succeeded")
-    # for t in 2:tseriesT
-    for t in 950:tseriesT
-        println("denoiser: blocked on take $t")
-        tt, M = take!(raw_vols)
-        println("denoiser: took $t")
-        @assert t == tt
-        # @threads for i in eachindex(X)
-        # @sync for i in eachindex(X)
-        #     @spawn  X[i] = step_kalman(X[i])
-        # end
-        # X = @tturbo step_kalman.(X,M)
-        X = step_kalman.(X,M)
-        println("denoiser: blocked on put $t")
-        put!(denoised_vols, (t, convert(Array{Float32}, X)))
-        println("denoiser: put $t")
-    end
-end
-
-raw_vols = Channel(3 * Base.Threads.nthreads())
-denoised_vols = Channel(3 * Base.Threads.nthreads())
-# T = tseriesT
-T = 61
-loader_task = @spawn vol_loader(raw_vols, tseries, T, artifacts)
-h5path = joinpath(fish_dir, exp_name * "_kalman.h5")
-denoiser_task = @spawn denoiser(raw_vols, denoised_vols, artifacts, T)
-
-kalman_path = vol_writer(joinpath(fish_dir, exp_name * "_kalman.h5"),
-    tseriesH, tseriesW, tseriesZ, T, denoised_vols)
-
-
-
-
-
-
-
-
-
-
-
 ## Finally, save a denoised tseries!!
 
-function kalman_filter_stream(tyh5_path, tseries, tseriesT, artifacts)
+function kalman_filter_stream(tyh5_path, tseries, tseriesT, artifacts; save_uint16=true)
     h5 = h5open(tyh5_path, "w")
     tseries
-    dset = create_dataset(h5, "kalman", datatype(Float32), size(tseries))
+    dset = create_dataset(h5, "kalman", datatype(UInt16), size(tseries))
     X = Float32.(tseries[:,:,:,1])
     @showprogress for t in 2:tseriesT
         vol = Float32.(tseries[:,:,:,t])
         M = remove_artifacts_from_vol(vol, t, artifacts)
         X = step_kalman.(X,M)
-        dset[:,:,:,t] = X
+        if save_uint16
+            # safe assuming max val of 8192; could overflow if 65000+
+            dset[:,:,:,t] = convert(Array{UInt16}, round.(X))
+        else
+            dset[:,:,:,t] = X
+        end
     end
     close(h5)
     tyh5_path
 end
 kalman_path = joinpath(fish_dir, exp_name * "_kalman.h5")
 kalman_path = replace(kalman_path , "/scratch" => "/data/dlab")
+mkpath(dirname(kalman_path))
+# rm(kalman_path)
 kalman_filter_stream(kalman_path, tseries, tseriesT, artifacts)
-# kalman_filter_stream(kalman_path, tseries, 6, artifacts)
 
 
 
 ##
+@pun tseries_dir = recording
 h5 = h5open(kalman_path, "r")
 dset = h5["kalman"]
 

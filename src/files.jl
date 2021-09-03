@@ -674,10 +674,9 @@ function get_df_f_per_voxel_per_trial_from_h5(tyh5_path, tseries_dset,
 end
 
 "Calculate average response for each unique stimuli"
-function calc_trial_average(tseries::LazyTy5, stimStartIdx,
+function calc_trial_average(tseries::LazyHDF5, stimStartIdx,
         stimEndIdx, tseriesH, tseriesW, tseriesZ, trialOrder;
         pre=16, post=16)
-    println("dispatched on LazyTy5")
     nStimuli = maximum(trialOrder)
     nTrials = size(trialOrder, 1)
     nTrialsPerStimulus = [sum(trialOrder .== i) for i in 1:nStimuli]
@@ -696,11 +695,11 @@ function calc_trial_average(tseries::LazyTy5, stimStartIdx,
     # TODO: why does this use 100+GB of memory for pre=post=30?
     # also, is it actually safe to do this kind of parallel memory accumulation..?
     @showprogress @distributed for i in 1:length(stimStartIdx)
-        thread_tseries = LazyTy5(tseries.tyh5_path, tseries.dset_str)
+        thread_tseries = typeof(tseries)(tseries.tyh5_path, tseries.dset_str)
         start = stimStartIdx[i]
         stop = start - pre + trialTime - 1
         trialType = trialOrder[i]
-        @views avgStim[:,:,:,trialType,:] .+= thread_tseries[:,:,:,start - pre:stop]
+        avgStim[:,:,:,trialType,:] .+= thread_tseries[:,:,:,start - pre:stop]
         close(thread_tseries)
         thread_tseries = nothing
         GC.gc()

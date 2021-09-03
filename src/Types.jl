@@ -94,7 +94,6 @@ function Base.size(X::LazyTy5)
     H, W, Z, T
 end
 
-<<<<<<< HEAD
 function Base.size(X::LazyTy5, i)
     W, H, Z, C, T = size(X.dset)
     (H, W, Z, T)[i]
@@ -202,3 +201,30 @@ end
 Base.iterate(t::AbstractDAG) = iterate(t.nodes)
 Base.iterate(t::AbstractDAG, i) = iterate(t.nodes, i)
 Base.length(t::AbstractDAG) = length(t.nodes)
+
+import Base: >, <, >=, <=, ==
+function >(v::CategoricalValue{T,R},y::String) where {T<:Union{AbstractChar, AbstractString, Number}, R<:Integer}
+    catv_y = CategoricalArrays.pool(v)[get(CategoricalArrays.pool(v), y)]
+    v > catv_y
+end
+
+function <(v::CategoricalValue{T,R},y::String) where {T<:Union{AbstractChar, AbstractString, Number}, R<:Integer}
+    catv_y = CategoricalArrays.pool(v)[get(CategoricalArrays.pool(v), y)]
+    v < catv_y
+end
+
+function >=(v::CategoricalValue{T,R},y::String) where {T<:Union{AbstractChar, AbstractString, Number}, R<:Integer}
+    catv_y = CategoricalArrays.pool(v)[get(CategoricalArrays.pool(v), y)]
+    v >= catv_y
+end
+
+function <=(v::CategoricalValue{T,R},y::String) where {T<:Union{AbstractChar, AbstractString, Number}, R<:Integer}
+    catv_y = CategoricalArrays.pool(v)[get(CategoricalArrays.pool(v), y)]
+    v < catv_y
+end
+
+
+function ==(v::CategoricalValue{T,R},y::String) where {T<:Union{AbstractChar, AbstractString, Number}, R<:Integer}
+    catv_y = CategoricalArrays.pool(v)[get(CategoricalArrays.pool(v), y)]
+    v < catv_y
+end

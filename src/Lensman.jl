@@ -6,7 +6,8 @@ using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     Statistics, SharedArrays, CSV, DataFrames, Suppressor, Plots,
     LinearAlgebra, LibExpat, LightXML, RollingFunctions, HypothesisTests,
     EllipsisNotation, HDF5, Distributed, Thunks, NPZ, SparseArrays,
-    H5Sparse, Folds, Arrow, ProgressMeter, JuMP, ReusePatterns, StatsBase
+    H5Sparse, Folds, Arrow, ProgressMeter, JuMP, ReusePatterns, StatsBase,
+    CategoricalArrays
 import Base.Threads: @threads, @spawn, @sync
 using Distributed
 import Unitful: μm
@@ -33,7 +34,6 @@ include("resources.jl")
 include("recording_dag.jl")
 include("recordings.jl")
 include("stats.jl")
-
 
 export read_microns_per_pixel,
     read_mask,

@@ -1,9 +1,11 @@
 ENV["DISPLAY"] = "localhost:10"
 ##
+using ImageView
 using Lensman, PyCall, DataFrames, Gadfly, Distributed, StatsBase, Folds, ProgressMeter,
-    Images, Statistics
+    Images, Statistics, CategoricalArrays
 import PyPlot
 import Lensman: @pun, @assign
+import Base: >, <, ==
 plt = PyPlot
 matplotlib = plt.matplotlib
 np = pyimport("numpy")
@@ -23,7 +25,8 @@ recording = Recordings["2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration
       trial_order, stim_start_idx, stim_end_idx, tseriesH, tseriesW,
       tseriesZ, vol_rate, nStimuli, nTrials, zseries, imaging2zseries_plane,
       zseriesH, zseriesW, tseries, tyh5_path, fish_dir, tseriesT, window_len, 
-      ) = recording;
+      plot_dir
+) = recording;
 ##
 # cell_masks = L.read_cellpose_dir(joinpath(fish_dir, "cellpose_masks"));
 # cell_masks = L.read_cellpose_dir(joinpath(fish_dir, "cellpose_masks_conservative"));
@@ -32,6 +35,9 @@ cell_masks = shift_every_other_row(cell_masks,3); # undo from max z-proj
 cell_ids = unique(cell_masks)
 nCells = Int(length(cell_ids))
 mask_idxs = Folds.map(c->findall(cell_masks .== c), cell_ids)
+big_enough = length.(mask_idxs) .> 9
+mask_idxs = mask_idxs[big_enough]
+cell_ids = cell_ids[big_enough]
 nCells = length(mask_idxs)
 ##
 "Return nCell x T traces."
@@ -47,16 +53,19 @@ function cell_masks_to_traces(tseries::Lensman.LazyHDF5, mask_idxs)
     end
 end
 neurons = cell_masks_to_traces(tseries, mask_idxs);
+# neurons_f0 = mapslices(x->quantile(x,0.1), neurons; dims=2)[:,1];
 ##
-
+neurons
 df_f_per_cell_per_trial = zeros(nTrials, nCells)
 for (i,(st,en)) in enumerate(zip(stim_start_idx,stim_end_idx))
-    window_len = Int(floor(5 * vol_rate)) - 1
+    window_len = Int(floor(2 * vol_rate)) - 1
+    # s = st - Int(floor(5 * vol_rate))
+    # e = en - Int(floor(5 * vol_rate))
     s = st - 1
     e = en + 1
     f0 = mean(neurons[:,s-window_len:s],dims=2)
     f = mean(neurons[:,e:e+window_len],dims=2)
-    df_f_per_cell_per_trial[i,:] = @. (f - f0) / (f0 + 5)
+    df_f_per_cell_per_trial[i,:] = @. (f - f0) / (f0 + 1)
 end
 df_f_per_cell_per_trial
 
@@ -68,7 +77,7 @@ rename!(df, Dict(:variable => :cell_id, :value => :df_f))
 df[!,:cell_id] = parse.(Int,df[!,:cell_id])
 @show size(df)
 first(df,20)
-##
+
 df[!,:period] = ["" for _ in 1:size(df,1)];
 @assert maximum(df[!,:stim]) == 16
 for s in 1:16
@@ -82,16 +91,18 @@ for s in 1:16
     idxs = df[!, :stim] .== s
     df[idxs,:period] .= p
 end
+catarr = CategoricalArray(df[!,:period], ordered=true)
+levels!(catarr, ["early", "mid", "late"])
+df[!,:period] = catarr
 df
 
-##
-avg_stim_df = combine(groupby(df, [:cell_id, :period]), :df_f => mean)
-plot(avg_stim_df, x=:df_f_mean, ygroup=:period, Scale.y_log10,
-    Geom.subplot_grid(Geom.histogram))
-##
-min_stim_df = combine(groupby(df, [:cell_id, :period]), :df_f => minimum)
-plot(min_stim_df, x=:df_f_minimum, ygroup=:period, Scale.y_log10,
-    Geom.subplot_grid(Geom.histogram))
+
+avg_stim_df = combine(groupby(df, [:cell_id, :stim]), :df_f => mean)
+plot(avg_stim_df, y=:df_f_mean, x=:stim, Geom.boxplot)
+med_stim_df = combine(groupby(df, [:cell_id, :stim]), :df_f => median)
+plot(med_stim_df, y=:df_f_median, x=:stim, Geom.boxplot)
+
+mean(df.df_f)
 ##
 function get_fdr(true_positives::Vector{<:Real}, false_positives::Vector{<:Real},
         threshold::Real)
@@ -102,41 +113,42 @@ end
 
 #TODO maybe: 0.2 quantile?
 
-tp = min_stim_df[min_stim_df[!,:stim] .== 16, :df_f_minimum]
-fp = min_stim_df[min_stim_df[!,:stim] .== 1, :df_f_minimum]
-threshs = collect(0:0.0001:0.005)
-# tp = avg_stim_df[avg_stim_df[!,:stim] .== 16, :df_f_mean]
-# fp = avg_stim_df[avg_stim_df[!,:stim] .== 1, :df_f_mean]
+threshs = collect(0:0.05:1)
+tp = med_stim_df[med_stim_df[!,:stim] .== 16, :df_f_median]
+fp = med_stim_df[med_stim_df[!,:stim] .== 1, :df_f_median]
 # threshs = collect(0.5:0.05:2.5)
 fdrs = map(t->get_fdr(tp, fp, t), threshs)
 # plot(x=threshs, y=fdrs, Geom.LineGeometry)
 # nabove = map(t->sum(tp .> t)/length(tp), threshs)
-nabove = map(t->sum(tp .> t), threshs)
+nabove = map(t->sum(tp .> t), threshs) / length(tp)
 p1 = plot(x=threshs, y=fdrs, Geom.LineGeometry, Guide.title("fdr"))
 p2 = plot(x=threshs, y=nabove, Geom.LineGeometry, Guide.title("nabove"))
 vstack(p1,p2)
 
 
+
+
 ##
 "Given a threshould, find the lowest stim number where all df_f are above"
-function stim_threshold(cell_subdf, key, thresh, nStimuli)
+function stim_threshold(cell_subdf, key, thresh; frac=0.75)
     cell_id = cell_subdf[1,:cell_id]
-    for s in 1:nStimuli
-        idxs = cell_subdf.stim .>= s
+    for (i,p) in enumerate(levels(cell_subdf[!,:period]))
+        idxs = cell_subdf.period .>= p
         # if all(cell_subdf[idxs,key] .> thresh)
-        if (sum(cell_subdf[idxs,key] .> thresh)/length(cell_subdf[idxs,key])) > 0.75
-            return s
+        if (sum(cell_subdf[idxs,key] .> thresh)/length(cell_subdf[idxs,key])) > frac
+            return i
         end
     end
     # hack so background is black with 16 stimulation conditions
     return -1
 end
 
-thresh = 0.00
-stimthresh_df = combine(c->stim_threshold(c,:df_f_minimum, thresh, nStimuli),
-    groupby(min_stim_df, :cell_id))
+# thresh = 0.15
+thresh = 0.1
+stimthresh_df = combine(c->stim_threshold(c,:df_f, thresh),
+    groupby(df, :cell_id))
 # thresh = 1.00
-# stimthresh_df = combine(c->stim_threshold(c,:df_f_mean, thresh, nStimuli),
+# stimthresh_df = combine(c->stim_threshold(c,:df_f_mean, thresh),
 #     groupby(avg_stim_df, :cell_id))
 
 sum((~).(isnothing.(stimthresh_df.x1)))
@@ -168,34 +180,39 @@ maxTproj = mapslices(x->quantile(x[:],0.90), tseries_subset,dims=4);
 shiftedmaxTproj = shift_every_other_row(maxTproj,-3);
 shiftedmaxTproj = shiftedmaxTproj[:,:,:,1];
 
+shifted_rl = shift_every_other_row(recruited_labels,-3);
+##
+early_mid_late_im = RGB.(zeros(UInt8, size(shifted_rl)[1:2]...))
+for i in 1:3
+    is_recruited = shifted_rl.==i
+    new_recruits = maximum(is_recruited, dims=3)[:,:,1]
+    idxs = findall(new_recruits .> 0)
+    if i == 1
+        r = RGB(0.8,0,0)
+    elseif i == 2
+        r = RGB(0,0.8,0)
+    else
+        r = RGB(0.8,0.8,0)
+    end
+    early_mid_late_im[idxs] .= r
+end
 
 ##
 fig, ax = plt.subplots(1,dpi=600)
-p = 7
-im = maximum(shiftedmaxTproj[175:310,100:235,:], dims=3)[:,:,1]
-im = L.adjust_histogram(im, GammaCorrection(0.2))
-# ax.imshow(zseries[:,:,imaging2zseries_plane[p]], cmap=plt.cm.gray, alpha=0.2)
-ax.imshow(im, cmap=plt.cm.gray)
-# ax.imshow(maximum(zseries[:,:,imaging2zseries_plane], dims=3),
-#     cmap=plt.cm.gray)
-# ax.imshow(imresize(recruited_labels[:,:,p],zseriesH, zseriesW),
-#     cmap=plt.cm.magma_r, alpha=0.3)
-# rl = recruited_labels
-rl = shift_every_other_row(recruited_labels,-3)
-rl = maximum(rl, dims=3)[175:310,100:235,1] .* 2
-rl = pycall(np.ma.masked_where, Any, rl .== -2, rl)
-
-cim = ax.imshow(rl, cmap=plt.cm.magma_r, alpha=0.6)
-cbar = plt.colorbar(cim)
-cbar.set_label("# of stimulated targets")
-ax.set_xticks([])
-ax.set_xticks([], minor=true)
-ax.set_yticks([])
-ax.set_yticks([], minor=true)
-fig.savefig("/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure/2021-06-08_rsChRmine_titration/cell-stim-threshold_cellposed.png")
-fig
-
+p = nothing
+struct_im = maximum(shiftedmaxTproj, dims=3)[:,:,1]
+# struct_im = struct_im[175:310,100:235]
+struct_im = L.adjust_histogram(struct_im, GammaCorrection(0.5))
+struct_im = RGB.(imadjustintensity(struct_im))
+# eml_im = early_mid_late_im[175:310,100:235]
+eml_im = early_mid_late_im
+im = mapc.((x,y)->maximum([x,y]), eml_im, struct_im)
+im = convert(Matrix{RGB{N0f16}}, im)
 ##
+impath = joinpath(plot_dir,"early-mid-late_maxZ.png")
+save(joinpath(plot_dir,"early-mid-late_maxZ.png"), im)
+##
+@pun trial_average = recording;
 imap = influence_map(trial_average, window_len);
 ##
 fig, ax = plt.subplots(1,dpi=600)
@@ -211,32 +228,8 @@ ax.set_xticks([])
 ax.set_xticks([], minor=true)
 ax.set_yticks([])
 ax.set_yticks([], minor=true)
-fig.savefig("/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure/2021-06-08_rsChRmine_titration/stim-16-zoom.png")
 fig
-##
-x = zeros(size(tseries)[1:3])
-for m in mask_idxs[2:end]
-    x[m] .= 1
-end
-mm = shift_every_other_row(x,-3);
-##
-cell_masks_shifted = shift_every_other_row(cell_masks, -3);
-# Gray.(maximum(x[175:310,100:235,:],dims=3)[:,:,1])
-mmm = map(i->get_random_color(i), cell_masks_shifted) .* (cell_masks_shifted .> 0);
-# mmm[(cell_masks_shifted .<= 0)] .= RGB(1,1,1);
-##
-fig, ax = plt.subplots(1,dpi=600)
-im = maximum(shiftedmaxTproj[175:310,100:235,:], dims=3)[:,:,1]
-im = L.adjust_histogram(im, GammaCorrection(0.8))
-# ax.imshow(zseries[:,:,imaging2zseries_plane[p]], cmap=plt.cm.gray, alpha=0.2)
 
-im2 = channelview(mmm[175:310,100:235,5])
-im2 = permutedims(im2,[2,3,1])
-ax.imshow(im2, alpha=0.8)
-ax.imshow(im, cmap=plt.cm.gray, alpha=0.8)
-ax.set_xticks([])
-ax.set_xticks([], minor=true)
-ax.set_yticks([])
-ax.set_yticks([], minor=true)
-fig.savefig("/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure/2021-06-08_rsChRmine_titration/example_cellpose_neruons.png")
-fig
+##
+
+imshow(trial_average)

@@ -168,3 +168,73 @@ cbar = fig.colorbar(cim, cax=cbar_ax)
 fig
 
 #################
+
+##  NOT WORKING / multithreaded kalman denoising
+error("stop")
+function vol_loader(channel,tseries, tseriesT, artifacts)
+    println("vol_loader: init")
+    @threads for t = 1:tseriesT
+        println("vol_loader: $t")
+        vol = Float32.(tseries[:,:,:,t])
+        println("vol_loader: made vol")
+        rem_vol = remove_artifacts_from_vol(vol, t, artifacts)
+        println("vol_loader: blocked on $t")
+        put!(channel, (t, rem_vol))
+        println("vol_loader: sent $t")
+    end
+end
+
+function vol_writer(tyh5_path, tseriesH, tseriesW, tseriesZ, tseriesT, denoised_vols)
+    h5 = h5open(tyh5_path, "w")
+    try
+        dset = create_dataset(h5, "kalman", datatype(Float32), (tseriesH, tseriesW, tseriesZ, tseriesT))
+        for t in 1:tseriesT
+            println("vol_writer: blocked on $t")
+            (tt,vol) = take!(denoised_vols)
+            println("vol_writer: got $t")
+            dset[:,:,:,tt] = vol
+            # println("vol_writer: wrote $t")
+        end
+        close(h5)
+    finally
+        close(h5)
+    end
+    tyh5_path
+end
+
+function denoiser(raw_vols, denoised_vols, artifacts, tseriesT)
+    println("denoiser: init")
+    t, X = take!(raw_vols)
+    first = Float32.(X)
+    @assert t == 1
+    println("denoiser: about to put")
+    put!(denoised_vols, (1, first))
+    println("denoiser: first put succeeded")
+    # for t in 2:tseriesT
+    for t in 950:tseriesT
+        println("denoiser: blocked on take $t")
+        tt, M = take!(raw_vols)
+        println("denoiser: took $t")
+        @assert t == tt
+        # @threads for i in eachindex(X)
+        # @sync for i in eachindex(X)
+        #     @spawn  X[i] = step_kalman(X[i])
+        # end
+        # X = @tturbo step_kalman.(X,M)
+        X = step_kalman.(X,M)
+        println("denoiser: blocked on put $t")
+        put!(denoised_vols, (t, convert(Array{Float32}, X)))
+        println("denoiser: put $t")
+    end
+end
+
+raw_vols = Channel(3 * Base.Threads.nthreads())
+denoised_vols = Channel(3 * Base.Threads.nthreads())
+# T = tseriesT
+T = 61
+loader_task = @spawn vol_loader(raw_vols, tseries, T, artifacts)
+h5path = joinpath(fish_dir, exp_name * "_kalman.h5")
+denoiser_task = @spawn denoiser(raw_vols, denoised_vols, artifacts, T)
+
+kalman_path = vol_writer(joinpath(fish_dir, exp_name * "_kalman.h5"),
+    tseriesH, tseriesW, tseriesZ, T, denoised_vols)

@@ -12,24 +12,28 @@ import Base.Threads: @spawn, @sync, @threads
 L = Lensman
 init_workers()
 ##
-r = Recordings["2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"](
+resources = Resources();
+r = Recordings[
+    # "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
+    "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
+](;resources...
     # window_secs=10,
-    tseries_dset=nothing
 );
-@pun notes = r.settings
 ##
-@pun window_secs = r.settings
 @pun (trial_average, vol_rate, window_len, recording_folder, fish_name,
-    expName, tseriesZ, tseriesW, cells, exp_date, plot_dir, nStimuli,
-    window_len, etl_vals, stimEndIdx, stimStartIdx, nstim_pulses
+    exp_name, tseriesZ, tseriesW, cells, exp_date, plot_dir, nStimuli,
+    window_len, etl_vals, stim_end_idx, stim_start_idx, nstim_pulses, window_secs,
+    fish_dir
 ) = r;
 @show nstim_pulses
 @assert nstim_pulses == 10
 ##
+imap = influence_map(trial_average, window_len);
+##
 lateral_unit = microscope_lateral_unit(tseriesZ)
 targetSizePx = spiral_size(exp_date, lateral_unit)
 
-analysis_name = "raw_8-10s"
+analysis_name = "kalman_imap"
 figB = 1.6
 # 2 for extra stim mask
 # figW,figH = (figB*1.1, figB)
@@ -54,12 +58,7 @@ cnorm = matplotlib.colors.TwoSlopeNorm(vmin=cmin,vcenter=0,vmax=cmax)
 
 @warn "df_f denominator ϵ may have changed"
 for stimNum in 1:nStimuli
-    f = mean(trial_average[:,:,:,stimNum,end-window+1:end],dims=4)[:,:,:,1]
-    # f0 = mean(trial_average[:,:,:,stimNum,1:window-1],dims=4)[:,:,:,1]
-    @warn "last 8-10s post stim.."
-    f0 = mean(trial_average[:,:,:,stimNum,window_len-window:window_len],dims=4)[:,:,:,1]
-    df = f - f0
-    df_f = df./(f0 .+ ϵ)
+    df_f = imap[:,:,:,stimNum]
     # cmax = percentile(df_f[:],99.9)
     # cmin = percentile(df_f[:],0.1)
     if tseriesZ > 5
@@ -102,8 +101,12 @@ for stimNum in 1:nStimuli
     cbar_ax = fig.add_axes([0.91, 0.15, 0.0075, 0.7])
     # cbar = fig.colorbar(cim, ticks=[0,1,2], cax=cbar_ax)
     cbar = fig.colorbar(cim, cax=cbar_ax)
-    path = joinpath(plot_dir,"$(recording_folder)_$(fish_name)_$(expName)_$(analysis_name)_stim$stimNum")
+    path = joinpath(plot_dir,"$(recording_folder)_$(fish_name)_$(exp_name)_$(analysis_name)_stim$stimNum")
     @show path*".svg"
     fig.savefig(path*".svg", dpi=600)
     fig.savefig(path*".png", dpi=600)
 end
+
+##
+avg_tseries_path = joinpath(fish_dir, exp_name*"_kalman_trial_average.h5")
+h5write(avg_tseries_path, "trial_average", trial_average);

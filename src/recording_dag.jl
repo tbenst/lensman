@@ -42,13 +42,16 @@ end
 
 noop(`ni`)
 
-"Master DAG for all computations on a recording."
+"""Master DAG for all computations on a recording.
+
+TODO: add @assert length(trial_order) == length(stim_start_idx)
+"""
 function update_recording_dag(recording::DAG)
     @pun (uri, rel_analysis_dir, tseries_dset, zseries_name, tseries_root_dirs,
-        slm_dir, slm_root_dirs, h5_read_strategy, window_secs, zbrain_dir,
+        slm_dir, slm_root_dirs, tseries_read_strategy, window_secs, zbrain_dir,
         oir_dir, zbrain_warp_prefix, mm_warp_prefix, oir_920_name, oir_820_name, tyh5_path,
         h2b_zbrain, zbrain_units, rostral, dorsal, suite2p_dir, zbrain_masks,
-        zbrain_mask_names, lazy_tiff, cells_df_f_win_secs, cells_df_f_padding,
+        zbrain_mask_names, cells_df_f_win_secs, cells_df_f_padding,
         registration_type, roi_method
     ) = recording.nodes
     # procutil=Dict(Dagger.ThreadProc => 36.0)
@@ -70,9 +73,8 @@ function update_recording_dag(recording::DAG)
         plot_dir = make_joinpath(fish_dir, rel_analysis_dir, "plots")
         df_dir = make_joinpath(fish_dir, rel_analysis_dir, "dataframes")
         local_slm_dir = joinpath(fish_dir, "slm")
-        tyh5_path = get_tyh5_path(tyh5_path, tseries_dir)
         test = count_threads()
-        tseries = get_tseries(tseries_dir, tyh5_path, tseries_dset, h5_read_strategy, lazy_tiff)
+        tseries = get_tseries(tseries_dir, tyh5_path, tseries_dset, tseries_read_strategy)
         zseries = load_zseries(zseries_dir)
         zseries_xml = read_rec_xml(zseries_dir)
         tseries_xml = read_rec_xml(tseries_dir)
@@ -128,6 +130,7 @@ function update_recording_dag(recording::DAG)
         f = (x -> z -> searchsortedfirst(x, z))(zseries_zaxes)
         imaging2zseries_plane = map(f, et)
         window_len = ((vol_rate) -> Int(round(window_secs * vol_rate)))(vol_rate)
+        # todo: get rid of get_tyh5_path
         df_f_per_voxel_per_trial = get_df_f_per_voxel_per_trial_from_h5(
             tyh5_path, tseries_dset, stim_start_idx, stim_end_idx, window_len,
             tseriesH, tseriesW, tseriesZ)
@@ -341,32 +344,28 @@ function get_suite2p_dir(tseries_dir)
     joinpath(sp...)
 end
 
-function get_tyh5_path(settings_tyh5_path, tseries_dir)
-    if isnothing(settings_tyh5_path)
-        tseries_dir * ".ty.h5"
-    else
-        settings_tyh5_path
-    end
-end
-
-function get_tseries(tseries_dir, tyh5_path, tseries_dset, h5_read_strategy, lazy_tiff)
-    if ~isnothing(tseries_dset)
-            if isnothing(tyh5_path)
+function get_tseries(tseries_dir, tyh5_path, tseries_dset, tseries_read_strategy)
+    if tseries_read_strategy == :lazy_tyh5
+        if isnothing(tyh5_path)
             tyh5_path = tseries_dir * ".ty.h5"
         end
-        if h5_read_strategy == :lazy_tyh5
-            tseries = LazyTy5(tyh5_path, tseries_dset);
-        elseif h5_read_strategy == :lazy_hwzt
-            tseries = LazyH5(tyh5_path, tseries_dset);
-        else
-            tseries = read_tyh5(tyh5_path, tseries_dset)
+        tseries = LazyTy5(tyh5_path, tseries_dset);
+    elseif tseries_read_strategy == :lazy_hwzt
+        if isnothing(tyh5_path)
+            tyh5_path = tseries_dir * "_kalman.h5"
         end
-else
-        if lazy_tiff
+        if isnothing(tseries_dset)
+            tseries_dset = "kalman"
+        end
+        tseries = LazyH5(tyh5_path, tseries_dset);
+    elseif tseries_read_strategy == :tyh5
+        tseries = read_tyh5(tyh5_path, tseries_dset)
+    elseif tseries_read_strategy == :hwzt
+        tseries = h5read(tyh5_path, tseries_dset)
+    elseif tseries_read_strategy == :lazy_tiff
             tseries = LazyTiff(tseries_dir)
-        else
-            tseries = loadTseries(tseries_dir);
-        end
+    else
+        tseries = loadTseries(tseries_dir);
     end
     tseries
 end
