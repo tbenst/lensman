@@ -5,7 +5,6 @@ using Sockets, Observables, Statistics, Images, Lensman,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
     Compose, ImageMagick, Random, PyCall, Arrow, ProgressMeter,
     RollingFunctions
-using ImageView
 import Gadfly
 using Unitful: μm, m, s, mW
 import Base.Threads.@threads
@@ -19,6 +18,7 @@ ON_SHERLOCK = read(`hostname`,String)[1:2] == "sh"
 if ON_SHERLOCK
     tseriesRootDir = "/oak/stanford/groups/deissero/users/tyler/b115"
 else
+    using ImageView
     # tseriesRootDir = "/data/dlab/b115"
     tseriesRootDir = "/scratch/b115"
     # tseriesRootDir = "/mnt/deissero/users/tyler/b115"
@@ -85,7 +85,8 @@ end
 
 # tseriesDir = "$tseriesRootDir/2021-06-01_wt-chrmine_h2b6s/fish4/TSeries-lrhab-control-118trial-061"
 # tseriesDir = "$tseriesRootDir/2021-06-01_rsChRmine_h2b6s/fish3/TSeries-lrhab-118trial-060"
-tseriesDir = "$tseriesRootDir/2021-06-29_hsChRmine_6f_6dpf/fish2/TSeries-round3-lrhab-118trial-068"
+# tseriesDir = "$tseriesRootDir/2021-06-29_hsChRmine_6f_6dpf/fish2/TSeries-round3-lrhab-118trial-068"
+tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
 
 # tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
 # tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-titration-192trial-062"
@@ -192,7 +193,8 @@ if isfile(tyh5Path)
     # tseries = read_tyh5(tyh5Path)
     h5 = h5open(tyh5Path,"r")
     # dset = "/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm"
-    dset = "/imaging/LSTM_per-voxel-state_divide512-2021-07-02"
+    # dset = "/imaging/LSTM_per-voxel-state_divide512-2021-07-02"
+    dset = "/imaging/LSTM_per-voxel-state_divide2048-2021-07-02"
     # dset = "/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden_init_from_pretrained-2021-06-21_6pm"
     h5, tseries = lazy_read_tyh5(tyh5Path, dset);
     plotDir = joinpath(fishDir, "plots-denoised")
@@ -377,7 +379,10 @@ for stimNum in 1:nStimuli
     f0 = mean(avgStim[:,:,:,stimNum,1:window],dims=4)[:,:,:,1]
     df = f - f0
     # originally no epsilon prior to July 2021
-    df_f = df./(f0 .+ 0.05)
+    epsilon = 0.05
+    # epsilon = 0
+    df_f = df./(f0 .+ epsilon)
+    # df_f = df./f0
     # cmax = percentile(df_f[:],99.9)
     # cmin = percentile(df_f[:],0.1)
     if Z > 5
@@ -427,7 +432,7 @@ for stimNum in 1:nStimuli
     cbar_ax = fig.add_axes([0.91, 0.15, 0.0075, 0.7])
     # cbar = fig.colorbar(cim, ticks=[0,1,2], cax=cbar_ax)
     cbar = fig.colorbar(cim, cax=cbar_ax)
-    path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)_$(analysis_name)_stim$stimNum")
+    path = joinpath(plotDir,"$(recording_folder)_$(fish_name)_$(expName)_$(analysis_name)_stim$(stimNum)_epsilon$(epsilon)")
     @show path*".svg"
     fig.savefig(path*".svg", dpi=600)
     fig.savefig(path*".png", dpi=600)
