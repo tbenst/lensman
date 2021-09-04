@@ -1,4 +1,4 @@
-ENV["DISPLAY"] = "localhost:10"
+ENV["DISPLAY"] = "localhost:11"
 ##
 using ImageView
 using Lensman, Images, Glob, NPZ, PyCall, DataFrames, ImageSegmentation, 
@@ -13,6 +13,7 @@ import Plots: heatmap
 using Thunks
 import Base.Threads: @spawn, @sync, @threads
 L = Lensman
+
 init_workers()
 ##
 resources = Resources();
@@ -22,24 +23,40 @@ r = Recordings[
     "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
 ](;resources...,
     # window_secs=10,
-    tseries_read_strategy = :hwzt,
-    # tseries_read_strategy = :tyh5,
+    tseries_read_strategy = :lazy_tiff,
+    # tseries_read_strategy = :hwzt,
+    # tseries_read_strategy = :lazy_hwzt,
     # tyh5_path="/data/dlab/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123_kalman.h5",
     # tseries_dset=nothing
 );
-@pun (tseries, fish_dir) = r;
-typeof(tseries)
 ##
 @pun (trial_average, vol_rate, window_len, recording_folder, fish_name,
     exp_name, tseriesZ, tseriesW, cells, exp_date, plot_dir, nStimuli,
     window_len, etl_vals, stim_end_idx, stim_start_idx, nstim_pulses, window_secs,
-    tseries
+    tseries, fish_dir, tseries_read_strategy
 ) = r;
 @show nstim_pulses
 @assert nstim_pulses == 10
+size(trial_average)
+# rm(avgstim_path)
+if tseries_read_strategy==:lazy_tyh5
+    avgstim_path = joinpath(fish_dir,exp_name*"_lstm_avgStim.h5")
+    h5write(avgstim_path, "/lstm", trial_average);
+    analysis_name = "lstm_imap"
+elseif tseries_read_strategy==:lazy_tiff
+    avgstim_path = joinpath(fish_dir,exp_name*"_raw_avgStim.h5")
+    h5write(avgstim_path, "/lstm", trial_average);
+    analysis_name = "raw_imap"
+elseif tseries_read_strategy==:lazy_hwzt
+    avgstim_path = joinpath(fish_dir,exp_name*"_kalman_avgStim.h5")
+    h5write(avgstim_path, "/kalman", trial_average);
+    analysis_name = "kalman_imap"
+end
+
+trial_average = h5read(avgstim_path, "/kalman");
 ##
 imap = influence_map(trial_average, window_len);
-mean(imap, dims=[1,2,3])[1,1,1,:]
+sum(imap, dims=[1,2,3])[1,1,1,:]
 ##
 imshow(imap)
 ##
@@ -49,9 +66,7 @@ imshow(shift_every_other_row(tseries[:,:,:,s-10:s+15],-3))
 ##
 lateral_unit = microscope_lateral_unit(tseriesZ)
 targetSizePx = spiral_size(exp_date, lateral_unit)
-
-# analysis_name = "kalman_imap"
-analysis_name = "lstm"
+# analysis_name = "lstm"
 figB = 1.6
 # 2 for extra stim mask
 # figW,figH = (figB*1.1, figB)
@@ -141,10 +156,10 @@ Z = size(trial_average,3)
 # 2 for extra stim mask
 # figW,figH = (figB*1.1, figB)
 
-cmax = 1.0
-# cmax = 2.5
-# cmin = -1.0
-cmin = -0.5
+# cmax = 1.0
+cmax = 2
+cmin = -1.0
+# cmin = -0.5
 nseconds = 5
 pre = Int(ceil(nseconds*volRate))+1
 post = Int(ceil(nseconds*volRate))+1
@@ -168,17 +183,19 @@ df_f = df./f0
 nplots = 15
 @assert nplots == nStimuli - 1
 
-figW,figH = (figB*5, figB*3)
+# figW,figH = (figB*4, figB*4)
+figW,figH = (figB*4, figB*3.1)
 global fig = plt.figure(figsize=(figW,figH))
-fig, axs = plt.subplots(3,5, figsize=(figW,figH))
+fig, axs = plt.subplots(4,4, figsize=(figW,figH))
 axs = permutedims(axs,(2,1))
 z = 3
-for s in 2:nStimuli
-    ax = axs[s-1]
-    global cim = ax.imshow(df_f[:,:,z,s], cmap="RdBu_r",
+for s in 1:nStimuli
+    ax = axs[s]
+    global cim = ax.imshow(df_f[50:end-100,1:end-50,z,s], cmap="RdBu_r",
         norm=cnorm)
+    # global cim = ax.imshow(df_f[50:end-100,1:end-50,z,s], cmap="viridis", clim=(0.1,cmax))
     n = s*2
-    ax.set_title("$n cells")
+    # ax.set_title("$n cells")
     ax.set_axis_off()
 end
 
@@ -195,9 +212,13 @@ cbar = fig.colorbar(cim, cax=cbar_ax)
 h = cbar.ax.set_ylabel("Δf/f",rotation=270)
 # h.set_rotation = 180
 fig
-
-# fig.savefig(joinpath(plot_dir,"$(analysis_name)_titration_oneplane_df_f.svg"),
-#     dpi=600)
-# fig.savefig(joinpath(plot_dir,"$(analysis_name)_Ititration_oneplane_df_f.png"),
-#     dpi=600)
+plotpath = joinpath(plot_dir,"$(analysis_name)_rdbu_titration_oneplane_df_f")
+fig.savefig("$(plotpath).svg",
+    dpi=600)
+fig.savefig(joinpath(plot_dir,"$(plotpath).png"),
+    dpi=600)
+@show plotpath*".png"
+# fig
+fig.subplots_adjust(wspace=0.01, hspace=0.01)
+# plt.tight_layout()
 fig

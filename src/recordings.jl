@@ -51,6 +51,7 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     :genotype => "", # not yet used
     :registration_type => :dont_run,
     :roi_method => :suite2p, # or :cellpose
+    :channel_str => "Ch3"
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment",

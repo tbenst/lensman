@@ -237,7 +237,7 @@ function getStimTimesFromVoltages(voltageFile, Z::Int;
     stimEndIdx = findTTLEnds(voltages[!,stim_key])[nstim_pulses:nstim_pulses:end]
     stimStartFrameIdx = [Int.(floor.(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimStartIdx]
     stimEndFrameIdx = [Int.(ceil(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimEndIdx]
-    stimStartFrameIdx, stimEndFrameIdx, frameStartIdx, nstim_pulses
+    stimStartFrameIdx, stimEndFrameIdx, frameStartIdx, nstim_pulses, ttlStarts
 end
 
 """Read multiple voltageFiles and concatenate.
@@ -687,27 +687,26 @@ function calc_trial_average(tseries::LazyHDF5, stimStartIdx,
     stim_trial_lens = stimEndIdx .- stimStartIdx
     @assert (maximum(stim_trial_lens) - minimum(stim_trial_lens)) <= 1
     trialTime = maximum(stim_trial_lens) + pre + post + 1
-    # HWZCT
-    avgStim = SharedArray{Float64}(tseriesH, tseriesW, tseriesZ, nStimuli, trialTime)
+    
     # threads crashes HDF5
-    # @threads for i in 1:length(stimStartIdx)
-    # for i in 1:length(stimStartIdx)
-    # TODO: why does this use 100+GB of memory for pre=post=30?
-    # also, is it actually safe to do this kind of parallel memory accumulation..?
-    @showprogress @distributed for i in 1:length(stimStartIdx)
-        thread_tseries = typeof(tseries)(tseries.tyh5_path, tseries.dset_str)
-        start = stimStartIdx[i]
-        stop = start - pre + trialTime - 1
-        trialType = trialOrder[i]
-        avgStim[:,:,:,trialType,:] .+= thread_tseries[:,:,:,start - pre:stop]
-        close(thread_tseries)
-        thread_tseries = nothing
-        GC.gc()
+    stim_averages = map(1:nStimuli) do s
+        stim_idxs = findall(trialOrder .== s)
+        println("Calc average for sim $s")
+        # segfaults..?
+        # Folds.mapreduce((+), stim_idxs, DistributedEx()) do i
+        @showprogress @distributed (+) for i in stim_idxs
+            thread_tseries = typeof(tseries)(tseries.tyh5_path, tseries.dset_str)
+            start = stimStartIdx[i]
+            stop = start - pre + trialTime - 1
+            trialType = trialOrder[i]
+            arr = thread_tseries[:,:,:,start - pre:stop]
+            close(thread_tseries)
+            convert(Array{Float32}, arr)
+        end
     end
-    @sync @distributed for i in 1:nStimuli
-        avgStim[:,:,:,i,:] ./= nTrialsPerStimulus[i]
-    end
-    avgStim
+    stim_averages =  stim_averages ./ nTrialsPerStimulus
+    stim_averages = cat(stim_averages...; dims=5)
+    permutedims(stim_averages, [1,2,3,5,4])
 end
 
 "Calculate average response for each unique stimuli"
@@ -725,19 +724,22 @@ function calc_trial_average(tseries::Union{Array{<:Real},LazyTiff}, stimStartIdx
     @assert (maximum(stim_trial_lens) - minimum(stim_trial_lens)) <= 1
     trialTime = maximum(stim_trial_lens) + pre + post + 1
     # HWZCT
-    avgStim = zeros(tseriesH, tseriesW, tseriesZ, nStimuli, trialTime)
-    p = Progress(length(stimStartIdx); desc="trial average:")
-    for i in 1:length(stimStartIdx)
-        start = stimStartIdx[i]
-        stop = start - pre + trialTime - 1
-        trialType = trialOrder[i]
-        avgStim[:,:,:,trialType,:] .+= tseries[:,:,:,start - pre:stop]
-        next!(p)
+
+    
+    stim_averages = map(1:nStimuli) do s
+        stim_idxs = findall(trialOrder .== s)
+        println("Calc average for stim $s")
+        Folds.mapreduce((+), stim_idxs) do i
+            start = stimStartIdx[i]
+            stop = start - pre + trialTime - 1
+            trialType = trialOrder[i]
+            arr = tseries[:,:,:,start - pre:stop]
+            convert(Array{Float32}, arr)
+        end
     end
-    for i in 1:nStimuli
-        avgStim[:,:,:,i,:] ./= nTrialsPerStimulus[i]
-    end
-    avgStim
+    stim_averages =  stim_averages ./ nTrialsPerStimulus
+    stim_averages = cat(stim_averages...; dims=5)
+    permutedims(stim_averages, [1,2,3,5,4])
 end
 
 """

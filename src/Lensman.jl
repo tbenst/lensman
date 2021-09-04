@@ -10,7 +10,7 @@ using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     CategoricalArrays
 import Base.Threads: @threads, @spawn, @sync
 using Distributed
-import Unitful: μm
+import Unitful: μm, ms
 import Base.Threads.@threads
 sio = pyimport("scipy.io")
 # using Dagger
@@ -30,6 +30,7 @@ include("dataframes.jl")
 include("Bruker.jl")
 include("core.jl")
 include("tidying.jl")
+include("denoise.jl")
 include("resources.jl")
 include("recording_dag.jl")
 include("recordings.jl")

@@ -52,7 +52,7 @@ function update_recording_dag(recording::DAG)
         oir_dir, zbrain_warp_prefix, mm_warp_prefix, oir_920_name, oir_820_name, tyh5_path,
         h2b_zbrain, zbrain_units, rostral, dorsal, suite2p_dir, zbrain_masks,
         zbrain_mask_names, cells_df_f_win_secs, cells_df_f_padding,
-        registration_type, roi_method
+        registration_type, roi_method, channel_str
     ) = recording.nodes
     # procutil=Dict(Dagger.ThreadProc => 36.0)
     
@@ -74,7 +74,7 @@ function update_recording_dag(recording::DAG)
         df_dir = make_joinpath(fish_dir, rel_analysis_dir, "dataframes")
         local_slm_dir = joinpath(fish_dir, "slm")
         test = count_threads()
-        tseries = get_tseries(tseries_dir, tyh5_path, tseries_dset, tseries_read_strategy)
+        tseries = get_tseries(tseries_dir, tyh5_path, tseries_dset, tseries_read_strategy; channel_str=channel_str)
         zseries = load_zseries(zseries_dir)
         zseries_xml = read_rec_xml(zseries_dir)
         tseries_xml = read_rec_xml(tseries_dir)
@@ -105,8 +105,10 @@ function update_recording_dag(recording::DAG)
         res3 = getStimTimesFromVoltages(voltageFile, tseriesZ)
         stim_start_idx = getindex(res3, 1)
         stim_end_idx = getindex(res3, 2)
-        frameStartIdx = getindex(res3, 3)
+        frame_start_idx = getindex(res3, 3)
         nstim_pulses = getindex(res3, 4)
+        ttl_starts = getindex(res3, 5)
+        artifacts = find_artifacts(ttl_starts, frame_start_idx, tseriesH, tseriesZ, frame_rate)
         res4 = get_target_groups(slm_exp_dir)
         target_groups = getindex(res4, 1)
         group_stim_freq = getindex(res4, 1)
@@ -142,7 +144,7 @@ function update_recording_dag(recording::DAG)
         targets_with_plane_index = map(x -> Int.(round.(x, digits=0)), twp1)
         cells = makeCellsDF(targets_with_plane_index, stim_start_idx, stim_end_idx,
             trial_order, group_stim_freq)
-        lateral_unit = microscope_lateral_unit(tseriesZ)
+        lateral_unit = microscope_lateral_unit(tseriesW)
         target_size_px = spiral_size(exp_date, lateral_unit)
         cell_masks = constructROImasks(cells, tseriesH, tseriesW, tseriesZ, target_size_px)
         cells_df_f_winsize = Int(ceil(cells_df_f_win_secs * vol_rate))
@@ -233,7 +235,7 @@ function update_recording_dag(recording::DAG)
         exp_date, frame_rate, etl_vals, tseriesH, tseriesW, tseriesZ, tseriesT,
         zseriesH, zseriesW, zseriesZ, res, trial_order, slm_exp_dir,
         first_target_group, slm_num, power_per_cell, res2, slm1_power,
-        slm2_power, voltageFile, res3, stim_start_idx, stim_end_idx, frameStartIdx,
+        slm2_power, voltageFile, res3, stim_start_idx, stim_end_idx, frame_start_idx,
         res4, target_groups, group_stim_freq, nStimuli, nTrials, zOffset,
         suite2p_dir, nwb_path, ndict, cell_traces, cell_masks, iscell, nCells,
         used_slm_dir, vol_rate, imaging2zseries_plane, zseries_xml,
@@ -243,7 +245,8 @@ function update_recording_dag(recording::DAG)
         mm_transform_affine, mm_transform_SyN, zbrain_transforms,
         region_mask_path, zbrain_masks, region_masks_h5, zbrain_mask_names,
         nCells, cell_centers, cells_mask, iscell, cells_df_f, s2p_cell_masks, 
-        zbrain_restore, _zbrain_registered, multimap_920, multimap_820, multimap_ants_cmd
+        zbrain_restore, _zbrain_registered, multimap_920, multimap_820, multimap_ants_cmd,
+        ttl_starts, artifacts
     )
 
     recording
@@ -257,7 +260,7 @@ function update_dag(r)
         exp_date, frame_rate, etl_vals, tseriesH, tseriesW, tseriesZ, tseriesT,
         zseriesH, zseriesW, zseriesZ, res, trial_order, slm_exp_dir,
         first_target_group, slm_num, power_per_cell, res2, slm1_power,
-        slm2_power, voltageFile, res3, stim_start_idx, stim_end_idx, frameStartIdx,
+        slm2_power, voltageFile, res3, stim_start_idx, stim_end_idx, frame_start_idx,
         res4, target_groups, group_stim_freq, nStimuli, nTrials, zOffset,
         suite2p_dir, nwb_path, ndict, cell_traces, cell_masks, iscell, nCells
     ) = r.nodes
@@ -344,7 +347,8 @@ function get_suite2p_dir(tseries_dir)
     joinpath(sp...)
 end
 
-function get_tseries(tseries_dir, tyh5_path, tseries_dset, tseries_read_strategy)
+function get_tseries(tseries_dir, tyh5_path, tseries_dset, tseries_read_strategy;
+    channel_str="ChR")
     if tseries_read_strategy == :lazy_tyh5
         if isnothing(tyh5_path)
             tyh5_path = tseries_dir * ".ty.h5"
@@ -361,11 +365,17 @@ function get_tseries(tseries_dir, tyh5_path, tseries_dset, tseries_read_strategy
     elseif tseries_read_strategy == :tyh5
         tseries = read_tyh5(tyh5_path, tseries_dset)
     elseif tseries_read_strategy == :hwzt
+        if isnothing(tseries_dset)
+            tseries_dset = "kalman"
+        end
+        # uses 2x RAM that it should...?
         tseries = h5read(tyh5_path, tseries_dset)
     elseif tseries_read_strategy == :lazy_tiff
             tseries = LazyTiff(tseries_dir)
+    elseif tseries_read_strategy == :tiff
+        tseries = loadTseries(tseries_dir, channel_str);
     else
-        tseries = loadTseries(tseries_dir);
+        error("unknown tseries_read_strategy: $(tseries_read_strategy)")
     end
     tseries
 end

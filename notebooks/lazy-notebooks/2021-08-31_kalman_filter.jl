@@ -1,4 +1,4 @@
-ENV["DISPLAY"] = "localhost:12"
+ENV["DISPLAY"] = "localhost:11"
 ##
 using ImageView
 using Lensman, PyCall, DataFrames, Gadfly, Distributed, StatsBase, Folds, ProgressMeter,
@@ -25,7 +25,8 @@ recording = Recordings[
     # "2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069"
     # "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-lrhab-118trial-060"
     # "2021-06-15_rsChRmine_h2b6s_6dpf/fish1/TSeries-titration-192trial-050"
-    "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+    # "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+    "2021-06-01_wt-chrmine_h2b6s/fish4/TSeries-lrhab-control-118trial-061"
 ](
     ; resources...,
     tseries_read_strategy=:lazy_tiff
