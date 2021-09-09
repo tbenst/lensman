@@ -14,7 +14,7 @@ init_workers()
 ##
 resources = Resources();
 r = Recordings[
-    # "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
+    # "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
     "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
 ](;resources...
     # window_secs=10,
@@ -103,8 +103,8 @@ for stimNum in 1:nStimuli
     cbar = fig.colorbar(cim, cax=cbar_ax)
     path = joinpath(plot_dir,"$(recording_folder)_$(fish_name)_$(exp_name)_$(analysis_name)_stim$stimNum")
     @show path*".svg"
-    fig.savefig(path*".svg", dpi=600)
-    fig.savefig(path*".png", dpi=600)
+    # fig.savefig(path*".svg", dpi=300)
+    # fig.savefig(path*".png", dpi=300)
 end
 
 ##

@@ -2,17 +2,33 @@ ENV["DISPLAY"] = "localhost:11"
 ##
 using ImageView
 using Lensman, Images, Glob, NPZ, PyCall, DataFrames, ImageSegmentation, 
-      Random, Gadfly, Statistics, PyCall, ProgressMeter, HDF5, Distributed
+      Random, Gadfly, Statistics, PyCall, ProgressMeter, HDF5, Distributed,
+      Unitful
 import PyPlot
 import Lensman: @pun, @assign
 plt = PyPlot
 matplotlib = plt.matplotlib
+
+SMALL_SIZE = 7
+MEDIUM_SIZE = 8
+BIGGER_SIZE = 9
+plt.rc("font", size=SMALL_SIZE)          # controls default text sizes
+plt.rc("axes", titlesize=SMALL_SIZE)     # fontsize of the axes title
+plt.rc("axes", labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+plt.rc("xtick", labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc("ytick", labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc("legend", fontsize=SMALL_SIZE)    # legend fontsize
+plt.rc("figure", titlesize=BIGGER_SIZE)  # fontsize of the figure title
+
 np = pyimport("numpy")
+matscale = pyimport("matplotlib_scalebar.scalebar")
 import Plots
 import Plots: heatmap
 using Thunks
 import Base.Threads: @spawn, @sync, @threads
 L = Lensman
+
+matplotlib.rcParams["font.sans-serif"] = ["Arial", "sans-serif"]
 
 init_workers()
 ##
@@ -23,37 +39,60 @@ r = Recordings[
     "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
 ](;resources...,
     # window_secs=10,
-    tseries_read_strategy = :lazy_tiff,
+    # tseries_read_strategy = :lazy_tiff,
     # tseries_read_strategy = :hwzt,
-    # tseries_read_strategy = :lazy_hwzt,
-    # tyh5_path="/data/dlab/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123_kalman.h5",
-    # tseries_dset=nothing
+    tseries_read_strategy = :lazy_hwzt,
+    tyh5_path="/data/dlab/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123_kalman.h5",
+    tseries_dset=nothing
 );
 ##
-@pun (trial_average, vol_rate, window_len, recording_folder, fish_name,
+@pun (vol_rate, window_len, recording_folder, fish_name,
     exp_name, tseriesZ, tseriesW, cells, exp_date, plot_dir, nStimuli,
     window_len, etl_vals, stim_end_idx, stim_start_idx, nstim_pulses, window_secs,
-    tseries, fish_dir, tseries_read_strategy
+    tseries, fish_dir, tseries_read_strategy, tseries_units, lateral_unit
 ) = r;
 @show nstim_pulses
 @assert nstim_pulses == 10
-size(trial_average)
 # rm(avgstim_path)
-if tseries_read_strategy==:lazy_tyh5
+
+if occursin("tyh5", string(tseries_read_strategy))
     avgstim_path = joinpath(fish_dir,exp_name*"_lstm_avgStim.h5")
-    h5write(avgstim_path, "/lstm", trial_average);
-    analysis_name = "lstm_imap"
-elseif tseries_read_strategy==:lazy_tiff
+elseif occursin("tiff", string(tseries_read_strategy))
     avgstim_path = joinpath(fish_dir,exp_name*"_raw_avgStim.h5")
-    h5write(avgstim_path, "/lstm", trial_average);
-    analysis_name = "raw_imap"
-elseif tseries_read_strategy==:lazy_hwzt
+elseif occursin("hwzt", string(tseries_read_strategy))
     avgstim_path = joinpath(fish_dir,exp_name*"_kalman_avgStim.h5")
-    h5write(avgstim_path, "/kalman", trial_average);
-    analysis_name = "kalman_imap"
 end
 
-trial_average = h5read(avgstim_path, "/kalman");
+
+try 
+    if occursin("tyh5", string(tseries_read_strategy))
+        global analysis_name = "lstm_imap"
+        global trial_average = h5read(avgstim_path, "/lstm");
+    elseif occursin("hwzt", string(tseries_read_strategy))
+        global analysis_name = "kalman_imap"
+        global trial_average = h5read(avgstim_path, "/kalman");
+    else
+        global analysis_name = "raw_imap"
+        # global trial_average = h5read(avgstim_path, "/lstm");
+        global trial_average = h5read(avgstim_path, "/raw");
+    end
+catch
+    for (exc, bt) in Base.catch_stack()
+            showerror(stdout, exc, bt)
+            println(stdout)
+    end
+    println("couldn't read $avgstim_path")
+    error("oops")
+    global trial_average = r[:trial_average]
+    if tseries_read_strategy==:lazy_tyh5
+        h5write(avgstim_path, "/lstm", trial_average);
+    elseif tseries_read_strategy==:lazy_tiff
+        h5write(avgstim_path, "/raw", trial_average);
+    elseif tseries_read_strategy==:lazy_hwzt
+        h5write(avgstim_path, "/kalman", trial_average);
+    end
+end
+size(trial_average)
 ##
 imap = influence_map(trial_average, window_len);
 sum(imap, dims=[1,2,3])[1,1,1,:]
@@ -64,7 +103,6 @@ s = stim_start_idx[1]
 imshow(shift_every_other_row(tseries[:,:,:,s-10:s+15],-3))
 ##
 ##
-lateral_unit = microscope_lateral_unit(tseriesZ)
 targetSizePx = spiral_size(exp_date, lateral_unit)
 # analysis_name = "lstm"
 figB = 1.6
@@ -156,9 +194,10 @@ Z = size(trial_average,3)
 # 2 for extra stim mask
 # figW,figH = (figB*1.1, figB)
 
-# cmax = 1.0
-cmax = 2
-cmin = -1.0
+cmax = 1.0
+# cmax = 2
+# cmin = -1.0
+cmin = 0
 # cmin = -0.5
 nseconds = 5
 pre = Int(ceil(nseconds*volRate))+1
@@ -170,7 +209,7 @@ window = minimum([Int(ceil(3*volRate)), max_frames])
 
 # cmax = 4
 # cmin = -0.75
-cnorm = matplotlib.colors.TwoSlopeNorm(vmin=cmin,vcenter=0,vmax=cmax)
+# cnorm = matplotlib.colors.TwoSlopeNorm(vmin=cmin,vcenter=0,vmax=cmax)
 stimNum = 16
 
 # f = mean(trial_average[:,:,:,stimNum,end-window+1:end],dims=4)[:,:,:,1]
@@ -184,15 +223,28 @@ nplots = 15
 @assert nplots == nStimuli - 1
 
 # figW,figH = (figB*4, figB*4)
-figW,figH = (figB*4, figB*3.1)
+# two-column width (mm)
+figB = Float64(uconvert(u"inch", 183u"mm") / 4u"inch")
+figW,figH = (figB*4, figB*3)
 global fig = plt.figure(figsize=(figW,figH))
 fig, axs = plt.subplots(4,4, figsize=(figW,figH))
 axs = permutedims(axs,(2,1))
 z = 3
+felz_k = 50
+felz_min = 10
+
 for s in 1:nStimuli
     ax = axs[s]
-    global cim = ax.imshow(df_f[50:end-100,1:end-50,z,s], cmap="RdBu_r",
-        norm=cnorm)
+    im = df_f[:,:,z,s]
+    im = opening_median(im)
+    segments = felzenszwalb(im, felz_k, felz_min)
+    im[segments.image_indexmap .== 1] .= 0
+    im = im[50:end-100,1:end-50]
+    # global cim = ax.imshow(df_f[50:end-100,1:end-50,z,s], cmap="RdBu_r",
+    # global cim = ax.imshow(im, cmap="RdBu_r",
+    global cim = ax.imshow(im, cmap="viridis",
+        clim=(cmin,cmax), interpolation="none")
+        # norm=cnorm, interpolation="none")
     # global cim = ax.imshow(df_f[50:end-100,1:end-50,z,s], cmap="viridis", clim=(0.1,cmax))
     n = s*2
     # ax.set_title("$n cells")
@@ -205,20 +257,41 @@ end
 # plt.imshow(hcat([df_f[:,:,z] for z in 1:Z]...), cmap="RdBu_r",
 #     norm=cnorm)
 # may need to adjust if colorbar is cutoff
-fig.subplots_adjust(right=0.9)
-cbar_ax = fig.add_axes([0.91, 0.15, 0.0075, 0.7])
+plt.tight_layout()
+fig.subplots_adjust(right=0.93)
+fig.subplots_adjust(wspace=0.04, hspace=0.01)
+cbar_ax = fig.add_axes([0.94, 0.15, 0.0075, 0.7])
 # cbar = fig.colorbar(cim, ticks=[0,1,2], cax=cbar_ax)
 cbar = fig.colorbar(cim, cax=cbar_ax)
-h = cbar.ax.set_ylabel("Δf/f",rotation=270)
+h = cbar.ax.set_ylabel("Δf/f",rotation=270,fontsize=7)
 # h.set_rotation = 180
-fig
-plotpath = joinpath(plot_dir,"$(analysis_name)_rdbu_titration_oneplane_df_f")
+for (i,ax) in enumerate(axs)
+    if i == 1
+        ax.text(5,40,"1 cell bilateral",fontsize=7, color="white")
+    else
+        ax.text(5,40,"$i",fontsize=7, color="white")
+    end
+end
+
+um_per_px1 = tseries_units[2] / 1u"μm"
+scalebar1 = matscale.ScaleBar(um_per_px1, "um", length_fraction=0.18, box_alpha=0,
+    scale_loc="left", location="lower right", color = "white",
+    font_properties=Dict("size" => 7))
+axs[1].add_artist(scalebar1)
+
+# plotpath = joinpath(plot_dir,"$(analysis_name)_rdbu_titration_oneplane_df_f")
+plotpath = joinpath(plot_dir,"$(analysis_name)_viridis_medianfilt_titration_oneplane_df_f")
 fig.savefig("$(plotpath).svg",
-    dpi=600)
+    dpi=300)
+    # bbox_inches="tight", pad_inches=0, dpi=300)
 fig.savefig(joinpath(plot_dir,"$(plotpath).png"),
-    dpi=600)
-@show plotpath*".png"
+    dpi=300)
+    # bbox_inches="tight", pad_inches=0, dpi=300)
+fig.savefig(joinpath(plot_dir,"$(plotpath).pdf"),
+    dpi=300)
+    # bbox_inches="tight", pad_inches=0, dpi=300)
+@show plotpath*".svg"
 # fig
-fig.subplots_adjust(wspace=0.01, hspace=0.01)
-# plt.tight_layout()
+
+# fig
 fig

@@ -3,12 +3,13 @@ if ~size(ARGS,1)==1
     exit()
 end
 
+uri = ARGS[1]
 using Lensman
 import Lensman: @pun
-@wan "using red channel"
 resources = Resources();
 recording = Recordings[uri](;resources...,
     # channel_str="Ch2"
+    tseries_read_strategy=:lazy_tiff
 );
 
 @pun (fish_dir, exp_name, tseries, tseriesT, artifacts

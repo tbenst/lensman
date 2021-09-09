@@ -673,6 +673,18 @@ function get_df_f_per_voxel_per_trial_from_h5(tyh5_path, tseries_dset,
     convert(Array,df_f_per_voxel_per_trial)
 end
 
+function calc_save_trial_average(savepath::AbstractString, trial_average_dset::AbstractString,
+    tseries, stim_start_idx, stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
+    pre=window_len, post=window_len
+)
+    trial_average = calc_trial_average(tseries, stim_start_idx,
+            stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
+            pre=pre, post=post)
+    h5write(savepath, trial_average_dset, trial_average)
+    trial_average
+end
+    
+
 "Calculate average response for each unique stimuli"
 function calc_trial_average(tseries::LazyHDF5, stimStartIdx,
         stimEndIdx, tseriesH, tseriesW, tseriesZ, trialOrder;

@@ -144,14 +144,25 @@ function update_recording_dag(recording::DAG)
         targets_with_plane_index = map(x -> Int.(round.(x, digits=0)), twp1)
         cells = makeCellsDF(targets_with_plane_index, stim_start_idx, stim_end_idx,
             trial_order, group_stim_freq)
-        lateral_unit = microscope_lateral_unit(tseriesW)
+        # lateral_unit = microscope_lateral_unit(tseriesW)
+        # TODO test if this works..
+        tseries_units = read_microns_per_pixel(tseries_xml)
+        lateral_unit = tseries_units[2]
+        zseries_units = read_microns_per_pixel(zseries_xml)
         target_size_px = spiral_size(exp_date, lateral_unit)
         cell_masks = constructROImasks(cells, tseriesH, tseriesW, tseriesZ, target_size_px)
         cells_df_f_winsize = Int(ceil(cells_df_f_win_secs * vol_rate))
         cells_df_f = add_df_f_to_cells(tseries, cells, cell_masks,
             winSize=cells_df_f_winsize, padding=cells_df_f_padding);
-        trial_average = calc_trial_average(tseries, stim_start_idx,
-            stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
+        # TODO: not tested
+        trial_average_path = joinpath(fish_dir, replace(
+            "$(exp_name)_$(string(tseries_read_strategy))_avgStim.h5",
+            "lazy_"=>""))
+        trial_average_dset = replace(tseries_read_strategy, "lazy_" => "")
+        trial_average_restore = h5read(trial_average_path,
+            trial_average_dset)
+        _trial_average = calc_save_trial_average(trial_average_path, trial_average_dset,
+        tseries, stim_start_idx, stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
             pre=window_len, post=window_len)
         # will make into checkpoint
         zbrain_warpedname = glob_one_file("*Warped.nii.gz", fish_dir; nofail=true)
@@ -169,6 +180,7 @@ function update_recording_dag(recording::DAG)
         # TODO: this does force potentially unecessary read of zbrain_registered
     end
     zbrain_registered = Checkpointable(_zbrain_registered, zbrain_restore)
+    trial_average = Checkpointable(_trial_average, trial_average_restore)
 
     @reversible begin
         zbrain_warps = glob("*SyN_Warped.nii.gz", fish_dir)
@@ -246,7 +258,7 @@ function update_recording_dag(recording::DAG)
         region_mask_path, zbrain_masks, region_masks_h5, zbrain_mask_names,
         nCells, cell_centers, cells_mask, iscell, cells_df_f, s2p_cell_masks, 
         zbrain_restore, _zbrain_registered, multimap_920, multimap_820, multimap_ants_cmd,
-        ttl_starts, artifacts
+        ttl_starts, artifacts, tseries_units, zseries_units, trial_average_path
     )
 
     recording

@@ -35,3 +35,6 @@ example xml buried inside of binary:
             <commonphase:z>MICRO_METER</commonphase:z>^M
           </commonphase:pixelUnit>^M
 ```
+
+## NRRD
+saves as WHZ right now for unknown reason..?

@@ -195,3 +195,70 @@ function recording_to_df_df(recording, genotype)
         DataFrame()
     end
 end
+
+
+function add_period_to_df(df)
+    df[!,:period] = ["" for _ in 1:size(df,1)];
+    @assert maximum(df[!,:stim]) == 16
+    for s in 1:16
+        if s <= 6
+            p = "early"
+        elseif s <= 11
+            p = "mid"
+        else
+            p = "late"
+        end
+        idxs = df[!, :stim] .== s
+        df[idxs,:period] .= p
+    end
+    catarr = CategoricalArray(df[!,:period], ordered=true)
+    levels!(catarr, ["early", "mid", "late"])
+    df[!,:period] = catarr
+    df
+end
+
+function add_major_regions_to_df(df)
+    df[!,"major region"] = ["" for _ in 1:size(df,1)];
+    rhom_regions = unique(filter(r->occursin("Rhombencephalon", r), df.region))
+    max = 15
+    times, remainder = divrem(length(rhom_regions),max)
+    nrhom_sub = times + (remainder > 0)
+    rhom_map = Dict(r => "Rhombencephalon $(Char((i % nrhom_sub) + 65))"
+        for (i,r) in enumerate(rhom_regions))
+    for i in 1:size(df,1)
+        # @show df[i,:region]
+        if df[i,:region] == "Spinal Cord"
+            df[i,"major region"] = "Spinal Cord"
+        else
+            m = match(r"^([\w\s]+) -\s?(.*)", df[i,:region])
+            if ~isnothing(m)
+                if m[1] == "Rhombencephalon"
+                    # too many, split into subregions
+                    df[i,"major region"] = rhom_map[df[i,:region]]
+                else
+                    df[i,"major region"] = m[1]
+                end
+            else
+                error("no match for $(df[i,:region])")
+            end
+        end
+    end
+    df
+end
+
+function rename_regions_in_df(df)
+    for i in 1:size(df,1)
+        # @show df[i,:region]
+        if df[i,:region] == "Spinal Cord"
+            df[i,"major region"] = "Spinal Cord"
+        else
+            m = match(r"^([\w\s]+) -\s?(.*)", df[i,:region])
+            if ~isnothing(m)
+                df[i,:region] = m[2]
+            else
+                error("no match for $(df[i,:region])")
+            end
+        end
+    end
+    df
+end

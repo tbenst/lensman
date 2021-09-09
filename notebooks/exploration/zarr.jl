@@ -6,7 +6,8 @@ addprocs(36)
 ##
 path = joinpath(mktempdir(), "test.zarr")
 M, N = 1000, 10000
-z1 = zcreate(Float32, M,N,path = path,chunks=(M/10, N/10))
+z1 = zcreate(Float32, M,N,path = path,chunks=(M/10, N/10), compressor=Zarr.NoCompressor());
+# z1 = zcreate(Float32, M,N,path = path,chunks=(1, N))
 # z1 = zcreate(Float32, M,N,path = path,chunks=(M/10, N/10))
 m1 = rand(Float32, M,N);
 z1[:,:] .= m1
@@ -56,7 +57,7 @@ end
 @btime threads_sum(m1); # 3ms
 ##
 @btime seq_sum(h5["a"]); # 4.37s
-@btime seq_sum(z1); # 2.08s
-@btime threads_sum(z1); # 3.36s
-@btime distributed_sum(h5) # 194ms
-@btime distributed_sum(z1) # 590ms
+@btime seq_sum(z1); # 1.56s
+@btime threads_sum(z1); # 336ms
+@btime distributed_sum(h5) # 280ms
+@btime distributed_sum(z1) # 307ms
