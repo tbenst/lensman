@@ -164,3 +164,5 @@ function opening_nonbool(x; N=1)
 end
 
 opening_median = (x -> mapwindow(median!, x, (3,3))) ∘ opening_nonbool
+
+rgb2tuple(rgb) = (red(rgb), green(rgb), blue(rgb))

@@ -247,6 +247,7 @@ function add_major_regions_to_df(df)
 end
 
 function rename_regions_in_df(df)
+    df[:, :subregion] .= ""
     for i in 1:size(df,1)
         # @show df[i,:region]
         if df[i,:region] == "Spinal Cord"
@@ -254,7 +255,7 @@ function rename_regions_in_df(df)
         else
             m = match(r"^([\w\s]+) -\s?(.*)", df[i,:region])
             if ~isnothing(m)
-                df[i,:region] = m[2]
+                df[i,:subregion] = m[2]
             else
                 error("no match for $(df[i,:region])")
             end

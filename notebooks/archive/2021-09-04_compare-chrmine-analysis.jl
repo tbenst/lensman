@@ -241,8 +241,9 @@ meantraceDFnof = filter(x->x.genotype != "fChRmine", meantraceDF)
 meantraceDFnof = sort(meantraceDFnof, [:time])
 ##
 # data(meantraceDFnof) * mapping(:time,:mean,col=:genotype) * visual(Lines) |> aog.draw
-fontsize_theme = Theme(fontsize = 24, font="Arial")
+fontsize_theme = Theme(fontsize = 7 * 300/72, font="Arial")
 set_theme!(fontsize_theme)
+
 if "time" in names(meantraceDFnof)
     rename!(meantraceDFnof, :time => "time (s)")
 end
@@ -256,7 +257,7 @@ dpi = 300
 mm2px = mm->Int(round(uconvert(u"inch", mm) * dpi / 1u"inch" * 0.9))
 W = mm2px(W)
 H = mm2px(H)
-f = Figure(figsize=(W,H))
+f = Figure(resoultion=(W,H))
 p1 = d * mapping("time (s)",:min,:max,col=:genotype) * visual(Band, color="lightblue")
 p2 = d * mapping("time (s)",:mean,col=:genotype) * visual(Lines,color="darkblue",linewidth=4)
 fig = aog.draw(p1 + p2; axis=(xgridvisible=false, ygridvisible=false,ylabel="Δf/f"))
@@ -268,12 +269,9 @@ map(axs) do ax
     colormap = :heat)
 end
 
-AbstractPlotting.annotations!(axs[1],
-    "10 Hz", (-0.5,1.8), textsize = 0.1)
-
 @show ppath = joinpath(plot_dir,"single-cell-stim")
 pt_per_unit = 72/300
-save(ppath*".svg", fig, pt_per_unit = pt_per_unit)
-save(ppath*".png", fig, pt_per_unit = pt_per_unit)
-save(ppath*".pdf", fig, pt_per_unit = pt_per_unit)
+save(ppath*".svg", fig, pt_per_unit=pt_per_unit)
+save(ppath*".png", fig, pt_per_unit=pt_per_unit)
+save(ppath*".pdf", fig, pt_per_unit=pt_per_unit)
 fig

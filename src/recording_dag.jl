@@ -40,7 +40,12 @@ function checkpointable(args...)
     Checkpointable(args...)
 end
 
-noop(`ni`)
+function res_temp(a,b)
+    @show a,b
+    c = h5read(a,b)
+    println("restore success!!")
+    c
+end
 
 """Master DAG for all computations on a recording.
 
@@ -158,12 +163,13 @@ function update_recording_dag(recording::DAG)
         trial_average_path = joinpath(fish_dir, replace(
             "$(exp_name)_$(string(tseries_read_strategy))_avgStim.h5",
             "lazy_"=>""))
-        trial_average_dset = replace(tseries_read_strategy, "lazy_" => "")
-        trial_average_restore = h5read(trial_average_path,
+        trial_average_dset = replace(string(tseries_read_strategy), "lazy_" => "")
+        trial_average_restore = res_temp(trial_average_path,
             trial_average_dset)
-        _trial_average = calc_save_trial_average(trial_average_path, trial_average_dset,
-        tseries, stim_start_idx, stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
-            pre=window_len, post=window_len)
+        _trial_average = error("oops")
+        # _trial_average = calc_save_trial_average(trial_average_path, trial_average_dset,
+        # tseries, stim_start_idx, stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
+        #     pre=window_len, post=window_len)
         # will make into checkpoint
         zbrain_warpedname = glob_one_file("*Warped.nii.gz", fish_dir; nofail=true)
 
@@ -258,7 +264,8 @@ function update_recording_dag(recording::DAG)
         region_mask_path, zbrain_masks, region_masks_h5, zbrain_mask_names,
         nCells, cell_centers, cells_mask, iscell, cells_df_f, s2p_cell_masks, 
         zbrain_restore, _zbrain_registered, multimap_920, multimap_820, multimap_ants_cmd,
-        ttl_starts, artifacts, tseries_units, zseries_units, trial_average_path
+        ttl_starts, artifacts, tseries_units, zseries_units, trial_average_path,
+        trial_average_dset
     )
 
     recording

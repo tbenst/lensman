@@ -594,10 +594,6 @@ function load_zseries(zseries_dir; ch_str = "Ch3")
     AxisArray(zseries, (:y, :x, :z), zseries_microscope_units)
 end
 
-"Read sean's mat file stim frequency"
-getMatStimFreq(mat) = sum((~).(sum.(mat["cfg"]["exp"]["targets"]) .≈ 0.0))*5
-getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0,0) ? 1 : 2
-
 function read_suite2p(suite2p_dir)
     iscell = npzread(joinpath(suite2p_dir, "combined", "iscell.npy"));
     nCells = size(iscell,1)

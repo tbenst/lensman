@@ -25,25 +25,44 @@ import Plots: heatmap
 using Thunks
 import Base.Threads: @spawn, @sync, @threads
 L = Lensman
-init_workers()
+# init_workers()
 ##
 resources = Resources();
-r = Recordings[
+recording1 = Recordings[
+    "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-lrhab-118trial-060"
+](;resources...,
+    tseries_read_strategy = :lazy_hwzt,
+    tseries_suffix = "kalman"
+);
+# second-order experiment
+recording2 = Recordings[
     # "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
     "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
 ](;resources...
     # window_secs=10,
 );
 ##
-@pun (trial_average, vol_rate, window_len, recording_folder, fish_name,
+@pun (trial_average_path, trial_average_dset) = recording2;
+test = h5read(trial_average_path,trial_average_dset);
+##
+@pun (trial_average,vol_rate, window_len, recording_folder, fish_name,
     exp_name, tseriesZ, tseriesW, cells, exp_date, plot_dir, nStimuli,
     window_len, etl_vals, stim_end_idx, stim_start_idx, nstim_pulses, window_secs,
-    fish_dir, tseries_units, lateral_unit, tseries_read_strategy
-) = r;
+    fish_dir, tseries_units, lateral_unit, tseries_read_strategy, trial_average_path,
+    slm_num, zOffset
+) = recording2;
 @show nstim_pulses
 @assert nstim_pulses == 10
 tseries_read_strategy
 ##
+hab_trial_average = recording1[:trial_average];
+hab_trial_average_dset = recording1[:trial_average_dset];
+hab_trial_average_path = recording1[:trial_average_path];
+hab_cells = recording1[:cells];
+hab_nStimuli = recording1[:nStimuli];
+hab_target_groups = recording1[:target_groups];
+##
+hab_imap = influence_map(hab_trial_average, window_len);
 imap = influence_map(trial_average, window_len);
 ##
 targetSizePx = spiral_size(exp_date, lateral_unit)
@@ -62,7 +81,8 @@ window = 6
 cmax = 2.5
 cmin = -0.5
 
-cmax = 3
+# cmax = 3
+cmax = 1
 cmin = 0
 # cmin = -0.2
 
@@ -74,53 +94,74 @@ cmin = 0
 # cmax = 4
 # cmin = -0.75
 # cmin = -4
-# cnorm = matplotlib.colors.TwoSlopeNorm(vmin=cmin,vcenter=0,vmax=cmax)
-
-ncol = 4
+ncol = 3
+nrows = 5
 figB = Float64(uconvert(u"inch", 183u"mm") / (ncol*u"inch"))
-figW,figH = (figB*ncol, figB*1.5)
+figW,figH = (figB*ncol, figB*3.5)
 fig = plt.figure(figsize=(figW,figH))
-fig, axs = plt.subplots(2, 4, figsize=(figW,figH))
+fig, axs = plt.subplots(nrows, 3, figsize=(figW,figH))
 
 ztotext(z) = "$(Int(round(etl_vals[z],digits=0)))"
 zplanes = [5,10]
-yrange = 40:420
+yrange = 40:400
 felz_k = 50
 felz_min = 10
 
-for stimNum in 1:nStimuli
-    df_f = imap[:,:,:,stimNum]
+
+target_planes = unique(vcat(cells.z, hab_cells.z))
+ntarget_planes = length(target_planes)
+seeds = [RGB(1,1,1)]
+colors = distinguishable_colors(ntarget_planes, seeds, dropseed=true)
+plane_color = Dict(z => c for (z,c) in zip(target_planes, colors))
+
+
+
+# make each stim a row...
+# for row in 1:(nStimuli+hab_nStimuli-1)
+for row in [3,1,2,4,5]
+    if row >3
+        df_f = imap[:,:,:,row-3]
+        stimNum = row - 3
+        stim_cells = cells
+    else
+        df_f = hab_imap[:,:,:,row]
+        stim_cells = hab_cells
+        stimNum = row
+    end
     # cmax = percentile(df_f[:],99.9)
     # cmin = percentile(df_f[:],0.1)
     title_str = "{$(ztotext(zplanes[1])),$(ztotext(zplanes[2]))}μm"
-    axs[1].set_title("targets z∈$(title_str)", fontsize=8)
 
 
-    # show targets 
-    if stimNum < 3
-        ax = axs[stimNum]
-    else
-        ax = axs[1]
-    end
+    # show targets on first column
+    ax = axs[row]
     theSize = collect(size(df_f)[1:2])
     theSize[1] = length(yrange)
-    ax.imshow(zeros(theSize...), cmap="RdBu_r", norm=cnorm)
-    for (x,y,targetZ) in eachrow(unique(cells[cells.stimNum .== stimNum,[:x,:y,:z]]))
-        if stimNum == 1
-            z = 5
-        elseif stimNum == 2
-            z = 10
-            text = "Raphe targets"
-        end
-        circle = matplotlib.patches.Circle((x,y-yrange[1]), targetSizePx, color="k",
+    ax.imshow(zeros(theSize...), cmap="RdBu_r", clim=(-1,1))
+    each_target = unique(stim_cells[stim_cells.stimNum .== stimNum,[:x,:y,:z]])
+    target_zplanes = unique(each_target[:,:z])
+    if length(target_zplanes) > 1
+        zs_str = "z = {"
+        zs_list = ["$(Int(etl_vals[z]))" for z in target_zplanes]
+        zs_str *= join(zs_list, ", ")
+        zs_str *= "} μm"
+        ax.text(5,yrange[end]-50,zs_str,fontsize=7, color="black")
+    else
+        ax.text(5,yrange[end]-50,"z = $(Int(etl_vals[each_target[1,:z]]))μm",fontsize=7, color="black")
+    end
+    println("target plane for row $row: $(Int(etl_vals[each_target[1,:z]]))")
+    # use for legend
+    for (x,y,targetZ) in eachrow(each_target)
+
+        circle = matplotlib.patches.Circle((x,y-yrange[1]), targetSizePx,
+            color=rgb2tuple(plane_color[targetZ]),
             fill=false, lw=0.2)
         ax.add_patch(circle)
     end
-    ax.set_axis_off()
-    
+    ax.set_axis_off()    
     
     for (j,z) in enumerate(zplanes)
-        ax_num = stimNum*2 + j
+        ax_num = nrows * j + row
         ax = axs[ax_num]
         im = df_f[:,:,z]
         im = opening_median(im)
@@ -129,19 +170,26 @@ for stimNum in 1:nStimuli
 
         global cim = ax.imshow(im[yrange,:], cmap="viridis",
             clim=(cmin,cmax), interpolation="none")
-        
-        if ax_num == 3
-            ax.set_title("2nd-order hab",fontsize=8)
-        elseif ax_num == 5
-            ax.set_title("raphe",fontsize=8)
-        elseif ax_num == 7
-            ax.set_title("control",fontsize=8)
-        end
+        ax.text(5,yrange[end]-50,"z = $(Int(etl_vals[z]))μm",fontsize=7, color="white")
+        # if j == 1
+        #     if stimNum == 1
+        #         ax.set_title("2nd-order hab",fontsize=8)
+        #     elseif stimNum == 2
+        #         ax.set_title("raphe",fontsize=8)
+        #     elseif stimNum == 3
+        #         ax.set_title("control",fontsize=8)
+        #     end
+        # end
 
 
         ax.set_axis_off()
     end
 end
+
+patch_handles = [ matplotlib.patches.Patch(color=rgb2tuple(c), label="$(Int(etl_vals[z]))μm")
+    for (z,c) in plane_color]
+axs[1].legend(handles=patch_handles)
+
 
 um_per_px1 = tseries_units[2] / 1u"μm"
 scalebar1 = matscale.ScaleBar(um_per_px1, "um", length_fraction=0.18, box_alpha=0,
@@ -163,8 +211,13 @@ fig.savefig(path*".pdf", dpi=300)
 
 fig
 ##
-imshow(trial_average[:,:,5,:,:])
+hab_target_groups = recording1[:target_groups]
+@pun (target_groups, ) = recording2
 
-##
-avg_tseries_path = joinpath(fish_dir, exp_name*"_kalman_trial_average.h5")
-h5write(avg_tseries_path, "trial_average", trial_average);
+@show unique(target_groups[1][:,3]), unique(target_groups[2][:,3]), unique(target_groups[3][:,3])
+unique(hab_target_groups[1][:,3]), unique(hab_target_groups[2][:,3]), unique(hab_target_groups[3][:,3])
+# z should be 0 microns...
+
+unique(cells[cells.stimNum .== 3,:z])
+unique(hab_cells[hab_cells.stimNum .== 1,:z])
+unique(hab_cells[hab_cells.stimNum .== 3,:z])

@@ -156,5 +156,5 @@ export read_microns_per_pixel,
     influence_map,
     LazyTy5,
     noop, LazyTiff,
-    opening_median, opening_nonbool
+    opening_median, opening_nonbool, rgb2tuple
 end
