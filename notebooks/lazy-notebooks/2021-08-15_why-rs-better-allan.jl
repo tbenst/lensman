@@ -1,4 +1,4 @@
-ENV["DISPLAY"] = "localhost:13.0"
+ENV["DISPLAY"] = "localhost:10.0"
 ##
 using AlgebraOfGraphics, CairoMakie
 using Lensman, Images, Glob, NPZ, DataFrames, ImageSegmentation, 
@@ -14,37 +14,48 @@ aog = AlgebraOfGraphics
 Data = aog.data
 set_aog_theme!() # src
 init_workers(16)
-
-##
-# The good one
-recording_name = "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
-
-# recording_name = "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
-
 ##
 resources = Resources(zbrain_dir="/data/b115/atlas/zbrain");
 @pun (zbrain_dir, zbrain_masks) = resources;
 
 ##
+# DONE
+# recording_name = "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
+# recording_name = "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+# recording_name = "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-118trial-122"
+# recording_name = "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
+# recording_name = "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062"
+# recording_name = "2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069"
+recording_name = "2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-titration-192trial-070"
+
+# DONE - but errors (masks are same across planes; only 23 nonzero)
+# recording_name = "2021-06-15_rsChRmine_h2b6s_6dpf/fish1/TSeries-titration-192trial-050"
+
+# can't do this one as forgot to acquire ZSeries
+# recording_name = "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061"
+##
 # NOTE: need to make sure to have copied SLM files from /mnt/deissero to /data/b115/SLM_files/14-Jul-2021
 # at least user=allan can't read them from /mnt/deissero
-tyh5_path = "/data/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123_kalman.h5"
+# tyh5_path = "/data/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123_kalman.h5"
+tyh5_path = joinpath("/data/b115", recording_name * "_kalman.h5")
 options = Dict(
     # :rel_analysis_dir => "plots", :h5_read_strategy => :lazy_ty5, :lazy_tiff => false,  # just in case of trouble later: added `:lazy_tiff => false` here
     :rel_analysis_dir => "plots-kalman", :h5_read_strategy => :lazy_hwzt, :tyh5_path => tyh5_path, :tseries_dset => "kalman",
-    :tseries_root_dirs => ["/data/b115"], :slm_root_dirs => ["/data/b115/SLM_files"]
+    :tseries_root_dirs => ["/data/b115"],
+    :slm_root_dirs => ["/data/b115/SLM_files"]
 )
 recording = Recordings[recording_name](;options..., resources...);
 
+@pun tyh5_path = recording
 ##
 @pun fish_dir = recording
 
 @pun (tseries, tseriesH) = recording;
 
-      @pun (imaging2zseries_plane, window_len, 
-      tseries, tseriesH, tseriesW, tseriesZ, trial_order, 
-      zbrain_mask_names, target_groups, fish_dir,
-      stim_start_idx, stim_end_idx) = recording;
+@pun (imaging2zseries_plane, window_len, 
+tseries, tseriesH, tseriesW, tseriesZ, trial_order, 
+zbrain_mask_names, target_groups, fish_dir,
+stim_start_idx, stim_end_idx) = recording;
 
 ## Open h5 for warped region masks (saved to standardized path)
 
@@ -55,7 +66,6 @@ region_masks_h5_path = joinpath(mask_dir, "warped_region_masks.h5")
 region_masks_h5 = h5open(region_masks_h5_path, "r", swmr=true)
 plot_dir = joinpath(mask_dir, "plots")
 println("Will save plots to '$plot_dir'")
-
 #########################################################################################################
 ##
 # This function is basically nothing (I was planning on doing something more complicated initially)
@@ -68,7 +78,6 @@ end
 region_names = zbrain_masks["MaskDatabaseNames"][1:end - 2];
 masks = map(n -> read_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_plane, n),
             region_names);
-
 ## 
 # Remove masks returning as `nothing` (assuming correct flushing when creation region_masks.h5, this should
 # just be masks saved as 0 because no pixels overlapping with imaged - should only be a few)
@@ -77,21 +86,21 @@ println("Dropping $(length(masks) - sum(valid_mask_indices)) valid masks out of 
 region_names = region_names[valid_mask_indices];
 masks = masks[valid_mask_indices];
 
-##
+
 # Remove masks with no voxels imaged
 valid_mask_indices = map(m -> sum(m) > 0, masks)
 println("Dropping a further $(length(masks) - sum(valid_mask_indices)) valid masks out of $(length(masks)), because 0 in imaged plane")
 region_names = region_names[valid_mask_indices];
 masks = masks[valid_mask_indices];
 
-##
+
 # Read hemisphere_masks
 lhemisphere_name, lhemisphere = L.read_first_mask(
     region_masks_h5, zbrain_mask_names, imaging2zseries_plane, "Left hemisphere");
 rhemisphere_name, rhemisphere = L.read_first_mask(
     region_masks_h5, zbrain_mask_names, imaging2zseries_plane, "Right hemisphere");
 
-##
+
 # Construct "left" and "right" masks
 masks = vcat(map(m -> [m .& rhemisphere, m .& lhemisphere], masks)...);
 region_names = vcat(map(n -> ["right $n", "left $n"], region_names)...);
@@ -99,28 +108,31 @@ region_names = vcat(map(n -> ["right $n", "left $n"], region_names)...);
 # Resize masks to tseries shape
 masks = map(m -> imresize(m, tseriesH, tseriesW, tseriesZ) .> 0, masks);
 
+## viz a mask
+idx = findall(occursin.("Tectum", region_names))[1]
+@show region_names[idx]
+# imshow(masks[idx])
+Gray.(masks[idx][:,:,5])
+# Gray.(masks[idx][:,:,1])
 ##
-# FIXME: this right now is setup to run with tyh5, minor change for tiff's
-regions_df = L.per_trial_regions_df(
-    tseries,
-    window_len, stim_start_idx, stim_end_idx,
-    trial_order, masks, region_names)  # , stim_names=nothing)
-# regions_df = L.per_trial_regions_df(
-#     tseries,
-#     window_len, stim_start_idx, stim_end_idx,
-#     trial_order, masks, region_names)  # , stim_names=nothing)
 
-##
+@assert length(trial_order) == length(stim_start_idx)
+# ss = stim_start_idx[1:length(trial_order)]
+# se = stim_end_idx[1:length(trial_order)]
+@assert length(masks) == length(region_names)
+regions_df = L.per_trial_regions_df(
+    tseries, window_len,
+    stim_start_idx, stim_end_idx,
+    # ss, se,
+    trial_order, masks, region_names)  # , stim_names=nothing)
 
 # Path to write out to (in the case that tyh5_path is defined, otherwise reading from tiff's)
 out_dir = joinpath(mask_dir, basename(recording[:tyh5_path]), basename(recording[:tseries_dset]))
 # out_dir = joinpath(mask_dir, basename(recording_name), "raw")
 println("Will create output_dir='$out_dir'")
 
-##
 mkpath(out_dir)
 
-##
 using Arrow
 open(joinpath(out_dir, "regions_df.arrow"), "w") do io
     Arrow.write(io, regions_df)
@@ -169,10 +181,12 @@ masks = map(m -> imresize(m, tseriesH, tseriesW, tseriesZ) .> 0, masks);
 # regions_df = L.per_trial_regions_df(tseries, window_len,
 #     stim_start_idx, stim_end_idx,
 #     trial_order, masks, region_names)  # , stim_names=nothing)            # CAN CHANGE BACK FROM THIS
-
+ss = stim_start_idx[1:length(trial_order)]
+se = stim_end_idx[1:length(trial_order)]
 regions_df = L.per_trial_regions_df(
     recording[:tyh5_path], recording[:tseries_dset],
-    window_len, stim_start_idx, stim_end_idx,
+    window_len, ss, se,
+    # window_len, stim_start_idx, stim_end_idx,
     trial_order, masks, region_names)  # , stim_names=nothing)
 
 ## Save DataFrame (without filtering any possible NaN's for now)
