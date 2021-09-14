@@ -1,4 +1,4 @@
-ENV["DISPLAY"] = "localhost:11.0"
+ENV["DISPLAY"] = "localhost:12.0"
 ##
 # using ImageView
 using Lensman, Images, Glob, NPZ, PyCall, DataFrames, ImageSegmentation, 
@@ -27,7 +27,11 @@ import Base.Threads: @spawn, @sync, @threads
 L = Lensman
 # init_workers()
 ##
-resources = Resources();
+if read(`hostname`,String) == "osprey\n"
+    resources = Resources(zbrain_dir="/data/b115/atlas/zbrain");
+else
+    resources = Resources();
+end
 recording1 = Recordings[
     # "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-lrhab-118trial-060"
     "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061"
@@ -388,8 +392,26 @@ fig.savefig(path*".pdf", dpi=300)
 fig
 # save(path*".png", img)
 
-##
-@pun (fish_dir, region_mask_path, zseries, zbrain_masks) = recording2;
+## register outlines
+@pun (fish_dir, region_mask_path, zseries, zbrain_mask_names, imaging2zseries_plane) = recording2;
+region_outline_path = replace(region_mask_path ,"region_masks.h5" =>"region_outlines.h5")
 cmtk_transform_path = joinpath(fish_dir, "warp_out.xform")
 isdir(cmtk_transform_path)
+##
 cmtk_region_masks = L.save_region_masks(region_mask_path, zseries, zbrain_masks, cmtk_transform_path, :cmtk);
+## read
+@assert isfile(region_outline_path)
+
+region_outline_h5 = h5open(region_outline_path);
+habenula_name, habenula_outline = L.read_first_mask(region_outline_h5, zbrain_mask_names,
+    imaging2zseries_plane,"Habenula")
+
+region_h5 = h5open(joinpath(fish_dir,"warped_region_masks.h5"));
+habenula_name, habenula = L.read_first_mask(region_h5, zbrain_mask_names,
+    imaging2zseries_plane,"Habenula")
+
+Gray.(habenula_outline[:,:,4])
+img_morphograd = morphogradient(dilate(habenula[:,:,4]))
+img_morphograd = morphogradient(habenula[:,:,4])
+Gray.(img_morphograd)
+Gray.(habenula[:,:,4])
