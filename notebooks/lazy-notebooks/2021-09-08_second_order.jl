@@ -1,4 +1,4 @@
-ENV["DISPLAY"] = "localhost:11.0"
+# ENV["DISPLAY"] = "localhost:11.0"
 ##
 # using ImageView
 using Lensman, Images, Glob, NPZ, PyCall, DataFrames, ImageSegmentation, 
@@ -73,6 +73,8 @@ hab_target_groups = recording1[:target_groups];
 ##
 hab_imap = influence_map(hab_trial_average, window_len);
 imap = influence_map(trial_average, window_len);
+## draw regions example
+
 ##
 targetSizePx = spiral_size(exp_date, lateral_unit)
 
@@ -388,8 +390,8 @@ fig.savefig(path*".pdf", dpi=300)
 fig
 # save(path*".png", img)
 
-##
-@pun (fish_dir, region_mask_path, zseries, zbrain_masks) = recording2;
-cmtk_transform_path = joinpath(fish_dir, "warp_out.xform")
-isdir(cmtk_transform_path)
-cmtk_region_masks = L.save_region_masks(region_mask_path, zseries, zbrain_masks, cmtk_transform_path, :cmtk);
+## save region masks using CMTK
+# @pun (fish_dir, region_mask_path, zseries, zbrain_masks) = recording2;
+# cmtk_transform_path = joinpath(fish_dir, "warp_out.xform")
+# isdir(cmtk_transform_path)
+# cmtk_region_masks = L.save_region_masks(region_mask_path, zseries, zbrain_masks, cmtk_transform_path, :cmtk);
