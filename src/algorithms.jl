@@ -448,8 +448,8 @@ function ants_register(fixed, moving; interpolation = "BSpline",
 end
 
 
-"This doesn't work reliably..."
-function find_imaging_planes(zseries, avg_imaging)
+"Does not work reliably from tseries to zseries."
+function find_imaging_planes_mi(zseries, avg_imaging; bins=20)
     nZ = size(zseries, 3)
     nI = size(avg_imaging,3)
     mi = zeros(nZ,nI)
@@ -461,7 +461,23 @@ function find_imaging_planes(zseries, avg_imaging)
             zplane = imresize(zplane, size(avg_imaging)[1:2])
             img = avg_imaging[:,:,i]
             # img = adjust_histogram(avg_imaging[:,:,i], GammaCorrection(0.3))
-            mi[z,i] = mutual_information(zplane, img)
+            mi[z,i] = mutual_information(zplane, img; bins=bins)
+        end
+    end
+    matching_zplanes = Tuple.(argmax(mi,dims=1)[1,:])
+    map(x->x[1], matching_zplanes)
+end
+
+function find_imaging_planes_ssim(zseries, avg_imaging)
+    nZ = size(zseries, 3)
+    nI = size(avg_imaging,3)
+    mi = zeros(nZ,nI)
+    @threads for z in 1:nZ
+        for i in 1:nI
+            zplane = convert(Array{Float64},collect(zseries[:,:,z]))
+            zplane = imresize(zplane, size(avg_imaging)[1:2])
+            img = avg_imaging[:,:,i]
+            mi[z,i] = assess_msssim(zplane, img)
         end
     end
     matching_zplanes = Tuple.(argmax(mi,dims=1)[1,:])

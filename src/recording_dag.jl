@@ -43,7 +43,6 @@ end
 function res_temp(a,b)
     @show a,b
     c = h5read(a,b)
-    println("restore success!!")
     c
 end
 
@@ -57,7 +56,7 @@ function update_recording_dag(recording::DAG)
         oir_dir, zbrain_warp_prefix, mm_warp_prefix, oir_920_name, oir_820_name, tyh5_path,
         h2b_zbrain, zbrain_units, rostral, dorsal, suite2p_dir, zbrain_masks,
         zbrain_mask_names, cells_df_f_win_secs, cells_df_f_padding,
-        registration_type, roi_method, channel_str
+        registration_type, roi_method, channel_str, region_mask_strategy
     ) = recording.nodes
     # procutil=Dict(Dagger.ThreadProc => 36.0)
     
@@ -166,10 +165,9 @@ function update_recording_dag(recording::DAG)
         trial_average_dset = replace(string(tseries_read_strategy), "lazy_" => "")
         trial_average_restore = res_temp(trial_average_path,
             trial_average_dset)
-        _trial_average = error("oops")
-        # _trial_average = calc_save_trial_average(trial_average_path, trial_average_dset,
-        # tseries, stim_start_idx, stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
-        #     pre=window_len, post=window_len)
+        _trial_average = calc_save_trial_average(trial_average_path, trial_average_dset,
+        tseries, stim_start_idx, stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
+            pre=window_len, post=window_len)
         # will make into checkpoint
         zbrain_warpedname = glob_one_file("*Warped.nii.gz", fish_dir; nofail=true)
 
@@ -220,7 +218,7 @@ function update_recording_dag(recording::DAG)
         else
             save_region_masks(region_mask_path, zseries, zbrain_masks,
                 zbrain_transforms;
-                rostral=rostral, dorsal=dorsal)
+                rostral=rostral, dorsal=dorsal, method=region_mask_strategy)
         end
 
         sdict = read_suite2p(suite2p_dir)

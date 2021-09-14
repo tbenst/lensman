@@ -174,10 +174,10 @@ def write_experiment_to_tyh5(
             print('"/imaging/stim" not populated as stim data was not provided')
 
 # https://matthew-brett.github.io/teaching/mutual_information.html
-def mutual_information(A, B):
+def mutual_information(A, B, bins=20):
     """ Mutual information for joint histogram.
     """
-    hgram, x_edges, y_edges = np.histogram2d(A.ravel(), B.ravel(), bins=20) 
+    hgram, x_edges, y_edges = np.histogram2d(A.ravel(), B.ravel(), bins=bins)
     # Convert bins counts to probability values
     pxy = hgram / float(np.sum(hgram))
     px = np.sum(pxy, axis=1) # marginal for x over y

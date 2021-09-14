@@ -35,6 +35,7 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     :warp_prefix => "WARP_PREFIX_NOT_DEFINED",
     # :tyh5, :lazy_tyh5, :lazy_hwzt, :lazy_tiff, or :tiff ("else")
     :tseries_read_strategy => :tiff,
+    :region_mask_strategy => :cmtk,
     :lazy_tiff => true,
     :window_secs => 5,
     :cells_df_f_win_secs => 2,
@@ -161,6 +162,15 @@ Recordings = RecordingsWrapper(
         tyh5_path="/data/dlab/b115/2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072_kalman.h5",
         dset_name="kalman",
         tseries_read_strategy = :lazy_hwzt,
-        zseries_name="ZSeries-structural-056"
+        zseries_name="ZSeries-structural-056",
+        notes="actually from 2021-06-02!!"
+    ),
+    modifiable_recording(
+        "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072";
+        tyh5_path="/data/dlab/b115/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072_kalman.h5",
+        dset_name="kalman",
+        tseries_read_strategy = :lazy_hwzt,
+        zseries_name="ZSeries-structural-056",
+        notes="copied from 2021-06-01/fish3, where we accidentally saved."
     ),
 )

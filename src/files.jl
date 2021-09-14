@@ -830,6 +830,21 @@ function write_n_sparse_datasets(h5path, n, dset_size, channel,blocker)
 end
 
 
+function save_region_masks(region_mask_path, zseries, zbrain_masks, transform_paths,
+    method=:cmtk;
+    nprocs = 10, rostral=:right, dorsal=:up
+)
+    if method == :ants
+        save_region_masks_ants(region_mask_path, zseries, zbrain_masks, transform_paths;
+            nprocs = nprocs, rostral=rostral, dorsal=dorsal)
+    elseif method == :cmtk
+        save_region_masks_cmtk(region_mask_path, zseries, zbrain_masks, transform_paths;
+            nprocs = nprocs, rostral=rostral, dorsal=dorsal)
+    else
+        error("unknown method $(string(method))")
+    end
+end
+
 """"
 Apply transform on Zbrain masks, and save sparse CSC arrays in h5 file.
 
@@ -863,7 +878,7 @@ which stops a consumer from proceeding if it is at capacity.
 Approximately, we cap memory usage at nprocs * 1024 * 1024 * 151 * sizeof(Float64),
 or say 21GB for 18 processes.
 """
-function save_region_masks(region_mask_path, zseries, zbrain_masks, ants_transforms;
+function save_region_masks_ants(region_mask_path, zseries, zbrain_masks, ants_transforms;
     nprocs = 10, rostral=:right, dorsal=:up
 )
     H, W, Z = size(zseries)
@@ -875,7 +890,7 @@ function save_region_masks(region_mask_path, zseries, zbrain_masks, ants_transfo
     @distributed for i in 1:nMasks
         @async begin
             put!(blocker, i)
-            assignment = _region_mask(i, zseries, zbrain_masks, ants_transforms, rostral, dorsal)
+            assignment = _region_mask_ants(i, zseries, zbrain_masks, ants_transforms, rostral, dorsal)
             put!(to_write, assignment)
             assignment = nothing
             GC.gc()
@@ -892,7 +907,7 @@ function save_region_masks(region_mask_path, zseries, zbrain_masks, ants_transfo
     return h5
 end
 
-function _region_mask(i, zseries, zbrain_masks, ants_transforms, rostral, dorsal)
+function _region_mask_ants(i, zseries, zbrain_masks, ants_transforms, rostral, dorsal)
     H, W, Z = size(zseries)
     # get rid of `/` so not interpreted as a h5 path
     name = replace(zbrain_masks["MaskDatabaseNames"][i], "/" => "_")
@@ -905,6 +920,60 @@ function _region_mask(i, zseries, zbrain_masks, ants_transforms, rostral, dorsal
     # https://github.com/JuliaIO/MAT.jl/blob/3ed629c05f7261e86c0dde0869d265e99a265efb/src/MAT_HDF5.jl
     mask = sparse(reshape(mask,length(mask),1))
     name => mask
+end
+
+function save_region_masks_cmtk(region_mask_path, zseries, zbrain_masks, cmtk_transform_path;
+    nprocs=10, rostral=:right, dorsal=:up
+)
+    H, W, Z = size(zseries)
+    zseries_path = joinpath(tmppath, ANTsRegistration.write_nrrd(zseries))
+    mask_names = zbrain_masks["MaskDatabaseNames"]
+    # nMasks = 2
+    nMasks = length(mask_names)
+    region_outline_path = replace(region_mask_path ,"region_masks.h5" =>"region_outlines.h5")
+    
+    n = nMasks
+    @warn "running on one... FIXME"
+    # for type in [:mask, :outline]
+    for type in [:outline]
+        if type == :mask
+            h5 = h5open(region_mask_path, "w")
+        elseif type == :outline
+            h5 = h5open(region_outline_path, "w")
+        end
+        h5["size"] = [H, W, Z]
+
+        @showprogress for i in 1:nMasks
+            name, data = _region_mask_cmtk(i, zseries_path, zbrain_masks, cmtk_transform_path,
+                rostral, dorsal; type=type)
+            if length(data.nzval) == 0
+                # all zero
+                h5[name] = 0
+            else
+                H5SparseMatrixCSC(h5, name, data)
+            end
+        end
+    end
+    nothing
+end
+
+function _region_mask_cmtk(i, zseries_path, zbrain_masks, cmtk_transform_path, rostral, dorsal;
+    type=:mask
+)
+    # get rid of `/` so not interpreted as a h5 path
+    name = replace(zbrain_masks["MaskDatabaseNames"][i], "/" => "_")
+
+    mask = read_mask(zbrain_masks, i; rostral=rostral, dorsal=dorsal, type=type)
+    mask = AxisArray(Float32.(mask), AxisArrays.axes(mask))
+
+    # (first writing zseries to nrrd anyways so just pass path in)
+    mask = apply_cmtk_transform(zseries_path, mask, cmtk_transform_path)
+    mask = mask.data .> 0  # This thing visualizes correctly, so should be good
+
+    # TODO: or we could save as a .mat file for more standard format..?
+    # https://github.com/JuliaIO/MAT.jl/blob/3ed629c05f7261e86c0dde0869d265e99a265efb/src/MAT_HDF5.jl
+    mask = sparse(reshape(mask, length(mask), 1))
+    (name, mask)
 end
 
 function read_registered_mask(region_masks_h5, name)

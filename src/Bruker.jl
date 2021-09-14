@@ -23,7 +23,11 @@ function read_first_zaxis(xml::ETree, device="Z")
     parse(Float64, xml[xpath"""/PVScan/Sequence/Frame[1]/PVStateShard/PVStateValue[@key="positionCurrent"]/SubindexedValues[@index="ZAxis"]/SubindexedValue[@description="$device"]/@value"""][1])
 end
 
-"Return z-plane of Z or ETL for all frames in sequence."
+"""Return z-plane of Z or ETL for all frames in sequence.
+
+PV seems to drop Z from final frame, so may return one short...
+
+If z-axis was teared / zero-ed after tseries, could be off.."""
 function read_all_zaxis(xml::ETree, device="Z")
     parse.(Float64, xml[xpath"""/PVScan/Sequence/Frame/PVStateShard/PVStateValue[@key="positionCurrent"]/SubindexedValues[@index="ZAxis"]/SubindexedValue[@description="$device"]/@value"""])
 end

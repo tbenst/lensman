@@ -52,8 +52,13 @@ end
 
 "Read (sparse) mask from Zbrain atlas and reshape to dense Array."
 function read_mask(masks, idx::Int; W=621, H=1406, Z=138, units=zbrain_units,
-        rostral=:left, dorsal=:down)
-    zbrain_vec2mat(masks["MaskDatabase"][:,idx];
+        rostral=:left, dorsal=:down, type=:mask)
+    if type == :mask
+        key = "MaskDatabase"
+    elseif type == :outline
+        key = "MaskDatabaseOutlines"
+    end
+    zbrain_vec2mat(masks[key][:,idx];
         W=W, H=H, Z=Z, units=units, rostral=rostral,dorsal=dorsal)
 end
 
@@ -135,6 +140,35 @@ function antsApplyTransforms(fixedPath::String, movingPath::String, transformPat
         ants_path = "/opt/ANTs/install/bin/antsApplyTransforms")
     run(`$ants_path --float -d 3 -i $movingPath -r $fixedPath -t $transformPath2 -t $transformPath1 -o $maskoutname`)
     niread(maskoutname)
+end
+
+
+function apply_cmtk_transform(fixed_path::String, moving::AxisArray, transform_path::String)
+    moving_path = joinpath(tmppath, ANTsRegistration.write_nrrd(moving))
+    println("Wrote to '$moving_path'")
+    result = apply_cmtk_transform(fixed_path, moving_path, transform_path)
+    rm(moving_path)
+    result
+end
+
+
+function apply_cmtk_transform(fixed_path::String, moving_path::String, transform_path::String)
+    mask_out_name = joinpath(tmppath, ANTsRegistration.randstring(10) * ".nrrd")
+    println("Will save warped mask to '$mask_out_name'")
+    result = apply_cmtk_transform(fixed_path, moving_path, transform_path, mask_out_name)
+    rm(mask_out_name)
+    result
+end
+
+function apply_cmtk_transform(fixed_path::String, moving_path::String, transform_path::String, mask_out_name::String,
+        cmtk_path = "/home/allan/applications/cmtk-3.3.1p2/build/bin/cmtk")
+    # run(`$ants_path --float -d 3 -i $movingPath -r $fixedPath -t $transformPath -o $maskoutname`)
+
+    # Example: cmtk reformatx -v -o warped_full_new.nrrd --floating zbrain_h2b.nrrd zseries.nrrd warp_out.xform
+    # NOTE: in command line always using zbrain_h2b as `--floating`, so following that here
+    run(`$cmtk_path reformatx -v -o $mask_out_name --floating $moving_path $fixed_path $transform_path`)
+
+    load(mask_out_name)
 end
 
 "Tranform all 4 channels from e.g. Olympus."
@@ -1002,7 +1036,7 @@ end
 ez_gamma(x,gamma=0.5) = adjust_histogram(imadjustintensity(x), GammaCorrection(gamma))
 
 # TODO: is there a better pattern to auto wrap..?
-mutual_information(A,B) = py_utils.mutual_information(A,B)
+mutual_information(A,B; bins=20) = py_utils.mutual_information(A,B; bins=bins)
 
 # sadly, the below pattern will throw an error
 # transparent_cmap = py_utils.transparent_cmap
