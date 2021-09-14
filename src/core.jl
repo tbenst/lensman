@@ -53,13 +53,15 @@ end
 "Read (sparse) mask from Zbrain atlas and reshape to dense Array."
 function read_mask(masks, idx::Int; W=621, H=1406, Z=138, units=zbrain_units,
         rostral=:left, dorsal=:down, type=:mask)
-    if type == :mask
-        key = "MaskDatabase"
-    elseif type == :outline
-        key = "MaskDatabaseOutlines"
-    end
-    zbrain_vec2mat(masks[key][:,idx];
+    mat = zbrain_vec2mat(masks[key][:,idx];
         W=W, H=H, Z=Z, units=units, rostral=rostral,dorsal=dorsal)
+
+    if type == :mask
+        mat
+    elseif type == :outline
+        morphogradient(dilate(mat))
+    end
+
 end
 
 function read_mask(masks, names::AbstractString; kwargs...)

@@ -409,12 +409,7 @@ function read_first_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_pla
     #     name)[:,:,imaging2zseries_plane];
 
     mask = nothing
-    try
-        mask = read_registered_mask(region_masks_h5, name)[:, :, imaging2zseries_plane]
-    catch e
-        println("We have a problem")
-    end
-    
+    mask = read_registered_mask(region_masks_h5, name)[:, :, imaging2zseries_plane]
     name, mask
 end
 

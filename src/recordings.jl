@@ -23,7 +23,8 @@ DEFAULT_RECORDING_SETTINGS = Dict(
         "/mnt/deissero/users/tyler/b115/SLM_files",
         "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/",
         "/mnt/deissero/users/tyler/b115/SLM_files/",
-        "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/"
+        "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/",
+        "/data/b115/SLM_files"
     ],
     :rel_analysis_dir => "raw",
     :tseries_dset => nothing, # if nothing, use raw tiffs

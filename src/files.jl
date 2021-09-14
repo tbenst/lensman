@@ -933,17 +933,21 @@ function save_region_masks_cmtk(region_mask_path, zseries, zbrain_masks, cmtk_tr
     region_outline_path = replace(region_mask_path ,"region_masks.h5" =>"region_outlines.h5")
     
     n = nMasks
-    @warn "running on one... FIXME"
     # for type in [:mask, :outline]
-    for type in [:outline]
+    # for type in [:outline]
+    # we use morphogradient instead of outline as cleaner 1px line
+    for type in [:mask]
         if type == :mask
             h5 = h5open(region_mask_path, "w")
+            N = nMasks
         elseif type == :outline
             h5 = h5open(region_outline_path, "w")
+            @warn "missing 2 outlines for Left/Right Hemisphere"
+            N = nMasks - 2
         end
         h5["size"] = [H, W, Z]
 
-        @showprogress for i in 1:nMasks
+        @showprogress for i in 1:N
             name, data = _region_mask_cmtk(i, zseries_path, zbrain_masks, cmtk_transform_path,
                 rostral, dorsal; type=type)
             if length(data.nzval) == 0
