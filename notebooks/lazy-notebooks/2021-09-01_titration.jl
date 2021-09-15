@@ -1,6 +1,6 @@
-ENV["DISPLAY"] = "localhost:11"
+ENV["DISPLAY"] = "localhost:12"
 ##
-using ImageView
+# using ImageView
 using Lensman, Images, Glob, NPZ, PyCall, DataFrames, ImageSegmentation, 
       Random, Gadfly, Statistics, PyCall, ProgressMeter, HDF5, Distributed,
       Unitful
@@ -31,25 +31,25 @@ L = Lensman
 matplotlib.rcParams["font.sans-serif"] = ["Arial", "sans-serif"]
 
 init_workers()
-##
 resources = Resources();
+##
 r = Recordings[
     # "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
     # "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
     "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
 ](;resources...,
-    # window_secs=10,
-    # tseries_read_strategy = :lazy_tiff,
-    # tseries_read_strategy = :hwzt,
-    tseries_read_strategy = :lazy_hwzt,
-    tyh5_path="/data/dlab/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123_kalman.h5",
-    tseries_dset=nothing
+    # LSTM tyh5 looks best
+    # tseries_read_strategy = :lazy_hwzt,
+    # tyh5_path="/data/dlab/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123_kalman.h5",
+    # tseries_dset=nothing
 );
 ##
 @pun (vol_rate, window_len, recording_folder, fish_name,
     exp_name, tseriesZ, tseriesW, cells, exp_date, plot_dir, nStimuli,
     window_len, etl_vals, stim_end_idx, stim_start_idx, nstim_pulses, window_secs,
-    tseries, fish_dir, tseries_read_strategy, tseries_units, lateral_unit
+    tseries, fish_dir, tseries_read_strategy, tseries_units, lateral_unit,
+    region_masks_h5, zbrain_mask_names, imaging2zseries_plane, tseriesH, tseriesW,
+    target_groups, zseries, tseries, tseriesT
 ) = r;
 @show nstim_pulses
 @assert nstim_pulses == 10
@@ -97,10 +97,10 @@ size(trial_average)
 imap = influence_map(trial_average, window_len);
 sum(imap, dims=[1,2,3])[1,1,1,:]
 ##
-imshow(imap)
+# imshow(imap)
 ##
 s = stim_start_idx[1]
-imshow(shift_every_other_row(tseries[:,:,:,s-10:s+15],-3))
+# imshow(shift_every_other_row(tseries[:,:,:,s-10:s+15],-3))
 ##
 ##
 targetSizePx = spiral_size(exp_date, lateral_unit)
@@ -182,8 +182,39 @@ for stimNum in 16:nStimuli
 end
 fig
 
+## brain region outlines
+REGION_LIST = [
+    # "Cerebellum"
+    # "Rhombencephalon - Gad1b Cluster 1"
+    # "Rhombencephalon - Gad1b Cluster 16"
+    # "Rhombencephalon - Gad1b Cluster 2"
+    # "Glyt2 Cluster 12"
+    # "Glyt2 Stripe 3"
+    # "Habenula"
+    # "Tectum Stratum Periventriculare"
+    # "Raphe - Superior"
+    # "Subpallial Gad1b cluster"
+    "Rhombencephalon -"
+    "Mesencephalon -"
+    # "Telencephalon -"
+    # "Diencephalon -" # we will manually draw
+]
+region_masks = [L.read_first_mask(region_masks_h5, zbrain_mask_names,
+imaging2zseries_plane, region; outline=false) for region in REGION_LIST];
+# dilate on outside for thicker line
 
+##
+region_outlines = [dilate(L.mask2outline(L.unsalt_n_pepper(regm[2]; felz_min=5000)),[1,2])
+    for regm in region_masks];
+    # for regm in region_masks[[1]]];
+outlines = cat(region_outlines...,dims=4);
+outlines = maximum(outlines,dims=4)[:,:,:,1];
+small_outlines = imresize(outlines, (tseriesH, tseriesW, tseriesZ));
+Gray.(outlines[:,:,3])
+
+#################################
 ## Titration one-plane
+#################################
 figB = 1.6
 
 nStimuli = size(trial_average)[end-1]
@@ -224,7 +255,7 @@ nplots = 15
 
 # figW,figH = (figB*4, figB*4)
 # two-column width (mm)
-figB = Float64(uconvert(u"inch", 183u"mm") / 4u"inch")
+figB = Float64(uconvert(u"inch", (183-3)u"mm") / 4u"inch")
 figW,figH = (figB*4, figB*3)
 global fig = plt.figure(figsize=(figW,figH))
 fig, axs = plt.subplots(4,4, figsize=(figW,figH))
@@ -232,23 +263,42 @@ axs = permutedims(axs,(2,1))
 z = 3
 felz_k = 50
 felz_min = 10
-
+# show_outline = false
+no_df = false
+show_outline = true
+# no_df = true
+# yrange = 65:tseriesH-100
+yrange = 85:tseriesH-120
+# xrange = 60:tseriesW-90
+xrange = 40:tseriesW-70
 for s in 1:nStimuli
     ax = axs[s]
     im = df_f[:,:,z,s]
     im = opening_median(im)
     segments = felzenszwalb(im, felz_k, felz_min)
     im[segments.image_indexmap .== 1] .= 0
-    im = im[50:end-100,1:end-50]
+    im = im[yrange,xrange]
     # global cim = ax.imshow(df_f[50:end-100,1:end-50,z,s], cmap="RdBu_r",
     # global cim = ax.imshow(im, cmap="RdBu_r",
-    global cim = ax.imshow(im, cmap="viridis",
-        clim=(cmin,cmax), interpolation="none")
-        # norm=cnorm, interpolation="none")
+    if ~no_df 
+        global cim = ax.imshow(im, cmap="viridis",
+            clim=(cmin,cmax), interpolation="none")
+            # norm=cnorm, interpolation="none")
+    end
+    # ax.imshow(outlines[:,:,z], alpha=outlines[:,:,z])
     # global cim = ax.imshow(df_f[50:end-100,1:end-50,z,s], cmap="viridis", clim=(0.1,cmax))
     n = s*2
     # ax.set_title("$n cells")
     ax.set_axis_off()
+
+    # brain outline
+    # @show size(im), size(small_outlines[50:end-100,1:end-50])
+    outlines_to_show = small_outlines[yrange,xrange,z]
+    # outlines_to_show = small_outlines[:,:,z]
+    outlines_to_show = Float64.(outlines_to_show)
+    if show_outline
+        ax.imshow(outlines_to_show, alpha=outlines_to_show,cmap="binary_r")
+    end
 end
 
 # axs[1].imshow(stim_masks[:, :,z,stimNum], cmap="gray")
@@ -267,7 +317,7 @@ h = cbar.ax.set_ylabel("Δf/f",rotation=270,fontsize=7)
 # h.set_rotation = 180
 for (i,ax) in enumerate(axs)
     if i == 1
-        ax.text(5,40,"1 cell bilateral",fontsize=7, color="white")
+        ax.text(5,40,"1 target bilateral",fontsize=7, color="white")
     else
         ax.text(5,40,"$i",fontsize=7, color="white")
     end
@@ -280,18 +330,117 @@ scalebar1 = matscale.ScaleBar(um_per_px1, "um", length_fraction=0.18, box_alpha=
 axs[1].add_artist(scalebar1)
 
 # plotpath = joinpath(plot_dir,"$(analysis_name)_rdbu_titration_oneplane_df_f")
-plotpath = joinpath(plot_dir,"$(analysis_name)_viridis_medianfilt_titration_oneplane_df_f")
+if no_df & show_outline
+    plotpath = joinpath(plot_dir,"$(analysis_name)_outlined_titration_oneplane_df_f")
+elseif show_outline
+    plotpath = joinpath(plot_dir,"$(analysis_name)_viridis_medianfilt_outlined_titration_oneplane_df_f")
+else
+    plotpath = joinpath(plot_dir,"$(analysis_name)_viridis_medianfilt_titration_oneplane_df_f")
+end
 fig.savefig("$(plotpath).svg",
     dpi=300)
-    # bbox_inches="tight", pad_inches=0, dpi=300)
 fig.savefig(joinpath(plot_dir,"$(plotpath).png"),
     dpi=300)
-    # bbox_inches="tight", pad_inches=0, dpi=300)
 fig.savefig(joinpath(plot_dir,"$(plotpath).pdf"),
     dpi=300)
-    # bbox_inches="tight", pad_inches=0, dpi=300)
 @show plotpath*".svg"
-# fig
-
-# fig
 fig
+
+#################################
+## zoom-in on targeted cells
+#################################
+border = 5
+stim_z = unique(stim_cells.z)
+@assert length(stim_z) == 1
+stim_z = stim_z[1]
+stim_z = 5
+# xrange = (minimum(stim_cells.x)-border):(maximum(stim_cells.x)+border)
+# xrange = xrange .+ 5
+xrange = 360:425
+# yrange = (minimum(stim_cells.y)-border):(maximum(stim_cells.y)+border)
+# yrange = Int(floor(yrange[1] + (yrange[end] - yrange[1])/2) + 15) : yrange[end]
+yrange = 150:300
+# yrange = 241:303
+
+show_targets = false
+
+N = 16
+fig, axs = plt.subplots(2,8,figsize=(6,3))
+axs = permutedims(axs,[2,1])
+for i = 1:N
+    ax = axs[i]
+    stim_num = i
+    stim_cells = unique(cells[cells.stimNum .== stim_num,:], [:x,:y])
+    im = df_f[:,:,stim_z,stim_num]
+    im = L.unsalt_n_pepper(df_f[:,:,stim_z,stim_num])
+
+    ax.imshow(im[yrange,xrange],clim=(0,1.0))
+    for (x,y,targetZ) in eachrow(stim_cells)
+        cir_x = x - xrange[1]
+        cir_y = y - yrange[1]
+        circle = matplotlib.patches.Circle((cir_x,cir_y), targetSizePx/2,
+            color="red",
+            fill=false, lw=0.4)
+        ax.add_patch(circle)
+    end
+    ax.set_axis_off()
+end
+plt.tight_layout()
+
+plotpath = joinpath(plot_dir,"$(analysis_name)_titration_oneplane_df_f_hab_target_closeup")
+fig.savefig("$(plotpath).svg",
+    dpi=300)
+fig.savefig(joinpath(plot_dir,"$(plotpath).png"),
+    dpi=300)
+fig.savefig(joinpath(plot_dir,"$(plotpath).pdf"),
+    dpi=300)
+@show plotpath*".svg"
+
+fig
+
+
+
+# target_groups
+##
+tseries_subset = tseries[:,:,:,1:20:tseriesT];
+maxTproj = mapslices(x->quantile(x[:],0.90), tseries_subset,dims=4)[:,:,:,1];
+shifted_maxTproj = shift_every_other_row(maxTproj,-3);
+##
+fig, ax = plt.subplots()
+z_im = zseries[yrange .* 2,xrange .* 2,imaging2zseries_plane[5]];
+t_im = maxTproj[yrange,xrange,5];
+t_im_shift = shifted_maxTproj[yrange,xrange,5];
+# z_im = L.unsalt_n_pepper(z_im);
+# z_im = adjust_histogram(imadjustintensity(z_im), GammaCorrection(0.9))
+ax.imshow(z_im,cmap="Greys_r")
+# ax.imshow(t_im,cmap="Greys_r")
+# ax.imshow(t_im_shift,cmap="Greys_r")
+for (x,y,targetZ) in eachrow(stim_cells)
+    cir_x = x - xrange[1]
+    cir_y = y - yrange[1]
+    circle = matplotlib.patches.Circle((cir_x,cir_y), targetSizePx/2,
+        color="red",
+        fill=false, lw=0.4)
+    ax.add_patch(circle)
+end
+ax.set_axis_off()
+
+# plotpath = joinpath(plot_dir,"$(analysis_name)_titration_oneplane_shifted_gray_hab_target_closeup")
+plotpath = joinpath(plot_dir,"$(analysis_name)_titration_oneplane_zseries_gray_hab_target_closeup")
+fig.savefig("$(plotpath).svg",
+    dpi=300)
+fig.savefig(joinpath(plot_dir,"$(plotpath).png"),
+    dpi=300)
+fig.savefig(joinpath(plot_dir,"$(plotpath).pdf"),
+    dpi=300)
+@show plotpath
+fig
+##
+save(joinpath(fish_dir, "zseries_imaging_planes.tif"), zseries[:,:,imaging2zseries_plane])
+save(joinpath(fish_dir, "zseries.tif"), zseries)
+
+##
+dorsal_ventral = load(joinpath(fish_dir, "test_segs.nrrd"));
+sum(dorsal_ventral[:,:,32])
+Gray.(dorsal_ventral[:,:,32] .== 1) # dorsal
+Gray.(dorsal_ventral[:,:,45] .== 2) # ventral

@@ -17,7 +17,7 @@ function per_trial_regions_df(tseries::Array, window_len, stim_start_idx, stim_e
 end
 
 
-function per_trial_regions_df(tseries::LazyTy5, window_len, stim_start_idx, stim_end_idx, trial_order,
+function per_trial_regions_df(tseries::Union{LazyH5, LazyTy5}, window_len, stim_start_idx, stim_end_idx, trial_order,
     masks, region_names, stim_names=nothing
 )
     per_trial_regions_df(tseries.tyh5_path, tseries.dset_str, window_len, stim_start_idx, stim_end_idx,
@@ -33,7 +33,7 @@ function per_trial_regions_df(tyh5_path::AbstractString, tseries_dset::AbstractS
         stim_names = string.(collect(1:nStimuli))
     end
 
-    df = @sync @distributed vcat for i in 1:nTrials
+    df = @showprogress @distributed vcat for i in 1:nTrials
         start_idx, end_idx = stim_start_idx[i], stim_end_idx[i]
         stim_name = stim_names[trial_order[i]]
         _proc_region_df_f(tyh5_path, tseries_dset, masks, region_names, stim_name,
@@ -117,11 +117,18 @@ function _proc_region_df_f(tyh5_path::AbstractString, tseries_dset::AbstractStri
         else
             hemisphere="unknown"
         end
-        df = vcat(df, DataFrame("Δf/f"=>region_response,
-            "region"=>region_name,
-            "stim"=>stim_name,
-            "trial"=>trial,
-            "hemisphere"=>hemisphere))
+       df = vcat(
+            df, 
+            DataFrame(
+                "Δf/f" => region_response,
+                "f" => region_f,
+                "f0" => region_f0,
+                "area" => sum(mask),  # number of voxels averaged over
+                "region" => region_name,
+                "stim" => stim_name,  # number, e.g. "1" when `stim_names` not passed into `per_trial_regions_df`
+                "trial" => trial,
+                "hemisphere" => hemisphere)
+        )
     end
     df
 end
@@ -148,11 +155,18 @@ function _proc_region_df_f(tseries::Array, masks, region_names, stim_name,
         else
             hemisphere="unknown"
         end
-        df = vcat(df, DataFrame("Δf/f"=>region_response,
-            "region"=>region_name,
-            "stim"=>stim_name,
-            "trial"=>trial,
-            "hemisphere"=>hemisphere))
+       df = vcat(
+            df, 
+            DataFrame(
+                "Δf/f" => region_response,
+                "f" => region_f,
+                "f0" => region_f0,
+                "area" => sum(mask),  # number of voxels averaged over
+                "region" => region_name,
+                "stim" => stim_name,  # number, e.g. "1" when `stim_names` not passed into `per_trial_regions_df`
+                "trial" => trial,
+                "hemisphere" => hemisphere)
+        )
     end
     df
 end
@@ -201,18 +215,20 @@ function add_period_to_df(df)
     df[!,:period] = ["" for _ in 1:size(df,1)];
     @assert maximum(df[!,:stim]) == 16
     for s in 1:16
-        if s <= 6
-            p = "early"
+        if s <= 1
+            p = "1"
+        elseif s <= 6
+            p = "2-6"
         elseif s <= 11
-            p = "mid"
+            p = "7-11"
         else
-            p = "late"
+            p = "12-16"
         end
         idxs = df[!, :stim] .== s
         df[idxs,:period] .= p
     end
     catarr = CategoricalArray(df[!,:period], ordered=true)
-    levels!(catarr, ["early", "mid", "late"])
+    levels!(catarr, ["1", "2-6", "7-11", "12-16"])
     df[!,:period] = catarr
     df
 end

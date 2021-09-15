@@ -4,6 +4,7 @@ Resources(;nodes...) = update_resource_dag(
 # Recording(uri, settings) = Recording(uri, settings, dictsrv(Dict()))
 DEFAULT_RESOURCE_SETTINGS = Dict(
     :zbrain_dir => "/mnt/deissero/users/tyler/zbrain",
+    # :zbrain_dir => "/data/dlab/atlas/zbrain-from-oak/",
     :zbrain_units => (0.798μm, 0.798μm, 2μm),
 )
 

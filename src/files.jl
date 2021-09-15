@@ -980,15 +980,21 @@ function _region_mask_cmtk(i, zseries_path, zbrain_masks, cmtk_transform_path, r
     (name, mask)
 end
 
-function read_registered_mask(region_masks_h5, name)
+function read_registered_mask(region_masks_h5, name; outline=false)
     @show name
     shape = region_masks_h5["size"][:]
-    reshape(
+    ret = reshape(
         Array(sparse(H5SparseMatrixCSC(region_masks_h5, name))),
         # TODO benchmark
         # collect(sparse(H5SparseMatrixCSC(region_masks_h5, name))),
         shape...
     )
+    if outline
+        # only on XY dim
+        return morphogradient(dilate(rm,[1,2]), [1,2])
+    else
+        return ret
+    end        
 end
 
 """Read all zbrain masks into sparse arrays.

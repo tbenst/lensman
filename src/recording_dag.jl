@@ -146,6 +146,7 @@ function update_recording_dag(recording::DAG)
         twp1 = mapTargetGroupsToPlane(target_groups, etl_vals,
             is1024=tseries_is1024, zOffset=zOffset)
         targets_with_plane_index = map(x -> Int.(round.(x, digits=0)), twp1)
+        # TODO: this is returning an array for stimFreq...
         cells = makeCellsDF(targets_with_plane_index, stim_start_idx, stim_end_idx,
             trial_order, group_stim_freq)
         # lateral_unit = microscope_lateral_unit(tseriesW)
@@ -172,18 +173,26 @@ function update_recording_dag(recording::DAG)
         zbrain_warpedname = glob_one_file("*Warped.nii.gz", fish_dir; nofail=true)
 
         # checkpoint for `zbrain_registered`
-        zbrain_restore = niread(zbrain_warpedname)
+        zbrain_restore_ants = niread(zbrain_warpedname)
         b_run = registration_type != :dont_run
-        _zbrain_registered = ants_register(zseries, h2b_zbrain;
+        _zbrain_registered_ants = ants_register(zseries, h2b_zbrain;
             interpolation="WelchWindowedSinc", histmatch=0,
             sampling_frac=0.25, maxiter=200, threshold=1e-8,
             use_syn=false, synThreshold=1e-7, synMaxIter=200,
             save_dir=fish_dir, run=b_run)
             # use_syn = true, synThreshold = 1e-7, synMaxIter = 200,
             # save_dir=fish_dir, dont_run = true)
+        _zbrain_registered_cmtk = error("not implemented _zbrain_registered_cmtk")
+        zbrain_restore_cmtk = "not nothing"
         # TODO: this does force potentially unecessary read of zbrain_registered
     end
-    zbrain_registered = Checkpointable(_zbrain_registered, zbrain_restore)
+    if region_mask_strategy==:cmtk
+        zbrain_registered = Checkpointable(_zbrain_registered_cmtk, zbrain_restore_cmtk)
+    elseif region_mask_strategy==:ants
+        zbrain_registered = Checkpointable(_zbrain_registered_ants, zbrain_restore_ants)
+    else
+        error("unknown region_mask_strategy: $(region_mask_strategy)")
+    end
     trial_average = Checkpointable(_trial_average, trial_average_restore)
 
     @reversible begin
@@ -213,13 +222,10 @@ function update_recording_dag(recording::DAG)
             mm_transform_affine, mm_transform_SyN)
         region_mask_path = parentof(zbrain_registered, joinpath(fish_dir, "region_masks.h5"))
         region_mask_dir = joinpath(fish_dir, "region_masks")
-        region_masks_h5 = if isfile(region_mask_path)
-            h5open(region_mask_path, "r", swmr=true)
-        else
-            save_region_masks(region_mask_path, zseries, zbrain_masks,
-                zbrain_transforms;
-                rostral=rostral, dorsal=dorsal, method=region_mask_strategy)
-        end
+        _restore_region_masks_h5 = h5open(region_mask_path, "r", swmr=true)
+        _calc_region_masks_h5 = save_region_masks(region_mask_path, zseries, zbrain_masks,
+            zbrain_transforms;
+            rostral=rostral, dorsal=dorsal, method=region_mask_strategy)
 
         sdict = read_suite2p(suite2p_dir)
         nCells = getindex(sdict, :nCells)
@@ -229,8 +235,8 @@ function update_recording_dag(recording::DAG)
 
         # targetsWithPlaneIndex = mapTargetGroupsToPlane(target_groups, etl_vals; is1024=(tseriesW==1024), zOffset=zOffset)
         # assigned all above
-
     end
+    region_masks_h5 = Checkpointable(_calc_region_masks_h5, _restore_region_masks_h5)
     # zbrain_registered = Checkpointable(zbrain_registered, zbrain_restore, noop)
     # if slm_num == 1
     #     slmpower_per_cell = @lazy slm1Power * power_per_cell / 1000
@@ -261,7 +267,7 @@ function update_recording_dag(recording::DAG)
         mm_transform_affine, mm_transform_SyN, zbrain_transforms,
         region_mask_path, zbrain_masks, region_masks_h5, zbrain_mask_names,
         nCells, cell_centers, cells_mask, iscell, cells_df_f, s2p_cell_masks, 
-        zbrain_restore, _zbrain_registered, multimap_920, multimap_820, multimap_ants_cmd,
+        multimap_920, multimap_820, multimap_ants_cmd,
         ttl_starts, artifacts, tseries_units, zseries_units, trial_average_path,
         trial_average_dset
     )
@@ -403,21 +409,32 @@ function read_rec_xml(recording_dir)
     read_xml(xmlPath)
 end
 
-function read_first_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_plane, mask_name)
+function read_first_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_plane, mask_name;
+        outline=false
+)
     name = zbrain_mask_names[occursin.(mask_name, zbrain_mask_names)][1]
     # name, read_registered_mask(region_masks_h5,
     #     name)[:,:,imaging2zseries_plane];
 
-    mask = nothing
-    mask = read_registered_mask(region_masks_h5, name)[:, :, imaging2zseries_plane]
+    mask = read_registered_mask(region_masks_h5, name; outline=outline)[:, :, imaging2zseries_plane]
     name, mask
+end
+
+function try_read_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_plane, mask_name;
+        outline=false
+)
+    try
+        return read_registered_mask(region_masks_h5, mask_name; outline=outline)[:, :, imaging2zseries_plane]
+    catch
+        return nothing
+    end
 end
 
 function read_matching_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_plane, mask_name)
     names = zbrain_mask_names[occursin.(mask_name, zbrain_mask_names)]
     ret = nothing
     for name in names
-        new = read_registered_mask(region_masks_h5, name)[:,:,imaging2zseries_plane]
+        new = read_registered_mask(region_masks_h5, name; outline=outline)[:,:,imaging2zseries_plane]
         if isnothing(ret)
             ret = new
         else

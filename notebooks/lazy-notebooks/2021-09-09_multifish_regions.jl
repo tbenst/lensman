@@ -1,17 +1,93 @@
+# mostly, we use the previously saved .arrow files from osprey
+# but, we also supplement with dorsal/ventral habenula as defined by
+# center of mass
 ENV["DISPLAY"] = "localhost:11.0"
 ##
-using DataFrames, Statistics, Arrow, AlgebraOfGraphics, CairoMakie, StatsKit
+using DataFrames, Statistics, Arrow, AlgebraOfGraphics, CairoMakie, StatsKit, Makie
 Data = AlgebraOfGraphics.data
 aog = AlgebraOfGraphics
+using ImageView
 
 using Lensman, Images, Glob, NPZ, PyCall, DataFrames, ImageSegmentation, 
       Random, Statistics, PyCall, ProgressMeter, HDF5, Distributed,
-      Arrow, StatsBase, Unitful, HypothesisTests, GLM
+      Arrow, StatsBase, Unitful, HypothesisTests, GLM, MultipleTesting
 import PyPlot
 import Lensman: @pun, @assign
-
+L = Lensman
 fontsize_theme = Theme(fontsize = 7 * 300/72)
 set_theme!(fontsize_theme)
+init_workers()
+## we will add the dorsal / ventral habenula by splitting center of mass
+resources = Resources();
+##
+recording_2021_06_08_fish2_titration = Recordings[
+    "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+](;resources...);
+recording_2021_06_02_fish3_ipn = Recordings[
+    "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+](;resources...);
+##
+
+secondorder_names[1]
+
+function dorsal_ventral_hab_df(recording)
+    @pun (region_masks_h5, imaging2zseries_plane, zbrain_mask_names,
+        tseries, window_len,
+        stim_start_idx, stim_end_idx,
+        trial_order, tseriesH, tseriesW, tseriesZ
+
+    ) = recording;
+
+    habenula_name, habenula = L.read_first_mask(region_masks_h5, zbrain_mask_names,
+        imaging2zseries_plane,"Habenula")
+    lhemisphere_name, lhemisphere = L.read_first_mask(region_masks_h5, zbrain_mask_names,
+        imaging2zseries_plane,"Left hemisphere")
+    rhemisphere_name, rhemisphere = L.read_first_mask(region_masks_h5, zbrain_mask_names,
+        imaging2zseries_plane,"Right hemisphere")
+
+    hab = read_registered_mask(region_masks_h5, habenula_name);
+    left_hemi = read_registered_mask(region_masks_h5, "Left hemisphere");
+    right_hemi = read_registered_mask(region_masks_h5, "Right hemisphere");
+
+        
+    prof = sum(hab,dims=[1,2])[1,1,:]
+    cumprof = cumsum(prof)
+    halfway = searchsortedfirst(cumprof, cumprof[end] / 2)
+
+
+    # ymax = maximum(prof)
+    # df2 = (z=[halfway, halfway], area=[0, ymax])
+    # fig = Figure()
+    # ax = Makie.Axis(fig[1, 1], title="dorsal/ventral hab cutoff")
+    # p1 = (aog.data((z=1:length(prof), area=prof)) + aog.data(df2) ) * mapping(:z, :area)* visual(Lines)
+    # aog.draw!(fig[1,1], p1)
+    # fig
+    dorsal_hab = copy(hab)
+    ventral_hab = copy(hab)
+    dorsal_hab[:,:,halfway+1:end] .= false
+    ventral_hab[:,:,1:halfway] .= false
+    # im = RGB.(dorsal_hab)
+    # channelview(im)[[2,3],:,:,:] .= 0
+    # channelview(im)[2,:,:,:] = ventral_hab
+    # imshow(im)
+    masks = [dorsal_hab .& left_hemi, dorsal_hab .& right_hemi,
+        ventral_hab .& left_hemi, ventral_hab .& right_hemi]
+    masks = map(m->imresize(m, tseriesH, tseriesW, tseriesZ) .> 0, masks);
+    region_names = ["left Diencephalon - Dorsal Habenula", "right Diencephalon - Dorsal Habenula",
+        "left Diencephalon - Ventral Habenula", "right Diencephalon - Ventral Habenula"]
+    regions_df = L.per_trial_regions_df(
+        tseries, window_len,
+        stim_start_idx, stim_end_idx,
+        # ss, se,
+        trial_order, masks, region_names);
+    return regions_df
+end
+dorsal_ventral_hab_df_2021_06_08_fish2_titration = dorsal_ventral_hab_df(recording_2021_06_08_fish2_titration)
+dorsal_ventral_hab_df_2021_06_08_fish2_titration[:,:uri] .= "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+dorsal_ventral_hab_df_2021_06_02_fish3_ipn = dorsal_ventral_hab_df(recording_2021_06_02_fish3_ipn)
+dorsal_ventral_hab_df_2021_06_02_fish3_ipn[:,:uri] .= "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
+@assert length(unique(dorsal_ventral_hab_df_2021_06_08_fish2_titration.stim)) == 16
+@assert length(unique(dorsal_ventral_hab_df_2021_06_02_fish3_ipn.stim)) == 3
 ##
 # rsync -mrltvP --include "*kalman/regions_df.arrow" --include "*/" --exclude "*" osprey:/scratch/allan/b115/ .
 
@@ -43,13 +119,18 @@ root_dir = "/data/dlab/b115"
 df = DataFrame()
 for (p,r) in zip(arrow_paths, recording_names)
     rdf = Arrow.Table(joinpath(root_dir, p)) |> DataFrame
-    rdf[:,:uri] .= r
+    rdf[:,:uri] .= replace(r, "2021-06-01_rsChRmine_h2b6s" => "2021-06-02_rsChRmine-h2b6s")
     df = vcat(df,rdf)
 end
+
+df = vcat(df, dorsal_ventral_hab_df_2021_06_08_fish2_titration,
+    dorsal_ventral_hab_df_2021_06_02_fish3_ipn)
 if typeof(df.stim[1]) == String
     df[!,:stim] = parse.(Int,df.stim)
 end;
 df = Lensman.add_major_regions_to_df(df)
+df = Lensman.rename_regions_in_df(df)
+df[df.subregion .== "Tectum Stratum Periventriculare",:subregion] .= "Optic Tectum"
 # julia> names(df)
 # 9-element Vector{String}:
 #  "Δf/f"
@@ -89,10 +170,12 @@ REGION_LIST = [
     # "Tectum Stratum Periventriculare",
     "Optic Tectum",
     "Cerebellum",
-    "Habenula",
+    # "Habenula",
+    "Dorsal Habenula",
+    "Ventral Habenula",
     "Raphe - Superior",
     # "Raphe - Inferior",
-    "Rhombomere 1",
+    # "Rhombomere 1",
     # "Rhombomere 2",
     # "Rhombomere 3",
     # "Rhombomere 4",
@@ -109,11 +192,15 @@ REGION_LIST = [
 numcol = 3
 
 # TODO write abstraction for this for any num arguments to pass through
-function quick_mean_sem(df_f, region, subregion, period)
+function quick_mean_sem(df_f)
     DataFrame("Δf/f"=>mean(df_f), "sem"=>sem(df_f),
-    "plus_sem"=>Lensman.plus_sem(df_f), "minus_sem"=>Lensman.minus_sem(df_f),
-    "region"=>region,"period"=>period, "subregion"=>subregion)
+    "plus_sem"=>Lensman.plus_sem(df_f), "minus_sem"=>Lensman.minus_sem(df_f))
 end
+# function quick_mean_sem(df_f, region, subregion, period)
+#     DataFrame("Δf/f"=>mean(df_f), "sem"=>sem(df_f),
+#     "plus_sem"=>Lensman.plus_sem(df_f), "minus_sem"=>Lensman.minus_sem(df_f),
+#     "region"=>region,"period"=>period, "subregion"=>subregion)
+# end
 
 ## Second-order proj field mapping all brain regions
 second_order_uri = secondorder_names[1]
@@ -137,7 +224,7 @@ for (ii,major) in enumerate(major_regions)
     j = remainder + 1
     pdf = filter(r->r["major region"] == major, plot_df)
     pdf = combine(groupby(pdf, [:region,Symbol("stim target")]),
-        [Symbol("Δf/f"), :region, Symbol("stim target")]=>quick_mean_sem=>AsTable)
+        Symbol("Δf/f")=>quick_mean_sem=>AsTable; keepkeys=true)
     # https://discourse.julialang.org/t/makie-errorbars-for-grouped-bar-graphs/62361/7
     # p1 = Data(pdf) * visual(BarPlot) *
     #     mapping(:region, "Δf/f", color="stim target", dodge="stim target")
@@ -180,11 +267,11 @@ H = mm2px(H)
 
 fig = Figure(resolution=(W, H))
 pdf = combine(groupby(plot_df, [:region,:subregion, Symbol("stim target")]),
-    [Symbol("Δf/f"), :region, Symbol("stim target")]=>quick_mean_sem=>AsTable)
+    Symbol("Δf/f")=>quick_mean_sem=>AsTable, keepkeys=true)
 pdf[pdf.subregion .== "Tectum Stratum Periventriculare",:subregion] .= "Optic Tectum"
-pdf = filter(row -> row.region in REGION_LIST, pdf)
+pdf = filter(row -> row.subregion in REGION_LIST, pdf)
 for region in REGION_LIST
-    @assert sum(pdf.region .== region) > 0 region
+    @assert sum(pdf.subregion .== region) > 0 region
 end
 
 p2 = Data(pdf) * visual(CrossBar) *
@@ -200,13 +287,16 @@ save(ppath*".svg", fig, pt_per_unit=pt_per_unit)
 save(ppath*".pdf", fig, pt_per_unit=pt_per_unit)
 fig
 
+####################################
 ## Titration barplot
+####################################
 # only 3 stimuli...?
 # uri = "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062"
-uri = "2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-titration-192trial-070"
-# uri = "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+# uri = "2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-titration-192trial-070"
+uri = "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
 titration_plot_df = filter(row->row.uri == uri,
     region_df);
+
 titration_plot_df = Lensman.add_period_to_df(titration_plot_df);
 titration_plot_df = filter(row->row.uri == uri,
     titration_plot_df);
@@ -247,7 +337,7 @@ for (ii,major) in enumerate(sort(major_regions))
     j = remainder + 1
     pdf = filter(r->r["major region"] == major, titration_plot_df)
     pdf = combine(groupby(pdf, [:subregion,:period]),
-        [Symbol("Δf/f"), :subregion, :period]=>quick_mean_sem=>AsTable)
+        Symbol("Δf/f")=>quick_mean_sem=>AsTable, keepkeys=true)
     # https://discourse.julialang.org/t/makie-errorbars-for-grouped-bar-graphs/62361/7
     # p1 = Data(pdf) * visual(BarPlot) *
     #     mapping(:subregion, "Δf/f", color=:period, dodge=:period)
@@ -280,7 +370,9 @@ save(ppath*".svg", fig)
 save(ppath*".pdf", fig)
 fig
 
+####################################
 ## Titration select regions
+####################################
 W = 183u"mm" / 1.5
 # W = 183u"mm" / 2
 H = 57u"mm"
@@ -290,21 +382,21 @@ mm2px = mm->Int(round(uconvert(u"inch", mm) * dpi / 1u"inch"))
 @show H = mm2px(H)
 fig = Figure(resolution=(W, H))
 
-pdf = combine(groupby(titration_plot_df, [:region,:period]),
-    [Symbol("Δf/f"), :region, :subregion, :period]=>quick_mean_sem=>AsTable)
+pdf = combine(groupby(titration_plot_df, [:region,:period, :subregion]),
+    Symbol("Δf/f")=>quick_mean_sem=>AsTable)
 
 pdf[pdf.subregion .== "Tectum Stratum Periventriculare",:subregion] .= "Optic Tectum"
 pdf = filter(row -> row.subregion in REGION_LIST, pdf)
 @warn "we initially chose subregions so no collisions; could erroneously combine subregions if violated"
-pdf.period .= replace.(Array(pdf.period), "early" => "1-6")
-pdf.period .= replace.(Array(pdf.period), "mid" => "7-11")
-pdf.period .= replace.(Array(pdf.period), "late" => "12-16")
+# pdf.period .= replace.(Array(pdf.period), "early" => "1-6")
+# pdf.period .= replace.(Array(pdf.period), "mid" => "7-11")
+# pdf.period .= replace.(Array(pdf.period), "late" => "12-16")
 rename!(pdf, "period" => "# bilateral\ncell stim")
 period = "# bilateral\ncell stim"
 p2 = Data(pdf) * visual(CrossBar, width=0.5) *
     mapping(:subregion, "Δf/f", "minus_sem", "plus_sem", color=period, dodge=period)
 
-colors = colormap("Blues",4)[2:4]
+colors = colormap("Blues",5)[2:5]
 grid = aog.draw!(fig, p2, axis=(xticklabelrotation = pi / 5.5,),palettes=(color=colors,))
 legend!(fig[1,end + 1], grid)
 ppath = joinpath(plot_dir,
@@ -319,11 +411,11 @@ save(ppath*".pdf", fig, pt_per_unit=pt_per_unit)
 fig
 
 ## ANOVA
-periods = ["1-6", "7-11", "12-16"]
+periods = ["1", "2-6", "7-11", "12-16"]
 region_names = unique(titration_plot_df[!,:region])
 pvals = map(region_names) do region
     groups = [Float64.(filter(r->(string(r[:period]) == p) && (r.region == region), titration_plot_df)[:,"Δf/f"])
-        for p in ["early", "mid", "late"]]
+        for p in periods]
     # KW = KruskalWallisTest(groups...)
     # pvalue(KW)
 
@@ -339,27 +431,32 @@ pvals = map(region_names) do region
     F = ftest(nullModel.model, doseModel.model);
     F.pval[2]
 end
-bonferoni_p5 = 0.05 / length(pvals)
-bonferoni_p1 = 0.01 / length(pvals)
-significant5 = pvals .< bonferoni_p5
-significant1 = pvals .< bonferoni_p1
+##
+# corrected_pvals = MultipleTesting.adjust(pvals, Bonferroni())
+corrected_pvals = MultipleTesting.adjust(pvals, BenjaminiHochbergAdaptive())
+
+significant5 = corrected_pvals .< 0.05
+significant1 = corrected_pvals .< 0.01
+# bonferoni_p5 = 0.05 / length(pvals)
+# bonferoni_p1 = 0.01 / length(pvals)
+# significant5 = pvals .< bonferoni_p5
+# significant1 = pvals .< bonferoni_p1
+
+
 println("=====Significant at p=0.05: $(sum(significant5))/$(length(pvals))=====")
 for n in sort(region_names[significant5]); println(n); end
 println("=====Significant at p=0.01: $(sum(significant1))/$(length(pvals))=====")
 for n in sort(region_names[significant1]); println(n); end
+
 # see output at bottom
 
-##
-
-uri
-
 ## for 2021-06-08 titration fish
-=====Significant at p=0.05: 41/157=====
+=====Significant at p=0.05: 60/159=====
 Diencephalon -
 Diencephalon - Anterior pretectum cluster of vmat2 Neurons
+Diencephalon - Dorsal Habenula
 Diencephalon - Dorsal Thalamus
 Diencephalon - Habenula
-Diencephalon - Migrated Area of the Pretectum (M1)
 Diencephalon - Olig2 Band
 Diencephalon - Olig2 Band 2
 Diencephalon - Pineal
@@ -367,28 +464,47 @@ Diencephalon - Pineal Vmat2 cluster
 Diencephalon - Pretectal Gad1b Cluster
 Diencephalon - Pretectal dopaminergic cluster
 Diencephalon - Pretectum
+Diencephalon - Ventral Habenula
 Diencephalon - Ventral Thalamus
+Ganglia - Eyes
+Ganglia - Lateral Line Neuromast SO3
 Mesencephalon -
+Mesencephalon - Medial Tectal Band
 Mesencephalon - Oculomotor Nucleus nIII
 Mesencephalon - Otpb Cluster
 Mesencephalon - Oxtl Cluster Sparse
-Mesencephalon - Retinal Arborization Field 8 (AF8)
+Mesencephalon - Ptf1a Cluster
+Mesencephalon - Retinal Arborization Field 7 (AF7)
 Mesencephalon - Retinal Arborization Field 9 (AF9)
+Mesencephalon - Sparse 6.7FRhcrtR cluster
 Mesencephalon - Tecum Neuropil
 Mesencephalon - Tegmentum
 Mesencephalon - Torus Longitudinalis
 Mesencephalon - Vglut2 cluster 1
+Rhombencephalon - Anterior Cluster of nV Trigeminal Motorneurons
+Rhombencephalon - Caudal Ventral Cluster Labelled by Spinal Backfills
+Rhombencephalon - Cerebellum
+Rhombencephalon - Cerebellum Gad1b Enriched Areas
+Rhombencephalon - Corpus Cerebelli
 Rhombencephalon - Gad1b Cluster 1
+Rhombencephalon - Gad1b Cluster 16
 Rhombencephalon - Gad1b Cluster 17
 Rhombencephalon - Gad1b Cluster 2
+Rhombencephalon - Gad1b Cluster 5
+Rhombencephalon - Glyt2 Cluster 5
 Rhombencephalon - Isl1 Cluster 1
 Rhombencephalon - Isl1 Cluster 2
 Rhombencephalon - Lobus caudalis cerebelli
 Rhombencephalon - Neuropil Region 6
-Rhombencephalon - Oculomotor Nucleus nIV
+Rhombencephalon - Olig2 enriched areas in cerebellum
 Rhombencephalon - Otpb Cluster 4
+Rhombencephalon - Raphe - Inferior
 Rhombencephalon - Raphe - Superior
+Rhombencephalon - Rhombomere 1
+Rhombencephalon - VII' Facial Motor and octavolateralis efferent neurons
 Rhombencephalon - Vglut2 cluster 1
+Rhombencephalon - Vglut2 cluster 3
+Rhombencephalon - Vmat2 Cluster 3
 Telencephalon -
 Telencephalon - Pallium
 Telencephalon - Subpallial Gad1b cluster
@@ -396,12 +512,12 @@ Telencephalon - Subpallial dopaminergic cluster
 Telencephalon - Subpallium
 Telencephalon - Vglut2 rind
 Telencephalon - Vmat2 cluster
-=====Significant at p=0.01: 38/157=====
+=====Significant at p=0.01: 45/159=====
 Diencephalon -
 Diencephalon - Anterior pretectum cluster of vmat2 Neurons
+Diencephalon - Dorsal Habenula
 Diencephalon - Dorsal Thalamus
 Diencephalon - Habenula
-Diencephalon - Migrated Area of the Pretectum (M1)
 Diencephalon - Olig2 Band
 Diencephalon - Olig2 Band 2
 Diencephalon - Pineal
@@ -409,26 +525,33 @@ Diencephalon - Pineal Vmat2 cluster
 Diencephalon - Pretectal Gad1b Cluster
 Diencephalon - Pretectal dopaminergic cluster
 Diencephalon - Pretectum
+Diencephalon - Ventral Habenula
 Diencephalon - Ventral Thalamus
 Mesencephalon -
-Mesencephalon - Oculomotor Nucleus nIII
-Mesencephalon - Otpb Cluster
+Mesencephalon - Medial Tectal Band
 Mesencephalon - Oxtl Cluster Sparse
-Mesencephalon - Retinal Arborization Field 8 (AF8)
+Mesencephalon - Ptf1a Cluster
 Mesencephalon - Retinal Arborization Field 9 (AF9)
 Mesencephalon - Tecum Neuropil
 Mesencephalon - Tegmentum
 Mesencephalon - Torus Longitudinalis
 Mesencephalon - Vglut2 cluster 1
+Rhombencephalon - Anterior Cluster of nV Trigeminal Motorneurons
+Rhombencephalon - Caudal Ventral Cluster Labelled by Spinal Backfills
+Rhombencephalon - Cerebellum Gad1b Enriched Areas
 Rhombencephalon - Gad1b Cluster 1
 Rhombencephalon - Gad1b Cluster 17
-Rhombencephalon - Gad1b Cluster 2
+Rhombencephalon - Gad1b Cluster 5
 Rhombencephalon - Isl1 Cluster 1
 Rhombencephalon - Isl1 Cluster 2
+Rhombencephalon - Lobus caudalis cerebelli
 Rhombencephalon - Neuropil Region 6
+Rhombencephalon - Olig2 enriched areas in cerebellum
 Rhombencephalon - Otpb Cluster 4
 Rhombencephalon - Raphe - Superior
+Rhombencephalon - VII' Facial Motor and octavolateralis efferent neurons
 Rhombencephalon - Vglut2 cluster 1
+Rhombencephalon - Vglut2 cluster 3
 Telencephalon -
 Telencephalon - Pallium
 Telencephalon - Subpallial Gad1b cluster

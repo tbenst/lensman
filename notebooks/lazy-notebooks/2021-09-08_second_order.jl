@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# ENV["DISPLAY"] = "localhost:11.0"
-=======
 ENV["DISPLAY"] = "localhost:12.0"
->>>>>>> 8de6abd08a9756046ac5bd91954f21f2b7bdb56a
 ##
 # using ImageView
 using Lensman, Images, Glob, NPZ, PyCall, DataFrames, ImageSegmentation, 

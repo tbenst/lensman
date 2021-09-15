@@ -238,3 +238,71 @@ denoiser_task = @spawn denoiser(raw_vols, denoised_vols, artifacts, T)
 
 kalman_path = vol_writer(joinpath(fish_dir, exp_name * "_kalman.h5"),
     tseriesH, tseriesW, tseriesZ, T, denoised_vols)
+
+
+## region outlines for many regions...
+# taken from 2021-09-01_titration.jl 
+
+# fig
+# plt.imshow(fig)
+fig
+## read all masks
+all_region_names = zbrain_mask_names[1:end-2];
+all_region_masks = map(n -> L.try_read_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_plane, n),
+            all_region_names);
+good_idxs = (~).(isnothing.(all_region_masks))
+region_names = all_region_names[good_idxs]
+all_region_masks = all_region_masks[good_idxs];
+all_region_outlines = map(mask2outline, all_region_masks);
+
+## preprocess one plane
+z = 3
+img = df_f[:,:,z,16]
+img = L.unsalt_n_pepper(img)
+
+##
+fig, ax = plt.subplots()
+
+cim = ax.imshow(img, cmap="viridis",
+    clim=(cmin,cmax), interpolation="none")
+ax.imshow(small_outlines, alpha=Float64.(small_outlines),cmap="binary_r")
+fig
+##
+region_summary = DataFrame()
+for (name, mask) in zip(all_region_names, all_region_masks)
+    small_mask = imresize(mask[:,:,z], size(img)) .> 0
+    tot_df = sum(img[small_mask])
+    area = sum(small_mask)
+    push!(region_summary,(name=name,avg_df=tot_df / area))
+end
+region_summary = filter(r->~isnan(r.avg_df), region_summary)
+region_summary = sort(region_summary, :avg_df, rev=true)
+region_summary[1:8,:]
+## top regions
+top_region_outlines = []
+myrange = 1:20
+for n in region_summary[myrange,:name]
+    idx = findfirst(all_region_names .== n)
+    push!(top_region_outlines, all_region_outlines[idx])
+end
+@show region_summary[myrange,:]
+##
+# region_masks = [L.read_first_mask(region_masks_h5, zbrain_mask_names,
+# imaging2zseries_plane, region; outline=false) for region in REGION_LIST];
+# region_outlines = [morphogradient(dilate(regm[2],[1,2]), [1,2]) for regm in region_masks];
+
+# mask2outline(m) = morphogradient(dilate(m,[1,2]), [1,2])
+
+# top_regions_outlines = map(x->mask2outline(masks[findfirst(region_names .== x)]), top_regions);
+top_outlines = cat(top_region_outlines...,dims=4)
+top_outlines = maximum(top_outlines,dims=4)[:,:,:,1]
+Gray.(top_outlines[:,:,z])
+
+fig, ax = plt.subplots()
+
+cim = ax.imshow(img, cmap="viridis",
+    clim=(cmin,cmax), interpolation="none")
+small_top_outlines = imresize(top_outlines[:,:,z], size(img))
+ax.imshow(small_top_outlines, alpha=Float64.(small_top_outlines))
+fig
+

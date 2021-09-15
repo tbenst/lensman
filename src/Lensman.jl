@@ -7,7 +7,7 @@ using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     LinearAlgebra, LibExpat, LightXML, RollingFunctions, HypothesisTests,
     EllipsisNotation, HDF5, Distributed, Thunks, NPZ, SparseArrays,
     H5Sparse, Folds, Arrow, ProgressMeter, JuMP, ReusePatterns, StatsBase,
-    CategoricalArrays
+    CategoricalArrays, ImageSegmentation
 import Base.Threads: @threads, @spawn, @sync
 using Distributed
 import Unitful: μm, ms

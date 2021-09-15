@@ -348,6 +348,12 @@ git-tree-sha1 = "d19cd9ae79ef31774151637492291d75194fc5fa"
 uuid = "6b39b394-51ab-5f42-8807-6242bab2b4c2"
 version = "0.7.0"
 
+[[ColorBlendModes]]
+deps = ["ColorTypes", "FixedPointNumbers"]
+git-tree-sha1 = "9ec825436862d5ab02ad8f2cde72f2d860151fa6"
+uuid = "60508b50-96e1-4007-9d6c-f475c410f16b"
+version = "0.2.4"
+
 [[ColorBrewer]]
 deps = ["Colors", "JSON", "Test"]
 git-tree-sha1 = "61c5334f33d91e570e1d0c3eb5465835242582c4"
@@ -1622,6 +1628,12 @@ version = "0.3.3"
 
 [[MozillaCACerts_jll]]
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
+
+[[MultipleTesting]]
+deps = ["Distributions", "SpecialFunctions", "StatsBase"]
+git-tree-sha1 = "7e97fc2e370b0a1c18dca532c23af214b2148cdd"
+uuid = "f8716d33-7c4a-5097-896f-ce0ecbd3ef6b"
+version = "0.5.0"
 
 [[MultivariatePolynomials]]
 deps = ["DataStructures", "LinearAlgebra", "MutableArithmetics"]
