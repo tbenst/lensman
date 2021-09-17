@@ -197,7 +197,10 @@ REGION_LIST = [
     "Rhombencephalon -"
     "Mesencephalon -"
     # "Telencephalon -"
-    # "Diencephalon -" # we will manually draw
+    
+    # to manually draw:
+    # plot once with uncommented, trace diencephalon in illustrator, re-run with commented
+    # "Diencephalon -"
 ]
 region_masks = [L.read_first_mask(region_masks_h5, zbrain_mask_names,
 imaging2zseries_plane, region; outline=false) for region in REGION_LIST];
@@ -257,9 +260,42 @@ nplots = 15
 # two-column width (mm)
 figB = Float64(uconvert(u"inch", (183-3)u"mm") / 4u"inch")
 figW,figH = (figB*4, figB*3)
-global fig = plt.figure(figsize=(figW,figH))
-fig, axs = plt.subplots(4,4, figsize=(figW,figH))
-axs = permutedims(axs,(2,1))
+##
+
+fig = plt.figure(figsize=(figW,figH),
+    constrained_layout=false)
+    # constrained_layout=true)
+# each titration panel is 6x6
+gridbase = 6
+first_col_width = 4
+gs = fig.add_gridspec(gridbase*4, gridbase*4+first_col_width)
+# ax1 = fig.add_subplot(gs[1:6, 1]) # 1-cell stim close-up
+ax1 = fig.add_subplot(py"$(gs)[0:2*$gridbase,0:$(first_col_width)]") # 1-cell stim close-up
+# ax2 = fig.add_subplot(gs[7:12, 1]) # colorbar
+ax2 = fig.add_subplot(py"$(gs)[2*$gridbase:,0:1]") # colorbar
+axs = [ax1, ax2]
+for (i,j) in Iterators.product(1:4, 1:4)
+    # first at `gridbase`, second at `2*gridbase`...
+    is = (i-1)*gridbase + first_col_width
+    ie = i*gridbase + first_col_width
+    # first at 1, second at 4
+    js = (j-1)*gridbase
+    je = j*gridbase
+    # println(py"($js,$je,$is,$ie)")
+    push!(axs, fig.add_subplot(py"$(gs)[$js:$je,$is:$ie]"))
+end
+
+# function example_plot(ax, fontsize=12)
+#     ax.plot([1, 2])
+
+#     ax.locator_params(nbins=3)
+#     ax.set_xticklabels([])
+#     ax.set_yticklabels([])
+# end
+# for ax in axs
+#     example_plot(ax)
+# end
+# fig
 z = 3
 felz_k = 50
 felz_min = 10
@@ -269,19 +305,18 @@ show_outline = true
 # no_df = true
 # yrange = 65:tseriesH-100
 yrange = 85:tseriesH-120
-# xrange = 60:tseriesW-90
-xrange = 40:tseriesW-70
-for s in 1:nStimuli
-    ax = axs[s]
+xrange = 70:tseriesW-90
+# xrange = 40:tseriesW-70
+for (s,ax) in zip(1:nStimuli,axs[3:end])
     im = df_f[:,:,z,s]
     im = opening_median(im)
     segments = felzenszwalb(im, felz_k, felz_min)
     im[segments.image_indexmap .== 1] .= 0
-    im = im[yrange,xrange]
+    main_im = im[yrange,xrange]
     # global cim = ax.imshow(df_f[50:end-100,1:end-50,z,s], cmap="RdBu_r",
     # global cim = ax.imshow(im, cmap="RdBu_r",
     if ~no_df 
-        global cim = ax.imshow(im, cmap="viridis",
+        global cim = ax.imshow(main_im, cmap="viridis",
             clim=(cmin,cmax), interpolation="none")
             # norm=cnorm, interpolation="none")
     end
@@ -297,7 +332,38 @@ for s in 1:nStimuli
     # outlines_to_show = small_outlines[:,:,z]
     outlines_to_show = Float64.(outlines_to_show)
     if show_outline
+        if s == 1
+            outlines_to_show[1:100,1:30] .= 0
+        end
         ax.imshow(outlines_to_show, alpha=outlines_to_show,cmap="binary_r")
+    end
+
+    if s==1
+        # add close-up
+        zoom_xrange = 360:425
+        zoom_yrange = (150:300) .+ 10
+        axs[1].imshow(im[zoom_yrange,zoom_xrange],clim=(0,1.0))
+        axs[1].set_axis_off()
+        if show_outline
+            outlines_to_show = small_outlines[zoom_yrange,zoom_xrange,z]
+            outlines_to_show = Float64.(outlines_to_show)
+            # axs[1].imshow(outlines_to_show, alpha=outlines_to_show,cmap="binary_r")
+        end
+        rect = matplotlib.patches.Rectangle(
+            (1, 1),
+            # length(zoom_xrange)-3, length(zoom_yrange)-3,
+            length(zoom_xrange), length(zoom_yrange)-3,
+            linestyle="--", linewidth=1, edgecolor="w", facecolor="none")
+        axs[1].add_patch(rect)
+
+
+        # dotted rect for big fig
+        rect = matplotlib.patches.Rectangle(
+            (zoom_xrange[1] - xrange[1], zoom_yrange[1] - yrange[1]),
+            zoom_xrange[end]-zoom_xrange[1], zoom_yrange[end]-zoom_yrange[1],
+            # zoom_xrange[end]-zoom_xrange[1]-5, zoom_yrange[end]-zoom_yrange[1],
+            linestyle="--", linewidth=1, edgecolor="w", facecolor="none")
+        ax.add_patch(rect)
     end
 end
 
@@ -308,26 +374,27 @@ end
 #     norm=cnorm)
 # may need to adjust if colorbar is cutoff
 plt.tight_layout()
-fig.subplots_adjust(right=0.93)
-fig.subplots_adjust(wspace=0.04, hspace=0.01)
-cbar_ax = fig.add_axes([0.94, 0.15, 0.0075, 0.7])
-# cbar = fig.colorbar(cim, ticks=[0,1,2], cax=cbar_ax)
-cbar = fig.colorbar(cim, cax=cbar_ax)
+# fig.subplots_adjust(right=0.93)
+fig.subplots_adjust(wspace=0.04, hspace=0.04)
+# cbar_ax = fig.add_axes([0.94, 0.15, 0.0075, 0.7])
+cbar = fig.colorbar(cim, cax=axs[2], aspect=20)
 h = cbar.ax.set_ylabel("Δf/f",rotation=270,fontsize=7)
-# h.set_rotation = 180
-for (i,ax) in enumerate(axs)
+for (i,ax) in enumerate(axs[3:end])
     if i == 1
-        ax.text(5,40,"1 target bilateral",fontsize=7, color="white")
+        ax.text(3,80,"1\ntarget\nbilateral",fontsize=7, color="white")
     else
-        ax.text(5,40,"$i",fontsize=7, color="white")
+        ax.text(3,25,"$i",fontsize=7, color="white")
     end
 end
 
 um_per_px1 = tseries_units[2] / 1u"μm"
-scalebar1 = matscale.ScaleBar(um_per_px1, "um", length_fraction=0.18, box_alpha=0,
+scalebars = [matscale.ScaleBar(um_per_px1, "um", length_fraction=0.18, box_alpha=0,
     scale_loc="left", location="lower right", color = "white",
-    font_properties=Dict("size" => 7))
-axs[1].add_artist(scalebar1)
+    font_properties=Dict("size" => 7),
+    scale_formatter = py"""lambda value, unit: "" """)
+for _ in 1:2]
+axs[3].add_artist(scalebars[1])
+axs[1].add_artist(scalebars[2])
 
 # plotpath = joinpath(plot_dir,"$(analysis_name)_rdbu_titration_oneplane_df_f")
 if no_df & show_outline
@@ -345,102 +412,3 @@ fig.savefig(joinpath(plot_dir,"$(plotpath).pdf"),
     dpi=300)
 @show plotpath*".svg"
 fig
-
-#################################
-## zoom-in on targeted cells
-#################################
-border = 5
-stim_z = unique(stim_cells.z)
-@assert length(stim_z) == 1
-stim_z = stim_z[1]
-stim_z = 5
-# xrange = (minimum(stim_cells.x)-border):(maximum(stim_cells.x)+border)
-# xrange = xrange .+ 5
-xrange = 360:425
-# yrange = (minimum(stim_cells.y)-border):(maximum(stim_cells.y)+border)
-# yrange = Int(floor(yrange[1] + (yrange[end] - yrange[1])/2) + 15) : yrange[end]
-yrange = 150:300
-# yrange = 241:303
-
-show_targets = false
-
-N = 16
-fig, axs = plt.subplots(2,8,figsize=(6,3))
-axs = permutedims(axs,[2,1])
-for i = 1:N
-    ax = axs[i]
-    stim_num = i
-    stim_cells = unique(cells[cells.stimNum .== stim_num,:], [:x,:y])
-    im = df_f[:,:,stim_z,stim_num]
-    im = L.unsalt_n_pepper(df_f[:,:,stim_z,stim_num])
-
-    ax.imshow(im[yrange,xrange],clim=(0,1.0))
-    for (x,y,targetZ) in eachrow(stim_cells)
-        cir_x = x - xrange[1]
-        cir_y = y - yrange[1]
-        circle = matplotlib.patches.Circle((cir_x,cir_y), targetSizePx/2,
-            color="red",
-            fill=false, lw=0.4)
-        ax.add_patch(circle)
-    end
-    ax.set_axis_off()
-end
-plt.tight_layout()
-
-plotpath = joinpath(plot_dir,"$(analysis_name)_titration_oneplane_df_f_hab_target_closeup")
-fig.savefig("$(plotpath).svg",
-    dpi=300)
-fig.savefig(joinpath(plot_dir,"$(plotpath).png"),
-    dpi=300)
-fig.savefig(joinpath(plot_dir,"$(plotpath).pdf"),
-    dpi=300)
-@show plotpath*".svg"
-
-fig
-
-
-
-# target_groups
-##
-tseries_subset = tseries[:,:,:,1:20:tseriesT];
-maxTproj = mapslices(x->quantile(x[:],0.90), tseries_subset,dims=4)[:,:,:,1];
-shifted_maxTproj = shift_every_other_row(maxTproj,-3);
-##
-fig, ax = plt.subplots()
-z_im = zseries[yrange .* 2,xrange .* 2,imaging2zseries_plane[5]];
-t_im = maxTproj[yrange,xrange,5];
-t_im_shift = shifted_maxTproj[yrange,xrange,5];
-# z_im = L.unsalt_n_pepper(z_im);
-# z_im = adjust_histogram(imadjustintensity(z_im), GammaCorrection(0.9))
-ax.imshow(z_im,cmap="Greys_r")
-# ax.imshow(t_im,cmap="Greys_r")
-# ax.imshow(t_im_shift,cmap="Greys_r")
-for (x,y,targetZ) in eachrow(stim_cells)
-    cir_x = x - xrange[1]
-    cir_y = y - yrange[1]
-    circle = matplotlib.patches.Circle((cir_x,cir_y), targetSizePx/2,
-        color="red",
-        fill=false, lw=0.4)
-    ax.add_patch(circle)
-end
-ax.set_axis_off()
-
-# plotpath = joinpath(plot_dir,"$(analysis_name)_titration_oneplane_shifted_gray_hab_target_closeup")
-plotpath = joinpath(plot_dir,"$(analysis_name)_titration_oneplane_zseries_gray_hab_target_closeup")
-fig.savefig("$(plotpath).svg",
-    dpi=300)
-fig.savefig(joinpath(plot_dir,"$(plotpath).png"),
-    dpi=300)
-fig.savefig(joinpath(plot_dir,"$(plotpath).pdf"),
-    dpi=300)
-@show plotpath
-fig
-##
-save(joinpath(fish_dir, "zseries_imaging_planes.tif"), zseries[:,:,imaging2zseries_plane])
-save(joinpath(fish_dir, "zseries.tif"), zseries)
-
-##
-dorsal_ventral = load(joinpath(fish_dir, "test_segs.nrrd"));
-sum(dorsal_ventral[:,:,32])
-Gray.(dorsal_ventral[:,:,32] .== 1) # dorsal
-Gray.(dorsal_ventral[:,:,45] .== 2) # ventral

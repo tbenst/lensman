@@ -1,7 +1,7 @@
 # mostly, we use the previously saved .arrow files from osprey
 # but, we also supplement with dorsal/ventral habenula as defined by
 # center of mass
-ENV["DISPLAY"] = "localhost:11.0"
+ENV["DISPLAY"] = "localhost:12.0"
 ##
 using DataFrames, Statistics, Arrow, AlgebraOfGraphics, CairoMakie, StatsKit, Makie
 Data = AlgebraOfGraphics.data
@@ -27,8 +27,6 @@ recording_2021_06_02_fish3_ipn = Recordings[
     "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
 ](;resources...);
 ##
-
-secondorder_names[1]
 
 function dorsal_ventral_hab_df(recording)
     @pun (region_masks_h5, imaging2zseries_plane, zbrain_mask_names,
@@ -85,7 +83,7 @@ end
 dorsal_ventral_hab_df_2021_06_08_fish2_titration = dorsal_ventral_hab_df(recording_2021_06_08_fish2_titration)
 dorsal_ventral_hab_df_2021_06_08_fish2_titration[:,:uri] .= "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
 dorsal_ventral_hab_df_2021_06_02_fish3_ipn = dorsal_ventral_hab_df(recording_2021_06_02_fish3_ipn)
-dorsal_ventral_hab_df_2021_06_02_fish3_ipn[:,:uri] .= "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
+dorsal_ventral_hab_df_2021_06_02_fish3_ipn[:,:uri] .= "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
 @assert length(unique(dorsal_ventral_hab_df_2021_06_08_fish2_titration.stim)) == 16
 @assert length(unique(dorsal_ventral_hab_df_2021_06_02_fish3_ipn.stim)) == 3
 ##
@@ -119,7 +117,7 @@ root_dir = "/data/dlab/b115"
 df = DataFrame()
 for (p,r) in zip(arrow_paths, recording_names)
     rdf = Arrow.Table(joinpath(root_dir, p)) |> DataFrame
-    rdf[:,:uri] .= replace(r, "2021-06-01_rsChRmine_h2b6s" => "2021-06-02_rsChRmine-h2b6s")
+    rdf[:,:uri] .= replace(r, "2021-06-01_rsChRmine_h2b6s/fish3" => "2021-06-02_rsChRmine-h2b6s/fish2")
     df = vcat(df,rdf)
 end
 
@@ -153,7 +151,7 @@ end
 
 gb = groupby(df, [:region, :uri, :trial])
 @assert size(gb[1],1) == 2 # left&right hemisphere
-region_df = combine(gb,
+region_df = DataFrames.combine(gb,
     [:f0, :area, :f,:region,Symbol("Δf/f"),:stim,:trial,:uri, Symbol("major region")]
     => calc_df_both_hemispheres => AsTable)
 sort!(df, "Δf/f")
@@ -167,53 +165,61 @@ major_regions = unique(region_df[!,"major region"])
 major_regions = filter(x->x!="Spinal Cord", major_regions)
 ##
 REGION_LIST = [
-    # "Tectum Stratum Periventriculare",
-    "Optic Tectum",
-    "Cerebellum",
-    # "Habenula",
     "Dorsal Habenula",
     "Ventral Habenula",
+    "Hindbrain Glyt2 Stripe 3",
     "Raphe - Superior",
+    "Hindbrain Gad1b Cluster 16",
+    "Hindbrain Gad1b Cluster 2",
+    # "Tectum Stratum Periventriculare",
+    # "Optic Tectum",
+    # "Cerebellum",
+    # "Habenula",
     # "Raphe - Inferior",
     # "Rhombomere 1",
     # "Rhombomere 2",
     # "Rhombomere 3",
     # "Rhombomere 4",
-    "Subpallial Gad1b cluster",
-    "Gad1b Cluster 1",
-    "Gad1b Cluster 2",
+    # "Subpallial Gad1b cluster",
+    # "Gad1b Cluster 1",
     # "Gad1b Cluster 12",
-    "Gad1b Cluster 16",
     # "Otpb Cluster 4",
-    "Glyt2 Cluster 12",
-    "Glyt2 Stripe 3",
+    # "Glyt2 Cluster 12",
 ]
 
 numcol = 3
 
 # TODO write abstraction for this for any num arguments to pass through
-function quick_mean_sem(df_f)
-    DataFrame("Δf/f"=>mean(df_f), "sem"=>sem(df_f),
-    "plus_sem"=>Lensman.plus_sem(df_f), "minus_sem"=>Lensman.minus_sem(df_f))
+function quick_mean_sem(df_f; min=0.02)
+    thesem = sem(df_f)
+    themean = mean(df_f)
+    minsem = maximum([thesem, min])
+    DataFrame("Δf/f"=>mean(df_f), "sem"=>thesem,
+    "plus_sem"=>themean+minsem, "minus_sem"=>themean-minsem)
 end
+quick_mean_sem(ones(5))
 # function quick_mean_sem(df_f, region, subregion, period)
 #     DataFrame("Δf/f"=>mean(df_f), "sem"=>sem(df_f),
 #     "plus_sem"=>Lensman.plus_sem(df_f), "minus_sem"=>Lensman.minus_sem(df_f),
 #     "region"=>region,"period"=>period, "subregion"=>subregion)
 # end
 
+####################################################
 ## Second-order proj field mapping all brain regions
-second_order_uri = secondorder_names[1]
-sdf = filter(row->row[:uri]==second_order_uri, region_df);
-plot_df = filter(row -> row.area > 100, sdf)
-plot_df = Lensman.rename_regions_in_df(plot_df)
+####################################################
+# second_order_uri = secondorder_names[1]
 
-stim_names = sort(unique(plot_df[:,:stim]))
+second_order_uri = "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+sdf = filter(row->row[:uri]==second_order_uri, region_df);
+second_order_plot_df = filter(row -> row.area > 100, sdf)
+second_order_plot_df = Lensman.rename_regions_in_df(second_order_plot_df)
+
+stim_names = sort(unique(second_order_plot_df[:,:stim]))
 pretty_stim_names = ["habenula\n2nd order", "raphe", "outside\nbrain"]
-plot_df[:,"stim target"] = string.(plot_df[:,:stim])
+second_order_plot_df[:,"stim target"] = string.(second_order_plot_df[:,:stim])
 for (m,mm) in zip(stim_names,pretty_stim_names)
-    idxs = plot_df[:,:stim] .== m
-    plot_df[idxs,"stim target"] .= mm
+    idxs = second_order_plot_df[:,:stim] .== m
+    second_order_plot_df[idxs,"stim target"] .= mm
 end
 
 fig = Figure(resolution=(2000, 3000))
@@ -222,8 +228,8 @@ for (ii,major) in enumerate(major_regions)
     times, remainder = divrem(ii,numcol)
     i = times + 1
     j = remainder + 1
-    pdf = filter(r->r["major region"] == major, plot_df)
-    pdf = combine(groupby(pdf, [:region,Symbol("stim target")]),
+    pdf = filter(r->r["major region"] == major, second_order_plot_df)
+    pdf = DataFrames.combine(groupby(pdf, [:region,Symbol("stim target")]),
         Symbol("Δf/f")=>quick_mean_sem=>AsTable; keepkeys=true)
     # https://discourse.julialang.org/t/makie-errorbars-for-grouped-bar-graphs/62361/7
     # p1 = Data(pdf) * visual(BarPlot) *
@@ -254,33 +260,46 @@ save(ppath*".png", fig, pt_per_unit=pt_per_unit)
 save(ppath*".svg", fig, pt_per_unit=pt_per_unit)
 save(ppath*".pdf", fig, pt_per_unit=pt_per_unit)
 fig
-
-
+##################################################
 ## Second-order proj field mapping: select regions
-
-W = 183u"mm" - 110u"mm"
-H = 53u"mm"
+##################################################
+# W = 183u"mm" - 90u"mm"
+W = 75u"mm"
+# H = 53u"mm"
+H = 80u"mm"
 dpi = 300
-mm2px = mm->Int(round(uconvert(u"inch", mm) * dpi / 1u"inch" * 0.9))
+mm2px = mm->Int(round(uconvert(u"inch", mm) * dpi / 1u"inch"))
 W = mm2px(W)
 H = mm2px(H)
 
 fig = Figure(resolution=(W, H))
-pdf = combine(groupby(plot_df, [:region,:subregion, Symbol("stim target")]),
+pdf = DataFrames.combine(groupby(second_order_plot_df, [:region,:subregion, Symbol("stim target")]),
     Symbol("Δf/f")=>quick_mean_sem=>AsTable, keepkeys=true)
 pdf[pdf.subregion .== "Tectum Stratum Periventriculare",:subregion] .= "Optic Tectum"
+pdf[pdf.subregion .== "Glyt2 Stripe 3",:subregion] .= "Hindbrain Glyt2 Stripe 3"
+pdf[pdf.subregion .== "Gad1b Cluster 16",:subregion] .= "Hindbrain Gad1b Cluster 16"
+pdf[pdf.subregion .== "Gad1b Cluster 2",:subregion] .= "Hindbrain Gad1b Cluster 2"
+
+# pdf[pdf[:,"stim target"] .== "outside\nbrain","stim target"] .= "control"
 pdf = filter(row -> row.subregion in REGION_LIST, pdf)
+# sort!(pdf, "stim target"; lt=(a,b)->CategoricalValue(a,stim_targets)<CategoricalValue(b,stim_targets))
+pdf.subregion = CategoricalArray(pdf.subregion, ordered=true)
+levels!(pdf.subregion, REGION_LIST)
+stim_targets = CategoricalArray(pdf[:,"stim target"], ordered=true)
+levels!(stim_targets, ["outside\nbrain", "raphe","habenula\n2nd order"])
+pdf[!,"stim target"] = stim_targets
+
 for region in REGION_LIST
-    @assert sum(pdf.subregion .== region) > 0 region
+    @assert sum(pdf.subregion .== CategoricalValue(region, pdf.subregion)) > 0 region
 end
 
-p2 = Data(pdf) * visual(CrossBar) *
-    mapping(:region, "Δf/f", "minus_sem", "plus_sem", color="stim target", dodge="stim target")
-grid = aog.draw!(fig, p2, axis=(xticklabelrotation = pi / 6,))
-legend!(fig[1,end + 1], grid)
+p2 = Data(pdf) * visual(CrossBar, width=0.5) *
+    mapping(:subregion, "Δf/f", "minus_sem", "plus_sem", color="stim target", dodge="stim target")
+grid = aog.draw!(fig[1:3,2:7], p2, axis=(xticklabelrotation = pi / 6,))
+legend!(fig[4,4], grid, orientation = :horizontal)
 ppath = joinpath(plot_dir,
     "select-region_second_order_region_df_f_$(replace(second_order_uri,"""/"""=>"""_"""))")
-@show ppath
+@show ppath*".pdf"
 pt_per_unit = 72/300 # Makie defaults to 72px
 save(ppath*".png", fig, pt_per_unit=pt_per_unit)
 save(ppath*".svg", fig, pt_per_unit=pt_per_unit)
@@ -303,8 +322,8 @@ titration_plot_df = filter(row->row.uri == uri,
 titration_plot_df = Lensman.rename_regions_in_df(titration_plot_df)
 # titration_plot_df = filter(row->row.region in mask_names,
 #     titration_plot_df);
-# fig = Figure(resolution = (12000, 500))
-fig = Figure(resolution = (2000, 3000))
+fig = Figure(resolution = (12000, 2000))
+# fig = Figure(resolution = (2000, 3000))
 # ga = fig[1, 1] = GridLayout()
 # TODO: recreate panel b...
 ["habenula", "optic tectum", "rhombomere 1", "raphe", "cerebellum"]
@@ -320,7 +339,7 @@ fig = Figure(resolution = (2000, 3000))
 
 # gb = groupby(df, [:region, :uri, :trial])
 # @assert size(gb[1],1) == 2 # left&right hemisphere
-# region_df = combine(gb,
+# region_df = DataFrames.combine(gb,
 #     [:f0, :area, :f,:region,Symbol("Δf/f"),:stim,:trial,:uri, Symbol("major region")]
 #     => calc_df_both_hemispheres => AsTable)
 
@@ -336,7 +355,7 @@ for (ii,major) in enumerate(sort(major_regions))
     i = times + 1
     j = remainder + 1
     pdf = filter(r->r["major region"] == major, titration_plot_df)
-    pdf = combine(groupby(pdf, [:subregion,:period]),
+    pdf = DataFrames.combine(groupby(pdf, [:subregion,:period]),
         Symbol("Δf/f")=>quick_mean_sem=>AsTable, keepkeys=true)
     # https://discourse.julialang.org/t/makie-errorbars-for-grouped-bar-graphs/62361/7
     # p1 = Data(pdf) * visual(BarPlot) *
@@ -382,11 +401,16 @@ mm2px = mm->Int(round(uconvert(u"inch", mm) * dpi / 1u"inch"))
 @show H = mm2px(H)
 fig = Figure(resolution=(W, H))
 
-pdf = combine(groupby(titration_plot_df, [:region,:period, :subregion]),
+pdf = DataFrames.combine(groupby(titration_plot_df, [:region,:period, :subregion]),
     Symbol("Δf/f")=>quick_mean_sem=>AsTable)
 
 pdf[pdf.subregion .== "Tectum Stratum Periventriculare",:subregion] .= "Optic Tectum"
+pdf[pdf.subregion .== "Glyt2 Stripe 3",:subregion] .= "Hindbrain Glyt2 Stripe 3"
+pdf[pdf.subregion .== "Gad1b Cluster 16",:subregion] .= "Hindbrain Gad1b Cluster 16"
+pdf[pdf.subregion .== "Gad1b Cluster 2",:subregion] .= "Hindbrain Gad1b Cluster 2"
+pdf.subregion = CategoricalArray(pdf.subregion, ordered=true)
 pdf = filter(row -> row.subregion in REGION_LIST, pdf)
+levels!(pdf.subregion, REGION_LIST)
 @warn "we initially chose subregions so no collisions; could erroneously combine subregions if violated"
 # pdf.period .= replace.(Array(pdf.period), "early" => "1-6")
 # pdf.period .= replace.(Array(pdf.period), "mid" => "7-11")
@@ -410,7 +434,17 @@ save(ppath*".svg", fig, pt_per_unit=pt_per_unit)
 save(ppath*".pdf", fig, pt_per_unit=pt_per_unit)
 fig
 
-## ANOVA
+###############################
+## save dataframes for plotting in R
+###############################
+
+plot_dir
+
+
+
+###############################
+## titration ANOVA
+###############################
 periods = ["1", "2-6", "7-11", "12-16"]
 region_names = unique(titration_plot_df[!,:region])
 pvals = map(region_names) do region
@@ -418,10 +452,13 @@ pvals = map(region_names) do region
         for p in periods]
     # KW = KruskalWallisTest(groups...)
     # pvalue(KW)
-
+    @assert length(groups) == 4
     df1 = DataFrame(dose = 1, score=groups[1])
     df2 = DataFrame(dose = 2, score=groups[2])
     df3 = DataFrame(dose = 3, score=groups[3])
+    df3 = DataFrame(dose = 4, score=groups[4])
+    # not tested; make categorical..?
+    df3[!,:dose] = string.(df3[!,:dose])
     glm_df = vcat(df1, df2, df3)
 
 
@@ -444,11 +481,57 @@ significant1 = corrected_pvals .< 0.01
 
 
 println("=====Significant at p=0.05: $(sum(significant5))/$(length(pvals))=====")
-for n in sort(region_names[significant5]); println(n); end
+for n in sort(setdiff(region_names[significant5], region_names[significant1])); println(n); end
 println("=====Significant at p=0.01: $(sum(significant1))/$(length(pvals))=====")
 for n in sort(region_names[significant1]); println(n); end
 
 # see output at bottom
+
+###############################
+## second-order paired Mann–Whitney U test
+###############################
+second_order_region_names = unique(second_order_plot_df[!,:region])
+second_order_pvals = map(second_order_region_names) do region
+    groups = [Float64.(filter(r->(string(r["stim target"]) == s) &&
+        (r.region == region), second_order_plot_df)[:,"Δf/f"])
+        for s in levels(stim_targets)]
+    # KW = KruskalWallisTest(groups...)
+    # pvalue(KW)
+    MWs = [MannWhitneyUTest(groups[s1],groups[s2]) for (s1,s2) in Iterators.product(1:length(groups),1:length(groups))]
+    pvals = map(pvalue, MWs)
+end
+second_order_pvals = permutedims(cat(second_order_pvals...,dims=3),(3,1,2))
+thedims = size(second_order_pvals)
+
+##
+# corrected_pvals = MultipleTesting.adjust(pvals, Bonferroni())
+corrected_second_order_pvals = MultipleTesting.adjust(second_order_pvals[:], BenjaminiHochbergAdaptive())
+corrected_second_order_pvals = reshape(corrected_second_order_pvals, thedims)
+levels(stim_targets)
+##
+second_order_region_names = 
+
+second_order_significant5 = corrected_second_order_pvals .< 0.05
+second_order_significant1 = corrected_second_order_pvals .< 0.01
+# bonferoni_p5 = 0.05 / length(pvals)
+# bonferoni_p1 = 0.01 / length(pvals)
+# significant5 = pvals .< bonferoni_p5
+# significant1 = pvals .< bonferoni_p1
+
+
+println("=====Significant at p=0.05: $(sum(second_order_significant5))/$(length(corrected_second_order_pvals))=====")
+for n in sort(setdiff(second_order_region_names[second_order_significant5], second_order_region_names[second_order_significant1])); println(n); end
+println("=====Significant at p=0.01: $(sum(second_order_significant1))/$(length(corrected_second_order_pvals))=====")
+for n in sort(second_order_region_names[second_order_significant1]); println(n); end
+
+##
+
+for region in REGION_LIST
+    println("======$region======")
+    reg = replace(region, "Hindbrain "=>"")
+    idx = findfirst(map(r->occursin(reg,r), second_order_region_names))
+    println(corrected_second_order_pvals[idx,:,:])
+end
 
 ## for 2021-06-08 titration fish
 =====Significant at p=0.05: 60/159=====

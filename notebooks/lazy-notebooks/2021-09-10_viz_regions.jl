@@ -39,7 +39,6 @@ resources = Resources();
 @pun (zbrain_dir, zbrain_masks) = resources;
 
 ##
-# DONE
 recording_name = "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
 tyh5_path = joinpath("/data/dlab/b115", recording_name * "_kalman.h5")
 options = Dict(
@@ -109,22 +108,22 @@ zseriesZplane = imaging2zseries_plane[z]
 ##
 # order is critical
 REGION_LIST = [
-    "Cerebellum"
-    "Rhombencephalon - Gad1b Cluster 1"
+    "Glyt2 Stripe 3"
+    # "Cerebellum"
+    "Raphe - Superior"
     "Rhombencephalon - Gad1b Cluster 16"
     "Rhombencephalon - Gad1b Cluster 2"
-    "Glyt2 Cluster 12"
-    "Glyt2 Stripe 3"
-    "Tectum Stratum Periventriculare"
-    "Raphe - Superior"
+    # "Rhombencephalon - Gad1b Cluster 1"
+    # "Glyt2 Cluster 12"
+    # "Tectum Stratum Periventriculare"
     # "Rhombomere 1"
-    "Subpallial Gad1b cluster"
+    # "Subpallial Gad1b cluster"
 ]
 region_masks = [L.read_first_mask(region_masks_h5, zbrain_mask_names,
     imaging2zseries_plane, region) for region in REGION_LIST];
-insert!(region_masks, 2, ("Dorsal Habenula", dorsal_hab[:,:,imaging2zseries_plane]))
-insert!(region_masks, 11, ("Ventral Habenula", ventral_hab[:,:,imaging2zseries_plane]))
-@assert length(region_masks) == 11
+insert!(region_masks, 1, ("Dorsal Habenula", dorsal_hab[:,:,imaging2zseries_plane]))
+insert!(region_masks, 2, ("Ventral Habenula", ventral_hab[:,:,imaging2zseries_plane]))
+# @assert length(region_masks) == 11
 
 # colormap choose seperate colors
 # imshow zseries (matplotlib), add scalebar
@@ -143,7 +142,7 @@ im2
 ##
 
 seeds = vcat([RGB(0,x,0) for x in 0:0.11:1]..., RGB(1,1,1), RGB(0,0,0))
-colors = distinguishable_colors(length(region_masks), seeds, dropseed=true)
+region_colors = distinguishable_colors(length(region_masks), seeds, dropseed=true)
 
 region_masks
 
@@ -152,7 +151,7 @@ channelview(im2)[[1,3],:,:,:] .= 0
 for (r, reg) in enumerate(region_masks)
     # region = reg .> 0
     color_mask = RGB{N0f16}.(zeros(size(im2)...))
-    color_mask[reg[2]] .= colors[r]
+    color_mask[reg[2]] .= region_colors[r]
     # im2 = mapc.((a,b)->maximum([a,b]), im2, color_mask)
     im2 = blend.(im2, color_mask, mode=BlendScreen, opacity=1.0)
 end
@@ -184,6 +183,6 @@ fig.savefig(plotpath*".pdf",dpi=300)
 fig.savefig(plotpath*".png",dpi=300)
 fig
 
-colors
+region_colors
 ##
 @show etl_vals[zs]

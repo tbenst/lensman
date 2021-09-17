@@ -226,5 +226,5 @@ end
 
 function ==(v::CategoricalValue{T,R},y::String) where {T<:Union{AbstractChar, AbstractString, Number}, R<:Integer}
     catv_y = CategoricalArrays.pool(v)[get(CategoricalArrays.pool(v), y)]
-    v < catv_y
+    v == catv_y
 end

@@ -53,7 +53,7 @@ recording2 = Recordings[
     tyh5_path = "/data/dlab/b115/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072_kalman.h5"
 );
 ##
-@pun zbrain_masks = resources;
+@pun (zbrain_masks, zbrain_mask_names) = resources;
 @pun (trial_average,vol_rate, window_len, recording_folder, fish_name,
     exp_name, tseriesZ, tseriesW, cells, exp_date, plot_dir, nStimuli,
     window_len, etl_vals, stim_end_idx, stim_start_idx, nstim_pulses, window_secs,
@@ -62,7 +62,7 @@ recording2 = Recordings[
 ) = recording2;
 ##
 @pun (zseries, imaging2zseries_plane, zseries_xml, zseries_zaxes,
-    zseries_dir) = recording2;
+    zseries_dir, region_masks_h5) = recording2;
 ##
 @show nstim_pulses
 @assert nstim_pulses == 10
@@ -77,9 +77,29 @@ hab_target_groups = recording1[:target_groups];
 ##
 hab_imap = influence_map(hab_trial_average, window_len);
 imap = influence_map(trial_average, window_len);
-## draw regions example
+###############
+## get outlines
+###############
+REGION_LIST = [
+    "Rhombencephalon -",
+    "Mesencephalon -",
+    "Diencephalon -",
+    "Telencephalon -"
+]
+region_masks = [L.read_first_mask(region_masks_h5, zbrain_mask_names,
+imaging2zseries_plane, region; outline=false) for region in REGION_LIST];
 
-##
+region_outlines = [dilate(L.mask2outline(L.unsalt_n_pepper(regm[2]; felz_min=5000)),[1,2])
+    for regm in region_masks];
+    # for regm in region_masks[[1]]];
+outlines = cat(region_outlines...,dims=4);
+outlines = maximum(outlines,dims=4)[:,:,:,1];
+small_outlines = imresize(outlines, (tseriesH, tseriesW, tseriesZ));
+
+
+############
+## Main plot
+############
 targetSizePx = spiral_size(exp_date, lateral_unit)
 
 if occursin("hwzt", string(tseries_read_strategy))
@@ -176,7 +196,12 @@ for row in [3,1,2,4,5]
         ax.add_patch(circle)
     end
     ax.set_axis_off()
-    
+
+    outlines_to_show = small_outlines[yrange,xrange,5]
+    outlines_to_show = Float64.(outlines_to_show)
+    ax.imshow(outlines_to_show, alpha=outlines_to_show,cmap="binary_r")
+
+    # cols 2+    
     for (j,z) in enumerate(zplanes)
         ax_num = nrows * j + row
         ax = axs[ax_num]
@@ -187,7 +212,7 @@ for row in [3,1,2,4,5]
 
         global cim = ax.imshow(im[yrange,:], cmap="viridis",
             clim=(cmin,cmax), interpolation="none")
-        ax.text(5,yrange[end]-50,"z = $(Int(etl_vals[z]))μm",fontsize=7, color="white")
+        # ax.text(5,yrange[end]-50,"z = $(Int(etl_vals[z]))μm",fontsize=7, color="white")
         # zoom in ROI (compile in seperate plot)
         if ((row==1) || (row==4)) && (j==1)
             ls = row == 1 ? "--" : "-"
@@ -201,6 +226,9 @@ for row in [3,1,2,4,5]
         end
 
         ax.set_axis_off()
+        outlines_to_show = small_outlines[yrange,xrange,z]
+        outlines_to_show = Float64.(outlines_to_show)
+        ax.imshow(outlines_to_show, alpha=outlines_to_show,cmap="binary_r")
     end
 end
 sorted_plane_color = sort(collect(plane_color);lt=(a,b)->isless(a[1],b[1]))
@@ -211,7 +239,8 @@ patch_handles = [ matplotlib.lines.Line2D([0],[0],
 
 um_per_px1 = tseries_units[2] / 1u"μm"
 scalebar1 = matscale.ScaleBar(um_per_px1, "um", length_fraction=0.18, box_alpha=0,
-    scale_loc="left", location="upper right", font_properties=Dict("size" => 7), color="w")
+    scale_loc="left", location="upper right", font_properties=Dict("size" => 7), color="w",
+    scale_formatter = py"""lambda value, unit: "" """)
 axs[6].add_artist(scalebar1)
 
 plt.tight_layout()
@@ -289,13 +318,13 @@ plane_stim_cells = unique(cells[(cells.stimNum .== stimNum) .& (cells.z .== z),
 
 for (x,y) in eachrow(plane_stim_cells)
     circle = matplotlib.patches.Circle((x-zoom_xrange[1],y-zoom_yrange[1]), targetSizePx,
-        color="red",
+        color=rgb2tuple(plane_color[z]),
         fill=false, lw=0.5)
-        axs[1].add_patch(circle)
+    axs[1].add_patch(circle)
     circle = matplotlib.patches.Circle((x-zoom_xrange[1],y-zoom_yrange[1]), targetSizePx,
-        color="red",
+        color=rgb2tuple(plane_color[z]),
         fill=false, lw=0.5)
-    axs[2].add_patch(circle)
+    # axs[2].add_patch(circle)
 end
 axs[1].set_axis_off()    
 axs[2].set_axis_off()    
@@ -305,7 +334,8 @@ plt.tight_layout()
 fig.subplots_adjust(wspace=0.01, hspace=0.01)
 
 scalebar2 = matscale.ScaleBar(um_per_px1, "um", length_fraction=0.18, box_alpha=0,
-    scale_loc="left", color="white", location="lower left", font_properties=Dict("size" => 7))
+    scale_loc="left", color="white", location="lower left", font_properties=Dict("size" => 7),
+    scale_formatter = py"""lambda value, unit: "" """)
 axs[1].add_artist(scalebar2)
 
 
@@ -366,11 +396,13 @@ im2 = prettify_img(imap[:,:,z,2])
 channelview(img)[1,:,:,:] .= im1 .> reasonable_thresh
 channelview(img)[2,:,:,:] .= im2 .> reasonable_thresh
 overlap_yrange = 140:380
-overlap_xrange = xrange[1]:512-60
+# overlap_xrange = xrange[1]:512-60
+overlap_xrange = overlap_yrange .- 20
 img = img[overlap_yrange,overlap_xrange]
 
 img
-figW = Float64(uconvert(u"inch", 6u"cm") / u"inch")
+
+figW = Float64(uconvert(u"inch", 4u"cm") / u"inch")
 figH = figW * length(overlap_yrange) / length(overlap_xrange)
 fig, ax = plt.subplots(figsize=(figW,figH))
 
@@ -381,11 +413,12 @@ ax.imshow(permutedims(channelview(img),(2,3,1)),
 ax.set_axis_off()
 plt.tight_layout()
 scalebar3 = matscale.ScaleBar(um_per_px1, "um", length_fraction=0.18, box_alpha=0,
-    scale_loc="left", color="white", location="upper right", font_properties=Dict("size" => 7))
+    scale_loc="left", color="white", location="upper right", font_properties=Dict("size" => 7),
+    scale_formatter = py"""lambda value, unit: "" """)
 ax.add_artist(scalebar3)
 path = joinpath(plot_dir,"$(recording_folder)_$(fish_name)_$(exp_name)_$(analysis_name)_overlap")
 @show path*".png"
-ax.text(5,length(overlap_yrange)[end]-15,"z = $(Int(etl_vals[z]))μm",fontsize=7, color="white")
+# ax.text(5,length(overlap_yrange)[end]-15,"z = $(Int(etl_vals[z]))μm",fontsize=7, color="white")
 
 fig.savefig(path*".svg", dpi=300)
 fig.savefig(path*".png", dpi=300)

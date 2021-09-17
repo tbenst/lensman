@@ -16,16 +16,16 @@ function per_trial_regions_df(tseries::Array, window_len, stim_start_idx, stim_e
     df
 end
 
-
-function per_trial_regions_df(tseries::Union{LazyH5, LazyTy5}, window_len, stim_start_idx, stim_end_idx, trial_order,
-    masks, region_names, stim_names=nothing
+function per_trial_regions_df(tyh5_path::AbstractString, tseries_dset::AbstractString, window_len, stim_start_idx, stim_end_idx, trial_order,
+    masks, region_names; stim_names=nothing
 )
-    per_trial_regions_df(tseries.tyh5_path, tseries.dset_str, window_len, stim_start_idx, stim_end_idx,
-        trial_order, masks, region_names, stim_names)
+    tseries = LazyTy5(tyh5_path, tseries_dset)
+    _per_trial_regions_df(tseries, window_len, stim_start_idx, stim_end_idx, trial_order,
+    masks, region_names, stim_names)
 end
 
-function per_trial_regions_df(tyh5_path::AbstractString, tseries_dset::AbstractString, window_len, stim_start_idx, stim_end_idx, trial_order,
-    masks, region_names, stim_names=nothing
+function per_trial_regions_df(tseries::Union{LazyH5, LazyTy5}, window_len, stim_start_idx, stim_end_idx, trial_order,
+    masks, region_names; stim_names=nothing
 )
     nStimuli = maximum(trial_order)
     nTrials = length(stim_start_idx)
@@ -36,7 +36,7 @@ function per_trial_regions_df(tyh5_path::AbstractString, tseries_dset::AbstractS
     df = @showprogress @distributed vcat for i in 1:nTrials
         start_idx, end_idx = stim_start_idx[i], stim_end_idx[i]
         stim_name = stim_names[trial_order[i]]
-        _proc_region_df_f(tyh5_path, tseries_dset, masks, region_names, stim_name,
+        _proc_region_df_f(tseries, masks, region_names, stim_name,
             start_idx, end_idx, i, window_len)
     end
     df
@@ -98,6 +98,29 @@ function _proc_region_df_f(tyh5_path::AbstractString, tseries_dset::AbstractStri
     region_names, stim_name, start_idx, end_idx, trial, window_len, ϵ=0.0
 )
     proc_tseries = LazyTy5(tyh5_path, tseries_dset)
+    _proc_region_df_f(proc_tseries, Val(:helper), masks,
+        region_names, stim_name, start_idx, end_idx, trial, window_len, ϵ)
+end
+
+function _proc_region_df_f(tseries::LazyTy5, masks,
+    region_names, stim_name, start_idx, end_idx, trial, window_len, ϵ=0.0
+)
+    proc_tseries = LazyTy5(tseries.tyh5_path, tseries.dset_str)
+    _proc_region_df_f(proc_tseries, Val(:helper), masks,
+        region_names, stim_name, start_idx, end_idx, trial, window_len, ϵ)
+end
+
+function _proc_region_df_f(tseries::LazyH5, masks,
+    region_names, stim_name, start_idx, end_idx, trial, window_len, ϵ=0.0
+)
+    proc_tseries = LazyH5(tseries.tyh5_path, tseries.dset_str)
+    _proc_region_df_f(proc_tseries, Val(:helper), masks,
+        region_names, stim_name, start_idx, end_idx, trial, window_len, ϵ)
+end
+
+function _proc_region_df_f(proc_tseries, v::Val{:helper}, masks,
+    region_names, stim_name, start_idx, end_idx, trial, window_len, ϵ=0.0
+)
     s = start_idx
     e = end_idx
     f0 = mean(proc_tseries[:,:,:,s-window_len:s-1],dims=4)[:,:,:,1]
