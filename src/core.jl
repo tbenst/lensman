@@ -53,7 +53,7 @@ end
 "Read (sparse) mask from Zbrain atlas and reshape to dense Array."
 function read_mask(masks, idx::Int; W=621, H=1406, Z=138, units=zbrain_units,
         rostral=:left, dorsal=:down, outline=false)
-    mat = zbrain_vec2mat(masks[key][:,idx];
+    mat = zbrain_vec2mat(masks["MaskDatabase"][:,idx];
         W=W, H=H, Z=Z, units=units, rostral=rostral,dorsal=dorsal)
 
     if outline
@@ -64,13 +64,13 @@ function read_mask(masks, idx::Int; W=621, H=1406, Z=138, units=zbrain_units,
 
 end
 
-function read_mask(masks, names::AbstractString; kwargs...)
+function read_mask(masks, name::AbstractString; kwargs...)
     mask_names = masks["MaskDatabaseNames"]
     # we change name when resaving h5 file
     new_mask_names = replace.(mask_names, "/" => "_")[1,:]
     # lets resolve for either
-    is_name = mask_names .== names
-    new_is_name = new_mask_names .== names
+    is_name = mask_names .== name
+    new_is_name = new_mask_names .== name
     if sum(is_name) == 1
         idx = findall(is_name)[1]
     elseif sum(new_is_name) == 1

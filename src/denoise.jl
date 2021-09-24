@@ -114,3 +114,54 @@ function kalman_filter_stream(tyh5_path, tseries, tseriesT, artifacts; save_uint
     close(h5)
     tyh5_path
 end
+
+function artifact_filter_stream(tyh5_path, tseries, tseriesT, artifacts)
+    size(tseries)
+    z1 = zcreate(Float32, M,N,path = path,chunks=(M/10, N/10),
+        compressor=Zarr.BloscCompressor(cname="zstd", clevel=1));
+    tseries
+    dset = create_dataset(h5, "no_artifact", datatype(UInt16), size(tseries))
+    X = Float32.(tseries[:,:,:,1])
+    @showprogress for t in 2:tseriesT
+        vol = Float32.(tseries[:,:,:,t])
+        M = remove_artifacts_from_vol(vol, t, artifacts)
+        dset[:,:,:,t] = convert(Array{Float32}, M)
+    end
+    close(h5)
+    tyh5_path
+end
+
+"Remove salt & pepper."
+function unsalt_n_pepper(im, felz_k=50, felz_min=10)
+    im = opening_median(im)
+    segments = felzenszwalb(im, felz_k, felz_min)
+    im[segments.image_indexmap .== 1] .= 0
+    im
+end
+
+"Remove salt & pepper."
+function unsalt_n_pepper(vol::Array{T,3}; felz_k=50, felz_min=10) where T<:Real
+    new = zeros(size(vol)...)
+    for z in 1:size(new,3)
+        im = opening_median(vol[:,:,z])
+        segments = felzenszwalb(im, felz_k, felz_min)
+        im[segments.image_indexmap .== 1] .= 0
+        new[:,:,z] = im
+    end
+    new
+end
+
+
+erodeN(n) = n == 1 ? erode : erode ∘ erodeN(n-1)
+dilateN(n) = n == 1 ? dilate : dilate ∘ dilateN(n-1)
+openingN(n) = dilateN(n) ∘ erodeN(n)
+
+function opening_nonbool(x; N=1)
+    nonzero = x .> 0
+    nonzero = openingN(N)(nonzero)
+    new = copy(x)
+    new[(~).(nonzero)] .= 0
+    new
+end
+
+opening_median = (x -> mapwindow(median!, x, (3,3))) ∘ opening_nonbool

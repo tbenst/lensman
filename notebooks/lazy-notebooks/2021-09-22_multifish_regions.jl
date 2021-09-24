@@ -140,6 +140,7 @@ function get_major_subregion(name, mask)
     major_region, subregion
 end
 
+"missing dorsal / ventral hab...?"
 function region_to_major_sub(zbrain_mask_names, zbrain_masks, rhom_names, rhom_masks)
     # since so many more regions in hindbrain, we seperate out major regions...
     region_xloc = DataFrame()
@@ -161,15 +162,38 @@ function region_to_major_sub(zbrain_mask_names, zbrain_masks, rhom_names, rhom_m
 
         push!(region_xloc, (fullname=region, region=major, subregion=subregion, x=x))
     end
+    idx = findfirst(region_xloc.fullname .== "Diencephalon - Habenula")
+    x,region = region_xloc[idx,[:x,:region]]
+    push!(region_xloc, (fullname="Diencephalon - Dorsal Habenula", region=region,
+        subregion="Dorsal Habenula", x=x))
+    push!(region_xloc, (fullname="Diencephalon - Ventral Habenula", region=region,
+        subregion="Ventral Habenula", x=x))
     sort!(region_xloc,:x)
 
 end
 
 # skip left / right hemisphere
 regions = region_to_major_sub(zbrain_mask_names[1:end-2], zbrain_masks, rhom_names, rhom_masks)
-[(reg, sum(regions.region .== reg)) for reg in unique(regions.region)]
+region_levels = [
+    "Ganglia",
+    "Spinal Cord",
+    "Rhombencephalon - Rhombomere 7",
+    "Rhombencephalon - Rhombomere 6",
+    "Rhombencephalon - Rhombomere 5",
+    "Rhombencephalon - Rhombomere 4",
+    "Rhombencephalon - Rhombomere 3",
+    "Rhombencephalon - Rhombomere 2",
+    "Rhombencephalon - Rhombomere 1",
+    "Rhombencephalon",
+    "Mesencephalon",
+    "Diencephalon",
+    "Telencephalon"
+]
+regions.region = CategoricalArray(regions.region; levels=region_levels)
+[(reg, sum(regions.region .== reg)) for reg in levels(regions.region)]
 ##
-root_dir = "/data/dlab/b115"
+
+
 df = DataFrame()
 for (p,r) in zip(arrow_paths, recording_names)
     rdf = Arrow.Table(joinpath(root_dir, p)) |> DataFrame
@@ -182,6 +206,17 @@ df = vcat(df, dorsal_ventral_hab_df_2021_06_08_fish2_titration,
 if typeof(df.stim[1]) == String
     df[!,:stim] = parse.(Int,df.stim)
 end;
+rename!(df, :region => :fullname)
+
+# set levels so we get desired plotting order
+df_region = CategoricalArray(df.region, ordered=true)
+levels!(df_region, region_levels)
+df[!,:region] = df_region
+fullnames =  CategoricalArray(df.fullname; ordered=true)
+levels!(fullnames, regions.fullname)
+df.fullname = fullnames
+
+df
 # df = Lensman.add_major_regions_to_df(df)
 # df = Lensman.rename_regions_in_df(df)
 ##
@@ -206,7 +241,7 @@ ftms  = f -> _ftms.(f)
 # ftms = f -> (new1="hi",hew="yo")
 # ftms.(df[[1,2],:region])
 # df = DataFrames.combine(groupby(df, cols_to_keep), :region => ftms; keepkeys=true)
-new_df = DataFrames.transform(df, :region => ftms => AsTable)
+DataFrames.transform!(df, :fullname => ftms => AsTable)
 ##
 df[df.subregion .== "Tectum Stratum Periventriculare",:subregion] .= "Optic Tectum"
 # julia> names(df)
@@ -221,28 +256,27 @@ df[df.subregion .== "Tectum Stratum Periventriculare",:subregion] .= "Optic Tect
 #  "hemisphere"
 #  "uri"
 
-# combine by region
-function calc_df_both_hemispheres(f0, area,f,region,df_f,stim,trial,uri,major)
+function calc_df_both_hemispheres(f0,area,f,df_f)
     newf0 = sum(area .* f0)
     newf = sum(area .* f)
-    DataFrame("f0"=>newf0, "area"=>sum(area),"f"=>newf, "Δf/f" => (newf-newf0) / newf0,
-    "region"=>region[1], "stim"=>stim[1], "trial"=>trial[1], "uri"=>uri[1], "major region"=>major)
+    DataFrame("f0"=>newf0, "area"=>sum(area),"f"=>newf, "Δf/f" => (newf-newf0) / newf0)
 end
 
-gb = groupby(df, [:region, :uri, :trial])
-@assert size(gb[1],1) == 2 # left&right hemisphere
+gb = groupby(df, [:fullname, :stim, :trial, :uri, :region, :subregion])
+# todo: check for a known region where should have two hemisphere..?
+# @assert size(gb[1],1) == 2 # left&right hemisphere 
 region_df = DataFrames.combine(gb,
-    [:f0, :area, :f,:region,Symbol("Δf/f"),:stim,:trial,:uri, Symbol("major region")]
-    => calc_df_both_hemispheres => AsTable)
+    [:f0, :area, :f,Symbol("Δf/f")] => calc_df_both_hemispheres => AsTable;
+    keepkeys=true)
 sort!(df, "Δf/f")
 sort!(region_df, "Δf/f")
 good_idxs = (~).(isnan.(df[:,"Δf/f"]))
 df = df[good_idxs,:];
 good_idxs = (~).(isnan.(region_df[:,"Δf/f"]))
 region_df = region_df[good_idxs,:];
-
-major_regions = unique(region_df[!,"major region"])
-major_regions = filter(x->x!="Spinal Cord", major_regions)
+major_regions = levels(region_df[!,"region"])
+subregions = levels(region_df[!,"subregion"]) # TODO: should sort in loop for each region
+# major_regions = filter(x->x!="Spinal Cord", major_regions)
 ##
 REGION_LIST = [
     "Dorsal Habenula",
@@ -292,54 +326,87 @@ quick_mean_sem(ones(5))
 second_order_uri = "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
 sdf = filter(row->row[:uri]==second_order_uri, region_df);
 second_order_plot_df = filter(row -> row.area > 100, sdf)
-second_order_plot_df = Lensman.rename_regions_in_df(second_order_plot_df)
+# second_order_plot_df = Lensman.rename_regions_in_df(second_order_plot_df)
 
 stim_names = sort(unique(second_order_plot_df[:,:stim]))
 pretty_stim_names = ["habenula\n2nd order", "raphe", "outside\nbrain"]
-second_order_plot_df[:,"stim target"] = string.(second_order_plot_df[:,:stim])
+second_order_plot_df[!,"stim target"] = string.(second_order_plot_df[:,:stim])
+
 for (m,mm) in zip(stim_names,pretty_stim_names)
     idxs = second_order_plot_df[:,:stim] .== m
     second_order_plot_df[idxs,"stim target"] .= mm
 end
 
-fig = Figure(resolution=(2000, 6000))
+stim_targets = CategoricalArray(second_order_plot_df[!,"stim target"], ordered=true)
+levels!(stim_targets, ["outside\nbrain", "raphe","habenula\n2nd order"])
+second_order_plot_df[!,"stim target"] = stim_targets
 
-for (ii,major) in enumerate(major_regions)
-    times, remainder = divrem(ii,numcol)
-    i = times + 1
-    j = remainder + 1
-    pdf = filter(r->r["major region"] == major, second_order_plot_df)
-    pdf = DataFrames.combine(groupby(pdf, [:region,Symbol("stim target")]),
-        Symbol("Δf/f")=>quick_mean_sem=>AsTable; keepkeys=true)
-    # https://discourse.julialang.org/t/makie-errorbars-for-grouped-bar-graphs/62361/7
-    # p1 = Data(pdf) * visual(BarPlot) *
-    #     mapping(:region, "Δf/f", color="stim target", dodge="stim target")
-    p2 = Data(pdf) * visual(CrossBar) *
-        mapping(:region, "Δf/f", "minus_sem", "plus_sem", color="stim target", dodge="stim target")
-        # mapping(:region, "Δf/f", color="stim target", dodge="stim target")
-    # p = p1 + p2
-    p = p2
-    # push!(ps, p)
-    # add title, but only the title
-    Makie.Axis(fig[i,j], title=major, yticksvisible=false, xticksvisible=false,
-        rightspinevisible=false,leftspinevisible=false,topspinevisible=false,
-        xgridvisible=false,ygridvisible=false,xlabelvisible=false,ylabelvisible=false,
-        xminorgridvisible=false,yminorgridvisible=false,
-        xminorticksvisible=false,yminorticksvisible=false,
-        xticklabelsvisible=false,yticklabelsvisible=false)
-    global grid = aog.draw!(fig[i,j], p, axis=(xticklabelrotation = pi/6,))
-    ylims!(-0.2,0.75)
+
+ncol_per_region = DataFrames.combine(groupby(second_order_plot_df, :region), :subregion => x->length(unique(x)))
+# let's group:
+# Rhombomere 7, Spinal Cord, Ganglia
+# Rhombomere 1 - 6
+# Rhombencephalon
+# Mesencephalon, Diencephalon, Telencephalon
+# 
+##
+region_groups = [
+    ["Ganglia", "Spinal Cord", "Rhombencephalon - Rhombomere 7"],
+    ["Rhombencephalon - Rhombomere $i" for i in 6:-1:1],
+    ["Rhombencephalon"],
+    ["Mesencephalon", "Diencephalon", "Telencephalon"]
+]
+region_group_names = replace.(join.(region_groups,", "), "Rhombencephalon - " => "")
+W = 183u"mm"
+H = 247u"mm"
+dpi = 300 # makie default; we scale up on save
+mm2px = mm->Int(round(uconvert(u"inch", mm) * dpi / 1u"inch"))
+@show W = mm2px(W)
+@show H = mm2px(H)
+
+tiny_fontsize_theme = Theme(fontsize = 5 * 300/72)
+
+with_theme(tiny_fontsize_theme) do
+
+    fig = Figure(resolution=(W, H))
+    for (ii,(reg_name,reg_group)) in enumerate(zip(region_group_names, region_groups))
+        # times, remainder = divrem(ii,numcol)
+        # i = times + 1
+        # j = remainder + 1
+        pdf = filter(r->r[:region] in reg_group, second_order_plot_df)
+        pdf = DataFrames.combine(groupby(pdf, [:subregion,Symbol("stim target")]),
+            Symbol("Δf/f")=>quick_mean_sem=>AsTable; keepkeys=true)
+        # https://discourse.julialang.org/t/makie-errorbars-for-grouped-bar-graphs/62361/7
+        # p1 = Data(pdf) * visual(BarPlot) *
+        #     mapping(:region, "Δf/f", color="stim target", dodge="stim target")
+        p2 = Data(pdf) * visual(CrossBar) *
+            mapping(:subregion, "Δf/f", "minus_sem", "plus_sem", color="stim target", dodge="stim target")
+            # mapping(:region, "Δf/f", color="stim target", dodge="stim target")
+        # p = p1 + p2
+        p = p2
+        # push!(ps, p)
+        # add title, but only the title
+        # Makie.Axis(fig[ii,2:9], yticksvisible=false, xticksvisible=false,
+        Makie.Axis(fig[ii,1], title=reg_name, yticksvisible=false, xticksvisible=false,
+            rightspinevisible=false,leftspinevisible=false,topspinevisible=false,
+            xgridvisible=false,ygridvisible=false,xlabelvisible=false,ylabelvisible=false,
+            xminorgridvisible=false,yminorgridvisible=false,
+            xminorticksvisible=false,yminorticksvisible=false,
+            xticklabelsvisible=false,yticklabelsvisible=false)
+        global grid = aog.draw!(fig[ii,1], p, axis=(xticklabelrotation = pi/6,))
+        ylims!(-0.2,1.5)
+    end
+
+    # legend!(fig[1,end + 1], grid)
+    ppath = joinpath(plot_dir,
+        "all-region_second_order_region_df_f_$(replace(second_order_uri,"""/"""=>"""_"""))")
+    @show ppath
+    pt_per_unit = 72/300 # Makie defaults to 72px
+    save(ppath*".png", fig, pt_per_unit=pt_per_unit)
+    save(ppath*".svg", fig, pt_per_unit=pt_per_unit)
+    save(ppath*".pdf", fig, pt_per_unit=pt_per_unit)
+    fig
 end
-
-legend!(fig[1,end + 1], grid)
-ppath = joinpath(plot_dir,
-    "all-region_second_order_region_df_f_$(replace(second_order_uri,"""/"""=>"""_"""))")
-@show ppath
-pt_per_unit = 72/300 # Makie defaults to 72px
-save(ppath*".png", fig, pt_per_unit=pt_per_unit)
-save(ppath*".svg", fig, pt_per_unit=pt_per_unit)
-save(ppath*".pdf", fig, pt_per_unit=pt_per_unit)
-fig
 ##################################################
 ## Second-order proj field mapping: select regions
 ##################################################

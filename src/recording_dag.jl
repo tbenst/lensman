@@ -40,12 +40,6 @@ function checkpointable(args...)
     Checkpointable(args...)
 end
 
-function res_temp(a,b)
-    @show a,b
-    c = h5read(a,b)
-    c
-end
-
 """Master DAG for all computations on a recording.
 
 TODO: add @assert length(trial_order) == length(stim_start_idx)
@@ -56,7 +50,8 @@ function update_recording_dag(recording::DAG)
         oir_dir, zbrain_warp_prefix, mm_warp_prefix, oir_920_name, oir_820_name, tyh5_path,
         h2b_zbrain, zbrain_units, rostral, dorsal, suite2p_dir, zbrain_masks,
         zbrain_mask_names, cells_df_f_win_secs, cells_df_f_padding,
-        registration_type, roi_method, channel_str, region_mask_strategy
+        registration_type, roi_method, channel_str, region_mask_strategy, trial_average_path,
+        trial_average_dset
     ) = recording.nodes
     # procutil=Dict(Dagger.ThreadProc => 36.0)
     
@@ -159,12 +154,13 @@ function update_recording_dag(recording::DAG)
         cells_df_f_winsize = Int(ceil(cells_df_f_win_secs * vol_rate))
         cells_df_f = add_df_f_to_cells(tseries, cells, cell_masks,
             winSize=cells_df_f_winsize, padding=cells_df_f_padding);
-        # TODO: not tested
-        trial_average_path = joinpath(fish_dir, replace(
+        # TODO: this checkpointing is bad as isn't recalculated if inputs change...
+        # can we do something nix-like here...? hash inputs?
+        trial_average_path = isnothing(trial_average_path) ? joinpath(fish_dir, replace(
             "$(exp_name)_$(string(tseries_read_strategy))_avgStim.h5",
-            "lazy_"=>""))
-        trial_average_dset = replace(string(tseries_read_strategy), "lazy_" => "")
-        trial_average_restore = res_temp(trial_average_path,
+            "lazy_"=>"")) : trial_average_path
+        trial_average_dset = isnothing(trial_average_dset) ? replace(string(tseries_read_strategy), "lazy_" => "") : trial_average_dset
+        trial_average_restore = h5read(trial_average_path,
             trial_average_dset)
         _trial_average = calc_save_trial_average(trial_average_path, trial_average_dset,
         tseries, stim_start_idx, stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
@@ -233,6 +229,8 @@ function update_recording_dag(recording::DAG)
         cells_mask = getindex(sdict, :cells_mask)
         iscell = getindex(sdict, :iscell)
 
+        projective_field = influence_map(trial_average, window_len);
+
         # targetsWithPlaneIndex = mapTargetGroupsToPlane(target_groups, etl_vals; is1024=(tseriesW==1024), zOffset=zOffset)
         # assigned all above
     end
@@ -269,7 +267,7 @@ function update_recording_dag(recording::DAG)
         nCells, cell_centers, cells_mask, iscell, cells_df_f, s2p_cell_masks, 
         multimap_920, multimap_820, multimap_ants_cmd,
         ttl_starts, artifacts, tseries_units, zseries_units, trial_average_path,
-        trial_average_dset
+        trial_average_dset, projective_field, trial_average_path
     )
 
     recording
@@ -409,15 +407,25 @@ function read_rec_xml(recording_dir)
     read_xml(xmlPath)
 end
 
-function read_first_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_plane, mask_name;
+"Read Zbrain mask that is matching"
+function read_first_mask(region_masks_h5, zbrain_mask_names, mask_name;
         outline=false
 )
     name = zbrain_mask_names[occursin.(mask_name, zbrain_mask_names)][1]
     # name, read_registered_mask(region_masks_h5,
     #     name)[:,:,imaging2zseries_plane];
 
-    mask = read_registered_mask(region_masks_h5, name; outline=outline)[:, :, imaging2zseries_plane]
+    mask = read_registered_mask(region_masks_h5, name; outline=outline)
     name, mask
+end
+
+
+function read_first_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_plane, mask_name;
+        outline=false
+)
+    name, mask = read_first_mask(region_masks_h5, zbrain_mask_names, mask_name;
+        outline=outline)
+    name, mask[:, :, imaging2zseries_plane]
 end
 
 function try_read_mask(region_masks_h5, zbrain_mask_names, imaging2zseries_plane, mask_name;

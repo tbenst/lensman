@@ -980,8 +980,10 @@ function _region_mask_cmtk(i, zseries_path, zbrain_masks, cmtk_transform_path, r
     (name, mask)
 end
 
-function read_registered_mask(region_masks_h5, name; outline=false)
-    @show name
+function read_registered_mask(region_masks_h5, name; outline=false, verbose=false)
+    if verbose
+        @show name
+    end
     shape = region_masks_h5["size"][:]
     ret = reshape(
         Array(sparse(H5SparseMatrixCSC(region_masks_h5, name))),

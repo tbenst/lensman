@@ -1,4 +1,4 @@
-ENV["DISPLAY"] = "localhost:11"
+ENV["DISPLAY"] = "localhost:10"
 ##
 # using ImageView
 using Lensman, Images, Glob, NPZ, PyCall, DataFrames, ImageSegmentation, 
@@ -54,7 +54,7 @@ r = Recordings[
 @show nstim_pulses
 @assert nstim_pulses == 10
 # rm(avgstim_path)
-
+##
 if occursin("tyh5", string(tseries_read_strategy))
     avgstim_path = joinpath(fish_dir,exp_name*"_lstm_avgStim.h5")
 elseif occursin("tiff", string(tseries_read_strategy))
@@ -92,6 +92,7 @@ catch
         h5write(avgstim_path, "/kalman", trial_average);
     end
 end
+
 size(trial_average)
 ##
 imap = influence_map(trial_average, window_len);
@@ -101,7 +102,6 @@ sum(imap, dims=[1,2,3])[1,1,1,:]
 ##
 s = stim_start_idx[1]
 # imshow(shift_every_other_row(tseries[:,:,:,s-10:s+15],-3))
-##
 ##
 targetSizePx = spiral_size(exp_date, lateral_unit)
 # analysis_name = "lstm"
@@ -404,11 +404,11 @@ elseif show_outline
 else
     plotpath = joinpath(plot_dir,"$(analysis_name)_viridis_medianfilt_titration_oneplane_df_f")
 end
-fig.savefig("$(plotpath).svg",
-    dpi=300)
-fig.savefig(joinpath(plot_dir,"$(plotpath).png"),
-    dpi=300)
-fig.savefig(joinpath(plot_dir,"$(plotpath).pdf"),
-    dpi=300)
+# fig.savefig("$(plotpath).svg",
+#     dpi=300)
+# fig.savefig(joinpath(plot_dir,"$(plotpath).png"),
+#     dpi=300)
+# fig.savefig(joinpath(plot_dir,"$(plotpath).pdf"),
+#     dpi=300)
 @show plotpath*".svg"
 fig

@@ -499,6 +499,9 @@ function stim_roi_threshold(df, key, thresh, nStimuli; id_key=:cell_id,
     return -1
 end
 
+# TODO: this has disadvantage of not accounting so much for bleaching over time
+# we should consider either a) de-trending in denoising or b) taking geometric mean
+# of df/f values
 function influence_map(trial_average, window; ϵ=0.1)
     f = mean(trial_average[:,:,:,:,end-window+1:end],dims=5)[:,:,:,:,1]
     f0 = mean(trial_average[:,:,:,:,1:window],dims=5)[:,:,:,:,1]

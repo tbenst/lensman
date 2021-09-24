@@ -1,4 +1,4 @@
-# ENV["DISPLAY"] = "localhost:11"
+ENV["DISPLAY"] = "localhost:11"
 # mostly same as 2021-03-04 notebook, but updated for latest
 # DataFrames
 ##
