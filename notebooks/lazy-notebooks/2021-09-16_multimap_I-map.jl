@@ -432,7 +432,11 @@ for (i, (mm,z)) in enumerate([(gad_chan,2), (gad_chan,8), (gad_chan,2), (gad_cha
     # @show sum(segments.image_indexmap .!== 1)
     im820[segments.image_indexmap .== 1] .= 0
 
-    channelview(im)[1,:,:] .= im820
+    if mm == sert_chan
+        channelview(im)[3,:,:] .= im820
+    else
+        channelview(im)[1,:,:] .= im820
+    end
 
     # zoom in for right 4 panels
     if ~in(i, [1,2])

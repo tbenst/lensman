@@ -1,4 +1,4 @@
-ENV["DISPLAY"] = "localhost:11.0"
+ENV["DISPLAY"] = "localhost:10.0"
 ##
 using AlgebraOfGraphics, CairoMakie
 using Lensman, Images, Glob, NPZ, DataFrames, ImageSegmentation, 
@@ -150,15 +150,22 @@ im2 = RGB.(green)
 channelview(im2)[[1,3],:,:,:] .= 0
 for (r, reg) in enumerate(region_masks)
     # region = reg .> 0
-    color_mask = RGB{N0f16}.(zeros(size(im2)...))
-    color_mask[reg[2]] .= region_colors[r]
+
+    # color_mask = RGB{N0f16}.(zeros(size(im2)...))
+    # color_mask[reg[2]] .= region_colors[r]
+
     # im2 = mapc.((a,b)->maximum([a,b]), im2, color_mask)
-    im2 = blend.(im2, color_mask, mode=BlendScreen, opacity=1.0)
+    # im2 = mapc.((a,b)->b==0 ? a : b, im2, color_mask)
+
+    im2[reg[2]] .= region_colors[r]
+    # im2 = blend.(im2, color_mask, mode=BlendScreen)
+    # im2 = blend.(im2, color_mask, mode=BlendLighten)
+    # im2 = blend.(im2, color_mask, mode=BlendColor)
 end
 im2[:,:,z]
 # imshow(im2)
 
-##
+#
 zs = [4, 6, 8, 10]
 # no idea why need to scale up
 figB = Float64(uconvert(u"inch", 55u"mm")) / 1u"inch" * 1.3
@@ -182,7 +189,7 @@ fig.savefig(plotpath*".svg",dpi=300)
 fig.savefig(plotpath*".pdf",dpi=300)
 fig.savefig(plotpath*".png",dpi=300)
 fig
-
+##
 region_colors
 ##
 @show etl_vals[zs]

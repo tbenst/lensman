@@ -1,4 +1,4 @@
-ENV["DISPLAY"] = "localhost:10"
+ENV["DISPLAY"] = "localhost:11"
 ##
 # using ImageView
 using Lensman, Images, Glob, NPZ, PyCall, DataFrames, ImageSegmentation, 
@@ -21,6 +21,7 @@ plt.rc("legend", fontsize=SMALL_SIZE)    # legend fontsize
 plt.rc("figure", titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
 np = pyimport("numpy")
+inset_axes = pyimport("mpl_toolkits.axes_grid1.inset_locator").inset_axes
 matscale = pyimport("matplotlib_scalebar.scalebar")
 import Plots
 import Plots: heatmap
@@ -306,6 +307,29 @@ show_outline = true
 # yrange = 65:tseriesH-100
 yrange = 85:tseriesH-120
 xrange = 70:tseriesW-90
+zoom_xrange = 360:425
+zoom_yrange = (150:300) .+ 10
+inset1_xrange = (1:40) .+ 133
+inset1_yrange = (256:296) .- 75
+inset2_xrange = (1:40) .+ 133
+inset2_yrange = (256:296) .- 5
+cmap = "inferno"
+# cmap = "magma"
+# cmap = "viridis"
+lw = 0.5
+function style_inset(ax,color="white")
+    ax.spines["bottom"].set_color(color)
+    ax.spines["top"].set_color(color)
+    ax.spines["right"].set_color(color)
+    ax.spines["left"].set_color(color)
+    ax.set_xticks([])
+    ax.set_xticks([], minor=true)
+    ax.set_yticks([])
+    ax.set_yticks([], minor=true)
+end
+
+um_per_px1 = tseries_units[2] / 1u"μm"
+
 # xrange = 40:tseriesW-70
 for (s,ax) in zip(1:nStimuli,axs[3:end])
     im = df_f[:,:,z,s]
@@ -316,12 +340,12 @@ for (s,ax) in zip(1:nStimuli,axs[3:end])
     # global cim = ax.imshow(df_f[50:end-100,1:end-50,z,s], cmap="RdBu_r",
     # global cim = ax.imshow(im, cmap="RdBu_r",
     if ~no_df 
-        global cim = ax.imshow(main_im, cmap="viridis",
+        global cim = ax.imshow(main_im, cmap=cmap,
             clim=(cmin,cmax), interpolation="none")
             # norm=cnorm, interpolation="none")
     end
     # ax.imshow(outlines[:,:,z], alpha=outlines[:,:,z])
-    # global cim = ax.imshow(df_f[50:end-100,1:end-50,z,s], cmap="viridis", clim=(0.1,cmax))
+    # global cim = ax.imshow(df_f[50:end-100,1:end-50,z,s], cmap=cmap, clim=(0.1,cmax))
     n = s*2
     # ax.set_title("$n cells")
     ax.set_axis_off()
@@ -340,9 +364,7 @@ for (s,ax) in zip(1:nStimuli,axs[3:end])
 
     if s==1
         # add close-up
-        zoom_xrange = 360:425
-        zoom_yrange = (150:300) .+ 10
-        axs[1].imshow(im[zoom_yrange,zoom_xrange],clim=(0,1.0))
+        axs[1].imshow(im[zoom_yrange,zoom_xrange],clim=(0,1.0), cmap=cmap)
         axs[1].set_axis_off()
         if show_outline
             outlines_to_show = small_outlines[zoom_yrange,zoom_xrange,z]
@@ -353,7 +375,7 @@ for (s,ax) in zip(1:nStimuli,axs[3:end])
             (1, 1),
             # length(zoom_xrange)-3, length(zoom_yrange)-3,
             length(zoom_xrange), length(zoom_yrange)-3,
-            linestyle="--", linewidth=1, edgecolor="w", facecolor="none")
+            linestyle="--", linewidth=lw, edgecolor="w", facecolor="none")
         axs[1].add_patch(rect)
 
 
@@ -362,8 +384,86 @@ for (s,ax) in zip(1:nStimuli,axs[3:end])
             (zoom_xrange[1] - xrange[1], zoom_yrange[1] - yrange[1]),
             zoom_xrange[end]-zoom_xrange[1], zoom_yrange[end]-zoom_yrange[1],
             # zoom_xrange[end]-zoom_xrange[1]-5, zoom_yrange[end]-zoom_yrange[1],
-            linestyle="--", linewidth=1, edgecolor="w", facecolor="none")
+            linestyle="--", linewidth=lw, edgecolor="w", facecolor="none")
         ax.add_patch(rect)
+    else
+        # add inset
+        # upper right
+        rect1 = matplotlib.patches.Rectangle(
+            (inset1_xrange[1] - xrange[1], inset1_yrange[1] - yrange[1]),
+            length(inset1_xrange), length(inset1_yrange),
+            linestyle="--", linewidth=lw, edgecolor="w", facecolor="none")
+        ax.add_patch(rect1)
+
+        rect2 = matplotlib.patches.Rectangle(
+            (inset2_xrange[1] - xrange[1], inset2_yrange[1] - yrange[1]),
+            length(inset2_xrange), length(inset2_yrange),
+            linestyle="--", linewidth=lw, edgecolor="w", facecolor="none")
+        ax.add_patch(rect2)
+
+
+        axins1 = inset_axes(ax, height="100%", width="100%",
+            bbox_to_anchor=(.13, .76, .28, .28), bbox_transform=ax.transAxes, loc="upper right")
+        
+        axins1.imshow(im[inset1_yrange,inset1_xrange],clim=(0,1.0), cmap=cmap)
+        
+        style_inset(axins1)
+        # lower right
+        axins2 = inset_axes(ax, height="100%", width="100%",
+            bbox_to_anchor=(.13, -.04, .28, .28), bbox_transform=ax.transAxes, loc="lower right")
+
+        # make axis a dotted white
+        # for spine in ["right", "top", "left", "bottom"]
+        #     axins1.spines[spine].set_linestyle((0,(4,3)))
+        #     axins2.spines[spine].set_linestyle((0,(4,3)))
+        # end
+
+            
+        axins2.imshow(im[inset2_yrange,inset2_xrange],clim=(0,1.0), cmap=cmap)
+        style_inset(axins2)
+        if s == 2
+            # scalebar for second panel only
+            scalebar = matscale.ScaleBar(um_per_px1, "um", length_fraction=0.25, box_alpha=0,
+                scale_loc="left", location="lower right", color = "white",
+                pad=0.1, font_properties=Dict("size" => 7),
+                scale_formatter = py"""lambda value, unit: "" """)
+            axins2.add_artist(scalebar)
+        end
+
+        # top
+        ls = (0,(3,2))
+        x1 = inset1_xrange[1] - xrange[1]
+        y1 = inset1_yrange[1] - yrange[1]
+        x2 = inset1_xrange[end] - xrange[1]
+        y2 = inset1_yrange[end] - yrange[1]
+        ax.plot([x1, x1-25], [y1, y1-9], ls=ls, color="white", lw=0.5)
+        ax.plot([x2, x2+24], [y1, y1-9], ls=ls, color="white", lw=0.5)
+        
+        # bot
+        x1 = inset2_xrange[1] - xrange[1]
+        y1 = inset2_yrange[1] - yrange[1]
+        x2 = inset2_xrange[end] - xrange[1]
+        y2 = inset2_yrange[end] - yrange[1]
+        ax.plot([x1, x1-25], [y2, y2+13], ls=ls, color="white", lw=0.5)
+        ax.plot([x2, x2+22], [y2, y2+13], ls=ls, color="white", lw=0.5)
+        
+        # annotations
+        if s >= 14
+            # top inset
+            circ1 = matplotlib.patches.Circle(
+                (32, 32), 5,
+                linestyle="-", linewidth=lw, edgecolor="w", facecolor="none")
+            axins1.add_patch(circ1)
+        end
+
+        if s >= 3
+            # bottom inset
+            circ2 = matplotlib.patches.Circle(
+                (17, 21), 5,
+                linestyle="-", linewidth=lw, edgecolor="w", facecolor="none")
+            axins2.add_patch(circ2)
+        end
+
     end
 end
 
@@ -387,7 +487,7 @@ for (i,ax) in enumerate(axs[3:end])
     end
 end
 
-um_per_px1 = tseries_units[2] / 1u"μm"
+
 scalebars = [matscale.ScaleBar(um_per_px1, "um", length_fraction=0.18, box_alpha=0,
     scale_loc="left", location="lower right", color = "white",
     font_properties=Dict("size" => 7),
@@ -400,15 +500,15 @@ axs[1].add_artist(scalebars[2])
 if no_df & show_outline
     plotpath = joinpath(plot_dir,"$(analysis_name)_outlined_titration_oneplane_df_f")
 elseif show_outline
-    plotpath = joinpath(plot_dir,"$(analysis_name)_viridis_medianfilt_outlined_titration_oneplane_df_f")
+    plotpath = joinpath(plot_dir,"$(analysis_name)_$(cmap)_medianfilt_outlined_titration_oneplane_df_f")
 else
-    plotpath = joinpath(plot_dir,"$(analysis_name)_viridis_medianfilt_titration_oneplane_df_f")
+    plotpath = joinpath(plot_dir,"$(analysis_name)_$(cmap)_medianfilt_titration_oneplane_df_f")
 end
-# fig.savefig("$(plotpath).svg",
-#     dpi=300)
-# fig.savefig(joinpath(plot_dir,"$(plotpath).png"),
-#     dpi=300)
-# fig.savefig(joinpath(plot_dir,"$(plotpath).pdf"),
-#     dpi=300)
+fig.savefig("$(plotpath).svg",
+    dpi=300)
+fig.savefig(joinpath(plot_dir,"$(plotpath).png"),
+    dpi=300)
+fig.savefig(joinpath(plot_dir,"$(plotpath).pdf"),
+    dpi=300)
 @show plotpath*".svg"
 fig

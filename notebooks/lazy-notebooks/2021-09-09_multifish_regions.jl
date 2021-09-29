@@ -2,6 +2,7 @@
 # but, we also supplement with dorsal/ventral habenula as defined by
 # center of mass
 ENV["DISPLAY"] = "localhost:10.0"
+error("don't use this notebook--too old and broken")
 ##
 using DataFrames, Statistics, Arrow, AlgebraOfGraphics, CairoMakie, StatsKit, Makie
 Data = AlgebraOfGraphics.data
@@ -182,6 +183,7 @@ df = vcat(df, dorsal_ventral_hab_df_2021_06_08_fish2_titration,
 if typeof(df.stim[1]) == String
     df[!,:stim] = parse.(Int,df.stim)
 end;
+rename!(df, :region => :fullname)
 # df = Lensman.add_major_regions_to_df(df)
 # df = Lensman.rename_regions_in_df(df)
 ##
@@ -206,7 +208,7 @@ ftms  = f -> _ftms.(f)
 # ftms = f -> (new1="hi",hew="yo")
 # ftms.(df[[1,2],:region])
 # df = DataFrames.combine(groupby(df, cols_to_keep), :region => ftms; keepkeys=true)
-new_df = DataFrames.transform(df, :region => ftms => AsTable)
+DataFrames.transform!(df, :fullname => ftms => AsTable)
 ##
 df[df.subregion .== "Tectum Stratum Periventriculare",:subregion] .= "Optic Tectum"
 # julia> names(df)
@@ -229,10 +231,18 @@ function calc_df_both_hemispheres(f0, area,f,region,df_f,stim,trial,uri,major)
     "region"=>region[1], "stim"=>stim[1], "trial"=>trial[1], "uri"=>uri[1], "major region"=>major)
 end
 
+function calc_df_both_hemispheres(f0, area,f,region,df_f,stim,trial,uri,major)
+    newf0 = sum(area .* f0)
+    newf = sum(area .* f)
+    DataFrame("f0"=>newf0, "area"=>sum(area),"f"=>newf, "Δf/f" => (newf-newf0) / newf0,
+    "region"=>region[1], "stim"=>stim[1], "trial"=>trial[1], "uri"=>uri[1], "major region"=>major)
+end
+
 gb = groupby(df, [:region, :uri, :trial])
-@assert size(gb[1],1) == 2 # left&right hemisphere
+# @assert size(gb[1],1) == 2 # left&right hemisphere
+##
 region_df = DataFrames.combine(gb,
-    [:f0, :area, :f,:region,Symbol("Δf/f"),:stim,:trial,:uri, Symbol("major region")]
+    [:f0, :area, :f,:region,Symbol("Δf/f"),:stim,:trial,:uri, Symbol("region")]
     => calc_df_both_hemispheres => AsTable)
 sort!(df, "Δf/f")
 sort!(region_df, "Δf/f")
@@ -241,7 +251,7 @@ df = df[good_idxs,:];
 good_idxs = (~).(isnan.(region_df[:,"Δf/f"]))
 region_df = region_df[good_idxs,:];
 
-major_regions = unique(region_df[!,"major region"])
+major_regions = unique(region_df[!,"region"])
 major_regions = filter(x->x!="Spinal Cord", major_regions)
 ##
 REGION_LIST = [
@@ -381,9 +391,9 @@ ppath = joinpath(plot_dir,
     "select-region_second_order_region_df_f_$(replace(second_order_uri,"""/"""=>"""_"""))")
 @show ppath*".pdf"
 pt_per_unit = 72/300 # Makie defaults to 72px
-save(ppath*".png", fig, pt_per_unit=pt_per_unit)
-save(ppath*".svg", fig, pt_per_unit=pt_per_unit)
-save(ppath*".pdf", fig, pt_per_unit=pt_per_unit)
+# save(ppath*".png", fig, pt_per_unit=pt_per_unit)
+# save(ppath*".svg", fig, pt_per_unit=pt_per_unit)
+# save(ppath*".pdf", fig, pt_per_unit=pt_per_unit)
 fig
 
 ####################################

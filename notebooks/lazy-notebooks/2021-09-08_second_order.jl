@@ -1,4 +1,4 @@
-ENV["DISPLAY"] = "localhost:12.0"
+ENV["DISPLAY"] = "localhost:10.0"
 ##
 # using ImageView
 using Lensman, Images, Glob, NPZ, PyCall, DataFrames, ImageSegmentation, 
@@ -210,7 +210,7 @@ for row in [3,1,2,4,5]
         segments = felzenszwalb(im, felz_k, felz_min)
         im[segments.image_indexmap .== 1] .= 0
 
-        global cim = ax.imshow(im[yrange,:], cmap="viridis",
+        global cim = ax.imshow(im[yrange,:], cmap="inferno",
             clim=(cmin,cmax), interpolation="none")
         # ax.text(5,yrange[end]-50,"z = $(Int(etl_vals[z]))μm",fontsize=7, color="white")
         # zoom in ROI (compile in seperate plot)
@@ -285,7 +285,7 @@ im = opening_median(im)
 segments = felzenszwalb(im, felz_k, felz_min)
 im[segments.image_indexmap .== 1] .= 0
 
-global cim = axs[1].imshow(im[zoom_yrange,zoom_xrange], cmap="viridis",
+global cim = axs[1].imshow(im[zoom_yrange,zoom_xrange], cmap="inferno",
     clim=(cmin,cmax), interpolation="none")
 
 z_im = zseries[zoom_yrange*2,zoom_xrange*2,imaging2zseries_plane[z]]
@@ -296,7 +296,7 @@ segments = felzenszwalb(proj_im, felz_k, felz_min)
 proj_im[segments.image_indexmap .== 1] .= 0
 
 # axs[2].imshow(z_im)
-axs[2].imshow(proj_im[zoom_yrange,zoom_xrange], cmap="viridis",
+axs[2].imshow(proj_im[zoom_yrange,zoom_xrange], cmap="inferno",
     clim=(cmin,cmax*2), interpolation="none")
 
 struct_im = maxTproj[zoom_yrange,zoom_xrange,z]
@@ -318,11 +318,13 @@ plane_stim_cells = unique(cells[(cells.stimNum .== stimNum) .& (cells.z .== z),
 
 for (x,y) in eachrow(plane_stim_cells)
     circle = matplotlib.patches.Circle((x-zoom_xrange[1],y-zoom_yrange[1]), targetSizePx,
-        color=rgb2tuple(plane_color[z]),
+        color="cyan",
+        # color=rgb2tuple(plane_color[z]),
         fill=false, lw=0.5)
     axs[1].add_patch(circle)
     circle = matplotlib.patches.Circle((x-zoom_xrange[1],y-zoom_yrange[1]), targetSizePx,
-        color=rgb2tuple(plane_color[z]),
+        color="cyan",
+        # color=rgb2tuple(plane_color[z]),
         fill=false, lw=0.5)
     # axs[2].add_patch(circle)
 end

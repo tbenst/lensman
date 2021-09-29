@@ -195,6 +195,7 @@ regions.region = CategoricalArray(regions.region; levels=region_levels)
 
 
 df = DataFrame()
+root_dir = "/data/dlab/b115"
 for (p,r) in zip(arrow_paths, recording_names)
     rdf = Arrow.Table(joinpath(root_dir, p)) |> DataFrame
     rdf[:,:uri] .= replace(r, "2021-06-01_rsChRmine_h2b6s/fish3" => "2021-06-02_rsChRmine-h2b6s/fish2")
@@ -206,7 +207,31 @@ df = vcat(df, dorsal_ventral_hab_df_2021_06_08_fish2_titration,
 if typeof(df.stim[1]) == String
     df[!,:stim] = parse.(Int,df.stim)
 end;
-rename!(df, :region => :fullname)
+DataFrames.rename!(df, :region => :fullname)
+
+# df = Lensman.add_major_regions_to_df(df)
+# df = Lensman.rename_regions_in_df(df)
+# okay (no subregion yet)
+##
+function fullname_to_major_subregion(fullname, regions)
+    # no idea why these lines of code exist...? seem to break things
+    # # support our new regions...
+    # if (fullname == "Diencephalon - Dorsal Habenula") || 
+    #    (fullname == "Diencephalon - Ventral Habenula")
+    #    fullname = "Diencephalon - Habenula"
+    # end
+    idx = findfirst(regions.fullname .== fullname)
+    if isnothing(idx)
+        println("FULLNAME NOT FOUND: $fullname")
+    end
+    (region=regions[idx,:region], subregion=regions[idx,:subregion])
+    # regions[idx,[:region, :subregion]]
+end
+
+_ftms = f -> fullname_to_major_subregion(f, regions)
+ftms  = f -> _ftms.(f)
+DataFrames.transform!(df, :fullname => ftms => AsTable)
+##
 
 # set levels so we get desired plotting order
 df_region = CategoricalArray(df.region, ordered=true)
@@ -217,31 +242,7 @@ levels!(fullnames, regions.fullname)
 df.fullname = fullnames
 
 df
-# df = Lensman.add_major_regions_to_df(df)
-# df = Lensman.rename_regions_in_df(df)
-##
-function fullname_to_major_subregion(fullname, regions)
-    # support our new regions...
-    if (fullname == "Diencephalon - Dorsal Habenula") || 
-       (fullname == "Diencephalon - Ventral Habenula")
-       fullname = "Diencephalon - Habenula"
-    end
-    idx = findfirst(regions.fullname .== fullname)
-    if isnothing(idx)
-        println("FULLNAME NOT FOUND: $fullname")
-    end
-    (region=regions[idx,:region], subregion=regions[idx,:subregion])
-    # regions[idx,[:region, :subregion]]
-end
-
-
-cols_to_keep = ["Δf/f", "f", "f0", "area", "stim", "trial", "hemisphere", "uri"]
-_ftms = f -> fullname_to_major_subregion(f, regions)
-ftms  = f -> _ftms.(f)
-# ftms = f -> (new1="hi",hew="yo")
-# ftms.(df[[1,2],:region])
-# df = DataFrames.combine(groupby(df, cols_to_keep), :region => ftms; keepkeys=true)
-DataFrames.transform!(df, :fullname => ftms => AsTable)
+# okay (dorsal hab still here)
 ##
 df[df.subregion .== "Tectum Stratum Periventriculare",:subregion] .= "Optic Tectum"
 # julia> names(df)
@@ -329,7 +330,7 @@ second_order_plot_df = filter(row -> row.area > 100, sdf)
 # second_order_plot_df = Lensman.rename_regions_in_df(second_order_plot_df)
 
 stim_names = sort(unique(second_order_plot_df[:,:stim]))
-pretty_stim_names = ["habenula\n2nd order", "raphe", "outside\nbrain"]
+pretty_stim_names = ["habenula\n1st order", "raphe", "outside\nbrain"]
 second_order_plot_df[!,"stim target"] = string.(second_order_plot_df[:,:stim])
 
 for (m,mm) in zip(stim_names,pretty_stim_names)
@@ -338,7 +339,7 @@ for (m,mm) in zip(stim_names,pretty_stim_names)
 end
 
 stim_targets = CategoricalArray(second_order_plot_df[!,"stim target"], ordered=true)
-levels!(stim_targets, ["outside\nbrain", "raphe","habenula\n2nd order"])
+levels!(stim_targets, ["outside\nbrain", "raphe","habenula\n1st order"])
 second_order_plot_df[!,"stim target"] = stim_targets
 
 
@@ -402,9 +403,9 @@ with_theme(tiny_fontsize_theme) do
         "all-region_second_order_region_df_f_$(replace(second_order_uri,"""/"""=>"""_"""))")
     @show ppath
     pt_per_unit = 72/300 # Makie defaults to 72px
-    save(ppath*".png", fig, pt_per_unit=pt_per_unit)
-    save(ppath*".svg", fig, pt_per_unit=pt_per_unit)
-    save(ppath*".pdf", fig, pt_per_unit=pt_per_unit)
+    # save(ppath*".png", fig, pt_per_unit=pt_per_unit)
+    # save(ppath*".svg", fig, pt_per_unit=pt_per_unit)
+    # save(ppath*".pdf", fig, pt_per_unit=pt_per_unit)
     fig
 end
 ##################################################
@@ -432,8 +433,14 @@ pdf = filter(row -> row.subregion in REGION_LIST, pdf)
 # sort!(pdf, "stim target"; lt=(a,b)->CategoricalValue(a,stim_targets)<CategoricalValue(b,stim_targets))
 pdf.subregion = CategoricalArray(pdf.subregion, ordered=true)
 levels!(pdf.subregion, REGION_LIST)
-stim_targets = CategoricalArray(pdf[:,"stim target"], ordered=true)
-levels!(stim_targets, ["outside\nbrain", "raphe","habenula\n2nd order"])
+
+stim_targets = Array(pdf[:,"stim target"])
+stim_targets .= replace.(stim_targets, "\n" => " ")
+# stim_targets = CategoricalArray(pdf[:,"stim target"], ordered=true)
+stim_targets = CategoricalArray(stim_targets, ordered=true)
+
+levels!(stim_targets, ["outside brain", "raphe","habenula 1st order"])
+# levels!(stim_targets, ["outside\nbrain", "raphe","habenula\n1st order"])
 pdf[!,"stim target"] = stim_targets
 
 for region in REGION_LIST
@@ -442,8 +449,8 @@ end
 
 p2 = Data(pdf) * visual(CrossBar, width=0.5) *
     mapping(:subregion, "Δf/f", "minus_sem", "plus_sem", color="stim target", dodge="stim target")
-grid = aog.draw!(fig[1:3,2:7], p2, axis=(xticklabelrotation = pi / 6,))
-legend!(fig[4,4], grid, orientation = :horizontal)
+grid = aog.draw!(fig[1:3,2:20], p2, axis=(xticklabelrotation = pi / 6,))
+legend!(fig[4,1:20], grid, orientation = :horizontal)
 ppath = joinpath(plot_dir,
     "select-region_second_order_region_df_f_$(replace(second_order_uri,"""/"""=>"""_"""))")
 @show ppath*".pdf"
@@ -466,7 +473,11 @@ titration_plot_df = filter(row->row.uri == uri,
 titration_plot_df = Lensman.add_period_to_df(titration_plot_df);
 titration_plot_df = filter(row->row.uri == uri,
     titration_plot_df);
-titration_plot_df = Lensman.rename_regions_in_df(titration_plot_df)
+# titration_plot_df = Lensman.rename_regions_in_df(titration_plot_df)
+
+_ftms = f -> fullname_to_major_subregion(f, regions)
+ftms  = f -> _ftms.(f)
+DataFrames.transform!(titration_plot_df, :fullname => ftms => AsTable)
 # titration_plot_df = filter(row->row.region in mask_names,
 #     titration_plot_df);
 fig = Figure(resolution = (4000, 2000))
@@ -501,7 +512,7 @@ for (ii,major) in enumerate(sort(major_regions))
     times, remainder = divrem(ii,numcol)
     i = times + 1
     j = remainder + 1
-    pdf = filter(r->r["major region"] == major, titration_plot_df)
+    pdf = filter(r->r["region"] == major, titration_plot_df)
     pdf = DataFrames.combine(groupby(pdf, [:subregion,:period]),
         Symbol("Δf/f")=>quick_mean_sem=>AsTable, keepkeys=true)
     # https://discourse.julialang.org/t/makie-errorbars-for-grouped-bar-graphs/62361/7
@@ -520,7 +531,7 @@ for (ii,major) in enumerate(sort(major_regions))
         xminorgridvisible=false,yminorgridvisible=false,
         xminorticksvisible=false,yminorticksvisible=false,
         xticklabelsvisible=false,yticklabelsvisible=false)
-    grid = aog.draw!(fig[i,j], p, axis=(xticklabelrotation = pi/6,))
+    global grid = aog.draw!(fig[i,j], p, axis=(xticklabelrotation = pi/6,))
     ylims!(-0.2,0.3)
 end
 
@@ -567,7 +578,7 @@ period = "# bilateral\ncell stim"
 p2 = Data(pdf) * visual(CrossBar, width=0.5) *
     mapping(:subregion, "Δf/f", "minus_sem", "plus_sem", color=period, dodge=period)
 
-colors = colormap("Blues",5)[2:5]
+colors = colormap("Blues",7)[2:5]
 grid = aog.draw!(fig, p2, axis=(xticklabelrotation = pi / 5.5,),palettes=(color=colors,))
 legend!(fig[1,end + 1], grid)
 ppath = joinpath(plot_dir,
