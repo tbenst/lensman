@@ -1,7 +1,7 @@
 # mostly, we use the previously saved .arrow files from osprey
 # but, we also supplement with dorsal/ventral habenula as defined by
 # center of mass
-ENV["DISPLAY"] = "localhost:10.0"
+# ENV["DISPLAY"] = "localhost:11.0"
 ##
 using DataFrames, Statistics, Arrow, AlgebraOfGraphics, CairoMakie, StatsKit, Makie
 Data = AlgebraOfGraphics.data
@@ -94,7 +94,8 @@ mkpath(plot_dir)
 
 # transferred
 arrow_paths = [
-    "2021-06-01_rsChRmine_h2b6s/fish3/h5_output/TSeries-IPNraphe-118trial-072_kalman.h5/kalman/regions_df.arrow"
+    # "2021-06-01_rsChRmine_h2b6s/fish3/h5_output/TSeries-IPNraphe-118trial-072_kalman.h5/kalman/regions_df.arrow" # old df, no exclusion of targets
+    "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072_kalman/regions_df.arrow" # only df here with exclusion of targets
     "2021-06-08_rsChRmine_h2b6s/fish2/h5_output/TSeries-lrhab-titration-123_kalman.h5/kalman/regions_df.arrow"
     "2021-06-08_rsChRmine_h2b6s/fish2/h5_output/TSeries-lrhab-118trial-122_kalman.h5/kalman/regions_df.arrow"
     "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/h5_output/TSeries-lrhab-118trial-061_kalman.h5/kalman/regions_df.arrow"
@@ -111,6 +112,11 @@ titration_names = filter(x->occursin("titration",x), recording_names)
 secondorder_names = filter(x->occursin("IPN",x), recording_names)
 lrhab_names = filter(x->~occursin("titration",x) & occursin("lrhab",x),
     recording_names)
+
+
+## compare the two arrows for different exclusion criteria...
+# TODO: check if area different before & after / if looks okay...?
+DataFrames.combine(groupby(filter(r->(r.uri == "2021-06-02_rsChRmine-h2b6s/fish2/regions_df.arrow") && (r.fullname == "Rhombencephalon - Raphe - Superior"), df), [:stim, :hemisphere]), :area => mean)
 
 ## sort regions from rostral to caudal
 @pun (region_masks_h5, zbrain_mask_names, zbrain_masks, 
@@ -192,18 +198,28 @@ region_levels = [
 regions.region = CategoricalArray(regions.region; levels=region_levels)
 [(reg, sum(regions.region .== reg)) for reg in levels(regions.region)]
 ##
-
-
-df = DataFrame()
+original_df = DataFrame()
 root_dir = "/data/dlab/b115"
 for (p,r) in zip(arrow_paths, recording_names)
     rdf = Arrow.Table(joinpath(root_dir, p)) |> DataFrame
     rdf[:,:uri] .= replace(r, "2021-06-01_rsChRmine_h2b6s/fish3" => "2021-06-02_rsChRmine-h2b6s/fish2")
-    df = vcat(df,rdf)
+    original_df = vcat(original_df,rdf)
+end
+##
+if sum(original_df.region .== "Diencephalon - Dorsal Habenula") == 0
+    print
+    df = vcat(original_df, dorsal_ventral_hab_df_2021_06_08_fish2_titration,
+        dorsal_ventral_hab_df_2021_06_02_fish3_ipn)
+else
+    df = original_df
 end
 
-df = vcat(df, dorsal_ventral_hab_df_2021_06_08_fish2_titration,
-    dorsal_ventral_hab_df_2021_06_02_fish3_ipn)
+function is_not_bad_region(name)
+    ~((name =="right Diencephalon - Dorsal Habenula") || (name =="left Diencephalon - Dorsal Habenula") ||
+    (name =="right Diencephalon - Ventral Habenula") || (name =="left Diencephalon - Ventral Habenula"))
+end
+df = filter(r->is_not_bad_region(r.region), df)
+
 if typeof(df.stim[1]) == String
     df[!,:stim] = parse.(Int,df.stim)
 end;
@@ -324,7 +340,8 @@ quick_mean_sem(ones(5))
 ####################################################
 # second_order_uri = secondorder_names[1]
 
-second_order_uri = "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+# second_order_uri = "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+second_order_uri = "2021-06-02_rsChRmine-h2b6s/fish2/regions_df.arrow" # TODO: fix the URI
 sdf = filter(row->row[:uri]==second_order_uri, region_df);
 second_order_plot_df = filter(row -> row.area > 100, sdf)
 # second_order_plot_df = Lensman.rename_regions_in_df(second_order_plot_df)
@@ -451,6 +468,7 @@ p2 = Data(pdf) * visual(CrossBar, width=0.5) *
     mapping(:subregion, "Δf/f", "minus_sem", "plus_sem", color="stim target", dodge="stim target")
 grid = aog.draw!(fig[1:3,2:20], p2, axis=(xticklabelrotation = pi / 6,))
 legend!(fig[4,1:20], grid, orientation = :horizontal)
+ylims!(-0.15,1.7)
 ppath = joinpath(plot_dir,
     "select-region_second_order_region_df_f_$(replace(second_order_uri,"""/"""=>"""_"""))")
 @show ppath*".pdf"
@@ -547,6 +565,10 @@ save(ppath*".svg", fig)
 save(ppath*".pdf", fig)
 fig
 
+##
+tdf = DataFrames.combine(groupby(titration_plot_df, [:subregion,:period]),
+           Symbol("Δf/f")=>quick_mean_sem=>AsTable, keepkeys=true)
+
 ####################################
 ## Titration select regions
 ####################################
@@ -604,9 +626,9 @@ fig
 ## titration F-test
 ###############################
 periods = ["1", "2-6", "7-11", "12-16"]
-region_names = unique(titration_plot_df[!,:region])
+region_names = unique(titration_plot_df[!,:fullname])
 pvals = map(region_names) do region
-    groups = [Float64.(filter(r->(string(r[:period]) == p) && (r.region == region), titration_plot_df)[:,"Δf/f"])
+    groups = [Float64.(filter(r->(string(r[:period]) == p) && (r.fullname == region), titration_plot_df)[:,"Δf/f"])
         for p in periods]
     # KW = KruskalWallisTest(groups...)
     # pvalue(KW)
@@ -618,7 +640,7 @@ pvals = map(region_names) do region
     # df1 = DataFrame(dose = 1, score=groups[1])
     # df2 = DataFrame(dose = 2, score=groups[2])
     # df3 = DataFrame(dose = 3, score=groups[3])
-    # df3 = DataFrame(dose = 4, score=groups[4])
+    # df4 = DataFrame(dose = 4, score=groups[4])
     # not tested; make categorical..?
     # df3[!,:dose] = string.(df3[!,:dose])
     glm_df = vcat(df1, df2, df3, df4)
@@ -641,38 +663,48 @@ significant1 = corrected_pvals .< 0.01
 # significant5 = pvals .< bonferoni_p5
 # significant1 = pvals .< bonferoni_p1
 
-
+##
 println("=====Significant at p=0.05: $(sum(significant5))/$(length(pvals))=====")
 for n in sort(setdiff(region_names[significant5], region_names[significant1])); println(n); end
 println("=====Significant at p=0.01: $(sum(significant1))/$(length(pvals))=====")
 for n in sort(region_names[significant1]); println(n); end
+
+# raphe p-vals
+raphe_idxs = map(x->occursin("Raphe",x), region_names)
+collect(zip(region_names[raphe_idxs], corrected_pvals[raphe_idxs]))
+
 
 # see output at bottom
 
 ###############################
 ## second-order paired Mann–Whitney U test
 ###############################
-second_order_region_names = unique(second_order_plot_df[!,:region])
+second_order_region_names = unique(second_order_plot_df[!,:fullname])
 second_order_pvals = map(second_order_region_names) do region
     groups = [Float64.(filter(r->(string(r["stim target"]) == s) &&
-        (r.region == region), second_order_plot_df)[:,"Δf/f"])
-        for s in levels(stim_targets)]
+        (r.fullname == region), second_order_plot_df)[:,"Δf/f"])
+        for s in levels(second_order_plot_df[!,"stim target"])]
+    if region == "Rhombencephalon - Gad1b Cluster 2"
+        @show groups
+    end
     # KW = KruskalWallisTest(groups...)
     # pvalue(KW)
     MWs = [MannWhitneyUTest(groups[s1],groups[s2]) for (s1,s2) in Iterators.product(1:length(groups),1:length(groups))]
     pvals = map(pvalue, MWs)
 end
-second_order_pvals = permutedims(cat(second_order_pvals...,dims=3),(3,1,2))
-thedims = size(second_order_pvals)
+idx = findfirst(second_order_region_names .== "Rhombencephalon - Gad1b Cluster 2")
+correct_mat = second_order_pvals[idx]
+second_order_pvals_reshape = permutedims(cat(second_order_pvals...,dims=3),(3,1,2))
+second_order_pvals_reshape[idx,:,:]
+thedims = size(second_order_pvals_reshape)
 
 ##
 # corrected_pvals = MultipleTesting.adjust(pvals, Bonferroni())
-corrected_second_order_pvals = MultipleTesting.adjust(second_order_pvals[:], BenjaminiHochbergAdaptive())
+corrected_second_order_pvals = MultipleTesting.adjust(copy(second_order_pvals_reshape[:]), BenjaminiHochbergAdaptive())
 corrected_second_order_pvals = reshape(corrected_second_order_pvals, thedims)
+corrected_second_order_pvals[idx,:,:]
 levels(stim_targets)
 ##
-second_order_region_names = 
-
 second_order_significant5 = corrected_second_order_pvals .< 0.05
 second_order_significant1 = corrected_second_order_pvals .< 0.01
 # bonferoni_p5 = 0.05 / length(pvals)
@@ -681,17 +713,25 @@ second_order_significant1 = corrected_second_order_pvals .< 0.01
 # significant1 = pvals .< bonferoni_p1
 
 
-println("=====Significant at p=0.05: $(sum(second_order_significant5))/$(length(corrected_second_order_pvals))=====")
-for n in sort(setdiff(second_order_region_names[second_order_significant5], second_order_region_names[second_order_significant1])); println(n); end
-println("=====Significant at p=0.01: $(sum(second_order_significant1))/$(length(corrected_second_order_pvals))=====")
-for n in sort(second_order_region_names[second_order_significant1]); println(n); end
+# println("=====Significant at p=0.05: $(sum(second_order_significant5))/$(length(corrected_second_order_pvals))=====")
+# for n in sort(setdiff(second_order_region_names[second_order_significant5], second_order_region_names[second_order_significant1])); println(n); end
+# println("=====Significant at p=0.01: $(sum(second_order_significant1))/$(length(corrected_second_order_pvals))=====")
+# for n in sort(second_order_region_names[second_order_significant1]); println(n); end
 
 ##
 
 for region in REGION_LIST
     println("======$region======")
     reg = replace(region, "Hindbrain "=>"")
-    idx = findfirst(map(r->occursin(reg,r), second_order_region_names))
+    # idx = findfirst(map(r->occursin(reg,r), second_order_region_names))
+    
+    # idx = findfirst(map(r -> isnothing(match(r".* Gad1b Cluster 2$", r)),
+    #     second_order_region_names))
+    # idx = findfirst(map(r -> ~isnothing(match(".* $(region)" * r"$" , r)),
+    idx = findfirst(map(r -> ~isnothing(match(Regex(".* $(region)\$") , r)),
+        second_order_region_names))
+
+    @show idx
     println(corrected_second_order_pvals[idx,:,:])
 end
 

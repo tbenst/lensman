@@ -42,6 +42,45 @@ function per_trial_regions_df(tseries::Union{LazyH5, LazyTy5}, window_len, stim_
     df
 end
 
+"Remove pixels from all masks, e.g. to avoid analyzing stimulation targets."
+function exclude_from_masks(masks, stim_exclude_masks)
+    new_masks = deepcopy(masks)
+    include_masks = (~).(stim_exclude_masks)
+    for m in 1:length(new_masks)
+        new_masks[m] .= new_masks[m] .& include_masks
+    end
+    new_masks
+end
+
+"Ignore targeted cells / a mask (eg with arbitrary spatial exclusion zone) from region."
+function per_trial_regions_df_exclude_targets(tseries::Union{LazyH5, LazyTy5}, window_len,
+    stim_start_idx, stim_end_idx, trial_order, per_stim_region_masks, region_names;
+    stim_names=nothing
+)
+    nStimuli = maximum(trial_order)
+    nTrials = length(stim_start_idx)
+    if isnothing(stim_names)
+        stim_names = string.(collect(1:nStimuli))
+    end
+
+    n_stimuli = maximum(trial_order)
+    if n_stimuli > 16
+        @warn "we might run out of memory for high number of stim groups since create new region mask for each."
+    end
+
+    df = @showprogress @distributed vcat for i in 1:nTrials
+        start_idx, end_idx = stim_start_idx[i], stim_end_idx[i]
+        stim_num = trial_order[i]
+        stim_name = stim_names[stim_num]
+        masks = per_stim_region_masks[:,stim_num]
+        _proc_region_df_f(tseries, masks, region_names, stim_name,
+            start_idx, end_idx, i, window_len)
+    end
+    df
+end
+
+
+
 "Return DataFrame of df/f values"
 function imap_DF_by_region(imap, region_masks_h5::HDF5.File, regions, imaging2zseries_plane,
     stim_names=nothing, pretty_region_names=nothing

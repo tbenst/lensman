@@ -1,4 +1,4 @@
-ENV["DISPLAY"] = "localhost:10.0"
+ENV["DISPLAY"] = "localhost:11.0"
 ##
 using AlgebraOfGraphics, CairoMakie
 using Lensman, Images, Glob, NPZ, DataFrames, ImageSegmentation, 
@@ -39,7 +39,9 @@ resources = Resources();
 @pun (zbrain_dir, zbrain_masks) = resources;
 
 ##
-recording_name = "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+# first fish used in initial submission
+# recording_name = "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+recording_name = "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
 tyh5_path = joinpath("/data/dlab/b115", recording_name * "_kalman.h5")
 options = Dict(
 )
@@ -115,7 +117,7 @@ REGION_LIST = [
     "Rhombencephalon - Gad1b Cluster 2"
     # "Rhombencephalon - Gad1b Cluster 1"
     # "Glyt2 Cluster 12"
-    # "Tectum Stratum Periventriculare"
+    "Tectum Stratum Periventriculare"
     # "Rhombomere 1"
     # "Subpallial Gad1b cluster"
 ]
@@ -151,14 +153,14 @@ channelview(im2)[[1,3],:,:,:] .= 0
 for (r, reg) in enumerate(region_masks)
     # region = reg .> 0
 
-    # color_mask = RGB{N0f16}.(zeros(size(im2)...))
-    # color_mask[reg[2]] .= region_colors[r]
+    color_mask = RGB{N0f16}.(zeros(size(im2)...))
+    color_mask[reg[2]] .= region_colors[r]
 
-    # im2 = mapc.((a,b)->maximum([a,b]), im2, color_mask)
-    # im2 = mapc.((a,b)->b==0 ? a : b, im2, color_mask)
+    im2 = mapc.((a,b)->maximum([a,b]), im2, color_mask)
+    im2 = mapc.((a,b)->b==0 ? a : b, im2, color_mask)
 
-    im2[reg[2]] .= region_colors[r]
-    # im2 = blend.(im2, color_mask, mode=BlendScreen)
+    # im2[reg[2]] .= region_colors[r]
+    im2 = blend.(im2, color_mask, mode=BlendScreen)
     # im2 = blend.(im2, color_mask, mode=BlendLighten)
     # im2 = blend.(im2, color_mask, mode=BlendColor)
 end
@@ -193,3 +195,15 @@ fig
 region_colors
 ##
 @show etl_vals[zs]
+
+## assess drift
+
+img = RGB.(adjust_histogram(
+    imadjustintensity(zseries[:,:,imaging2zseries_plane[10]]),
+    GammaCorrection(0.2)))
+mean_tseries = mean(tseries[:,:,10,1:10:1000],dims=3)[:,:,1];
+channelview(img)[3,:,:] .= 0
+channelview(img)[1,:,:] .= adjust_histogram(
+    Gray.(imadjustintensity(imresize(mean_tseries,1024,1024),
+    )), GammaCorrection(0.2))
+img

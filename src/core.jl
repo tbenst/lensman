@@ -867,8 +867,10 @@ function constructROImasks(cells::DataFrame, H, W, targetSizePx)
     @warn "now must index by cellID"
     nCells = maximum(cells.cellID)
     roiMask = Dict()
-    @threads for cell in eachrow(cells)
-        (x,y,z,trialNum,stimStart,stimStop, cellID) = cell[[:x,:y,:z,:trialNum,:stimStart,:stimStop,:cellID]]
+    # THIS IS NOT THREAD SAFE!! due to dict mutation
+    # @threads for cell in eachrow(cells)
+    for cell in eachrow(unique(cells, :cellID))
+        (x,y,z, cellID) = cell[[:x,:y,:z,:cellID]]
         mask = Gray.(zeros(Bool, H,W))
         draw!(view(mask,:,:), Ellipse(CirclePointRadius(x,y,targetSizePx)))
         mask = findall(channelview(mask))
