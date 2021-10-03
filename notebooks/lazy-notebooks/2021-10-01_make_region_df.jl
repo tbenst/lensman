@@ -1,6 +1,6 @@
 # copied / adopted from 2021-08-15_why-rs-better-allan.jl on Osprey
 # we do manual alignment for 2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072
-ENV["DISPLAY"] = "localhost:11.0"
+ENV["DISPLAY"] = "localhost:12.0"
 ##
 using AlgebraOfGraphics, CairoMakie
 using Lensman, Images, Glob, NPZ, DataFrames, ImageSegmentation, 
@@ -168,6 +168,7 @@ aligned_masks = deepcopy(masks)
 for i in 1:length(aligned_masks)
     for z in 1:size(aligned_masks[i],3)
         (y_offset,x_offset,z_offset) = zplane_offset[z]
+        y_offset = Int(floor(y_offset / 2)) # 1024 offset to 512
         view(aligned_masks[i],:,:,z) .=
             circshift(aligned_masks[i][:,:,z], [y_offset,x_offset])
     end
@@ -212,6 +213,29 @@ img = RGB.(zeros(UInt8,size(og_gad[:,:,1])...));
 channelview(img)[[1],:,:] .= reshape(og_gad[:,:,9],1,512,512)
 channelview(img)[[2,3],:,:] .= reshape(stim_exclude_masks[:,:,10,1],1,512,512)
 img
+##
+# ex_mask = per_stim_region_masks[rap_idx[3],2] .& per_stim_region_masks[rap_idx[4],2]
+ex_mask = per_stim_region_masks[rap_idx[3],2] .| per_stim_region_masks[rap_idx[4],2]
+@show sum(ex_mask)
+Gray.(ex_mask[:,:,10])
+## debug on raphe 
+regions_df = L.per_trial_regions_df_exclude_targets(
+    tseries, window_len,
+    stim_start_idx, stim_end_idx,
+    # ss, se,
+    trial_order, per_stim_region_masks[rap_idx[[3,4]],:], region_names[rap_idx[[3,4]]])  # , stim_names=nothing)
+
+@show rap_names[3], sum(per_stim_region_masks[rap_idx[3],2])
+filter(r->r.region == "Rhombencephalon - Raphe - Superior",
+    regions_df)
+## compare to no exclusion values...
+no_exclude_masks =  repeat(aligned_masks[rap_idx[[3,4]]], 1, nStimuli)
+regions_no_exclude_df = L.per_trial_regions_df_exclude_targets(
+    tseries, window_len,
+    stim_start_idx, stim_end_idx,
+    # ss, se,
+    trial_order, no_exclude_masks, region_names[rap_idx[[3,4]]])  # , stim_names=nothing)
+
 
 ##
 @assert length(trial_order) == length(stim_start_idx)
@@ -236,112 +260,3 @@ using Arrow
 open(joinpath(out_dir, "regions_df.arrow"), "w") do io
     Arrow.write(io, regions_df)
 end
-
-
-#### RUNNING UNTIL HERE IS GOOD FOR CREATING DATAFRAME
-
-#########################################################################################################
-
-##
-tectum_name, tectum = L.read_first_mask(region_masks_h5, zbrain_mask_names,
-    imaging2zseries_plane,"Tectum")
-cerebellum_names, cerebellum = L.read_matching_mask(region_masks_h5, zbrain_mask_names,
-    imaging2zseries_plane,"Cerebe")
-medulla_names, medulla = L.read_matching_mask(region_masks_h5, zbrain_mask_names,
-    imaging2zseries_plane,"Medulla")
-raphe_names, raphe = L.read_matching_mask(region_masks_h5, zbrain_mask_names,
-    imaging2zseries_plane,"Raphe")
-
-
-habenula_name, habenula = L.read_first_mask(region_masks_h5, zbrain_mask_names,
-    imaging2zseries_plane,"Habenula")
-rhom1_name, rhom1 = L.read_first_mask(region_masks_h5, zbrain_mask_names,
-    imaging2zseries_plane,"Rhombomere 1")
-lhemisphere_name, lhemisphere = L.read_first_mask(region_masks_h5, zbrain_mask_names,
-    imaging2zseries_plane,"Left hemisphere")
-rhemisphere_name, rhemisphere = L.read_first_mask(region_masks_h5, zbrain_mask_names,
-    imaging2zseries_plane,"Right hemisphere")
-tectum_name, medulla_names, cerebellum_names, raphe_names, rhom1_name, habenula_name
-
-##
-if mean(target_groups[1], dims=1)[2] > 256
-    stim_names = ["right habenula", "left habenula", "control"]
-else
-    stim_names = ["left habenula", "right habenula", "control"]
-end
-region_names = ["habenula", "optic tectum", "rhombomere 1", "raphe", "cerebellum"]
-masks = [habenula, tectum, rhom1, raphe, cerebellum];
-masks = vcat(map(m -> [m .& rhemisphere, m .& lhemisphere], masks)...)
-region_names = vcat(map(n -> ["right $n", "left $n"], region_names)...)
-masks = map(m -> imresize(m, tseriesH, tseriesW, tseriesZ) .> 0, masks);
-
-##
-
-# regions_df = L.per_trial_regions_df(tseries, window_len,
-#     stim_start_idx, stim_end_idx,
-#     trial_order, masks, region_names)  # , stim_names=nothing)            # CAN CHANGE BACK FROM THIS
-ss = stim_start_idx[1:length(trial_order)]
-se = stim_end_idx[1:length(trial_order)]
-regions_df = L.per_trial_regions_df(
-    recording[:tyh5_path], recording[:tseries_dset],
-    window_len, ss, se,
-    # window_len, stim_start_idx, stim_end_idx,
-    trial_order, masks, region_names)  # , stim_names=nothing)
-
-## Save DataFrame (without filtering any possible NaN's for now)
-
-# Path to write out to (in the case that tyh5_path is defined, otherwise reading from tiff's)
-out_dir = joinpath(mask_dir, basename(recording[:tyh5_path]), basename(recording[:tseries_dset]))
-println("Will create output_dir='$out_dir'")
-
-##
-mkdir(out_dir)
-
-##
-open(joinpath(out_dir, "regions_df_tiny.arrow"), "w") do io
-    Arrow.write(io, regions_df)
-end
-
-##
-regions_df = filter(:("Δf/f") => !isnan, regions_df)
-
-##
-fig = Figure(resolution=(1200, 500))
-# p1 = Data(regions_df) * visual(BoxPlot, show_notch=true) *
-#     mapping(:region, "Δf/f", color=:hemisphere, dodge=:hemisphere, col=:stim)
-p1 = Data(filter(row -> row.stim == "1" || row.stim == "16", regions_df)) * visual(BoxPlot, show_notch=true) *
-    mapping(:region, "Δf/f", color=:hemisphere, dodge=:hemisphere, col=:stim)
-grid = draw!(fig, p1, axis=(xticklabelrotation = pi / 6,))
-legend!(fig[1,end + 1], grid)
-ppath = joinpath(plot_dir, "region_df_f_by-trial")
-save(ppath * ".png", fig)
-save(ppath * ".svg", fig)
-fig
-##
-regions_df[:,:fish] .= recording_folder * fish_name
-regions_df[:,:experiment] .= exp_name
-regions_df[:,:uri] .= recording[:uri]
-open(df_dir * "regions_df.arrow", "w") do io
-    Arrow.write(io, regions_df)
-end
-##
-v = quantile(zseries[:,:,imaging2zseries_plane][:], 0.99)
-green = imadjustintensity(zseries[:,:,imaging2zseries_plane], (0, v))
-thresh = otsu_threshold(green[:]) * 0.5
-for c in findall(green .<= thresh)
-    green[c] = 0
-end
-# green = adjust_histogram(green,GammaCorrection(0.5))
-im2 = RGB.(green)
-channelview(im2)[1,:,:,:] .= habenula .* 0.8
-channelview(im2)[1,:,:,:] .+= rhom1 .* 0.8
-channelview(im2)[3,:,:,:] .= tectum .* 0.8
-# imshow(im2)
-im2[:,:,6]
-save(joinpath(plot_dir, "tectum_rhomb1.png"), im2[:,:,6])
-##
-im3 = RGB.(green)
-channelview(im3)[1,:,:,:] .= lhemisphere .* 0.5
-channelview(im3)[3,:,:,:] .= rhemisphere .* 0.5
-save(joinpath(plot_dir, "hemishpere.png"), im3[:,:,6])
-im3[:,:,6]

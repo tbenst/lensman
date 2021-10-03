@@ -1,7 +1,7 @@
 # mostly, we use the previously saved .arrow files from osprey
 # but, we also supplement with dorsal/ventral habenula as defined by
 # center of mass
-# ENV["DISPLAY"] = "localhost:11.0"
+ENV["DISPLAY"] = "localhost:11.0"
 ##
 using DataFrames, Statistics, Arrow, AlgebraOfGraphics, CairoMakie, StatsKit, Makie
 Data = AlgebraOfGraphics.data
@@ -112,11 +112,6 @@ titration_names = filter(x->occursin("titration",x), recording_names)
 secondorder_names = filter(x->occursin("IPN",x), recording_names)
 lrhab_names = filter(x->~occursin("titration",x) & occursin("lrhab",x),
     recording_names)
-
-
-## compare the two arrows for different exclusion criteria...
-# TODO: check if area different before & after / if looks okay...?
-DataFrames.combine(groupby(filter(r->(r.uri == "2021-06-02_rsChRmine-h2b6s/fish2/regions_df.arrow") && (r.fullname == "Rhombencephalon - Raphe - Superior"), df), [:stim, :hemisphere]), :area => mean)
 
 ## sort regions from rostral to caudal
 @pun (region_masks_h5, zbrain_mask_names, zbrain_masks, 
@@ -335,6 +330,11 @@ quick_mean_sem(ones(5))
 #     "region"=>region,"period"=>period, "subregion"=>subregion)
 # end
 
+##
+## compare the two arrows for different exclusion criteria...
+# TODO: check if area different before & after / if looks okay...?
+DataFrames.combine(groupby(filter(r->(r.uri == "2021-06-02_rsChRmine-h2b6s/fish2/regions_df.arrow") && (r.fullname == "Rhombencephalon - Raphe - Superior"), df), [:stim, :hemisphere]), :area => mean)
+
 ####################################################
 ## Second-order proj field mapping all brain regions
 ####################################################
@@ -468,7 +468,7 @@ p2 = Data(pdf) * visual(CrossBar, width=0.5) *
     mapping(:subregion, "Δf/f", "minus_sem", "plus_sem", color="stim target", dodge="stim target")
 grid = aog.draw!(fig[1:3,2:20], p2, axis=(xticklabelrotation = pi / 6,))
 legend!(fig[4,1:20], grid, orientation = :horizontal)
-ylims!(-0.15,1.7)
+ylims!(-0.15,2.0)
 ppath = joinpath(plot_dir,
     "select-region_second_order_region_df_f_$(replace(second_order_uri,"""/"""=>"""_"""))")
 @show ppath*".pdf"
