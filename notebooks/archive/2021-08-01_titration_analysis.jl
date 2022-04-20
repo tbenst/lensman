@@ -1,11 +1,11 @@
 ## compare 
-# ENV["DISPLAY"] = "localhost:11.0"
+# ENV["DISPLAY"] = "localhost:14.0"
 using Sockets, Observables, Statistics, Images, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
     Compose, ImageMagick, Random, PyCall, Arrow, ProgressMeter,
     RollingFunctions
-using ImageView
+# using ImageView
 import Gadfly
 using Unitful: μm, m, s, mW
 import Base.Threads.@threads
@@ -36,8 +36,11 @@ else
 end
 
 tseriesDir = "$tseriesRootDir/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+# tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062"
 
 avg_stim_h5_path = "$(tseriesDir)_avgStim_lstm.h5"
+# avg_stim_h5_path = "$(tseriesDir)lstm_divide8192_avgStim.h5"
+# avg_stim_h5_path = "$(tseriesDir)_avgStim.h5"
 fish_dir = joinpath(splitpath(avg_stim_h5_path)[1:end-1]...)
 plot_dir = joinpath(fish_dir, "plots-denoised")
 if ~isdir(plot_dir)
@@ -45,14 +48,16 @@ if ~isdir(plot_dir)
 end
 ##
 avgStim = h5read(avg_stim_h5_path, "/block1");
+H, W = size(avgStim)
 ##
 imshow(avgStim)
 ##
-imshow(avgStim[:,:,6,16,:])
+imshow(avgStim[:,:,:,16,:])
 ##
 figB = 1.6
 
 nStimuli = size(avgStim)[end-1]
+# nStimuli = size(long_avg)[end-1]
 volRate = 3
 max_frames = size(avgStim,5)
 Z = size(avgStim,3)
@@ -128,13 +133,13 @@ draw!(img, Ellipse(
     Point(160,238), 35, 60))
 img
 ##
-function make_ellipse_mask(x,y,a,b,thesize=size(df_f)[1:2])
+function make_ellipse_mask(x,y,a,b,thesize=(H,W))
     mask = Gray.(zeros(Bool,thesize))
     draw!(mask, Ellipse(
         Point(x,y), a, b))
     reinterpret(Bool,mask)
 end
-medulla_mask = Gray.(zeros(Bool,size(df_f)[1:2]))
+medulla_mask = Gray.(zeros(Bool,(H,W)))
 draw!(medulla_mask, Ellipse(
     Point(160,238), 35, 60))
 medulla_mask
@@ -161,6 +166,8 @@ img
 ##
 rhab_mask = make_ellipse_mask(388,268,25,25)
 lhab_mask = make_ellipse_mask(388,188,25,25)
+# control_mask = make_ellipse_mask(50,50,25,25);
+control_mask = make_ellipse_mask(512-50,512-50,25,25);
 Gray.(rhab_mask)
 ##
 hab_sum = zeros(16)
@@ -182,8 +189,9 @@ masks = RGB.(zeros(Bool,size(df_f)[1:2]))
 masks[medulla_mask] .= RGB(250/255,104/255,0)
 masks[lhab_mask] .= RGB(109/255,135/255,100/255)
 masks[rhab_mask] .= RGB(109/255,135/255,100/255)
+masks[control_mask] .= RGB(255/255,255/255,255/255)
 masks
-
+save(joinpath(plot_dir, "titration_masks.png"),masks)
 ## look at early vs late
 
 analysis_name = ""
@@ -221,14 +229,21 @@ tylerSLMDir = joinpath(fishDir, "slm")
 
 
 
-@info "using ty.h5 file"
+# @info "using ty.h5 file"
 # tseries = read_tyh5(tyh5Path)
-h5 = h5open(tyh5Path,"r")
-dset = "/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm"
+# h5 = h5open(tyh5Path,"r")
 # dset = "/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden_init_from_pretrained-2021-06-21_6pm"
-h5, tseries = lazy_read_tyh5(tyh5Path, dset);
-plotDir = joinpath(fishDir, "plots-denoised")
-avgStimStr = "_avgStim_lstm.h5"
+
+# dset = "/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm"
+# h5, tseries = lazy_read_tyh5(tyh5Path, dset);
+# plotDir = joinpath(fishDir, "plots-denoised")
+# avgStimStr = "_avgStim_lstm.h5"
+
+tseries = loadTseries(tseriesDir);
+H, W = size(tseries) # duplicate line from above for avgStim
+@warn "using plots dir (not for denoised!"
+plotDir = joinpath(fishDir, "plots")
+avgStimStr = "_avgStim.h5"
 
 ##
 voltageFiles = glob("*VoltageRecording*.csv", tseriesDir)
@@ -335,3 +350,73 @@ function save_fig(avgStim, stimNum, prepend="")
 end
 save_fig(earlyStim, 16, "early")
 save_fig(lateStim, 16, "late")
+
+## plot temporal profile
+pre = Int(floor(5*volRate))
+post = Int(floor(15*volRate))
+long_avgstim_path = "$(tseriesDir)_long$avgStimStr.h5"
+if isfile(long_avgstim_path)
+    long_avg = h5read(long_avgstim_path, "/block1")
+else    
+    long_avg = trialAverage(tseries, stimStartIdx, stimEndIdx,
+        trialOrder; pre=pre, post=post);
+    h5write(long_avgstim_path,
+        "/block1", long_avg);
+end;
+##
+region_traces_df = DataFrame()
+medulla_plane = 3
+hab_plane = 6
+hab_mask = rhab_mask .| lhab_mask
+for s in 1:nStimuli
+    med = timeseries_df_f(extractTrace(long_avg[:,:,:,s,:],
+        repeat(collect(medulla_mask), 1, 1, 10)))
+    hab = timeseries_df_f(extractTrace(long_avg[:,:,:,s,:],
+        repeat(collect(hab_mask), 1, 1, 10)))
+    control = timeseries_df_f(extractTrace(long_avg[:,:,:,s,:],
+        repeat(collect(control_mask), 1, 1, 10)))
+    n = length(med)
+    time_idx = collect(1:length(med))
+    time = collect(1:length(med))/volRate .- pre/volRate
+    med_df = DataFrame(time_idx=time_idx, time=time, fluor=med,
+        region=repeat(["medulla"], n), num_cells=repeat([s*2], n))
+    hab_df = DataFrame(time_idx=time_idx, time=time, fluor=hab,
+        region=repeat(["habenula"], n), num_cells=repeat([s*2], n))
+    control_df = DataFrame(time_idx=time_idx, time=time, fluor=control,
+        region=repeat(["control"], n), num_cells=repeat([s*2], n))
+    region_traces_df = vcat(region_traces_df, med_df, hab_df, control_df)
+end
+##
+p1 = Gadfly.plot(region_traces_df[region_traces_df.region .== "medulla",:], x = :time, y = :fluor,
+    color = :num_cells, Gadfly.Guide.title("medulla"), Gadfly.Geom.line)
+
+p2 = Gadfly.plot(region_traces_df[region_traces_df.region .== "habenula",:], x = :time, y = :fluor,
+    color = :num_cells, Gadfly.Guide.title("habenula"), Gadfly.Geom.line)
+
+p3 = Gadfly.plot(region_traces_df[region_traces_df.region .== "control",:], x = :time, y = :fluor,
+    color = :num_cells, Gadfly.Guide.title("control"), Gadfly.Geom.line)
+
+p = vstack(p1,p2, p3)
+H = 150mm
+W = 200mm
+
+fn = joinpath(plotDir, "$(expName)_titraion_region_traces_df_f")
+img = SVG(fn*".svg", H, W)
+
+Gadfly.draw(img, p)
+
+mm2px = x -> Int(round(uconvert(u"inch",Quantity(x.value,u"mm"))*200/1u"inch",digits=0))
+px_w = mm2px(W)
+px_h = mm2px(H)
+cmd = "inkscape -w $px_w -h $px_h $fn.svg --export-filename $fn.png"
+println("to make PNG: $cmd")
+
+p
+
+
+##
+theTime = 7.5
+timeIdx = searchsortedfirst(unique(region_traces_df.time),theTime)
+@assert abs(region_traces_df.time[timeIdx] - theTime) < 0.5
+p1 = Gadfly.plot(region_traces_df[region_traces_df.time_idx .== timeIdx,:], x = :num_cells, y = :fluor,
+    color = :region, Gadfly.Geom.line)

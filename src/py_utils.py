@@ -3,7 +3,6 @@ import numpy as np
 import tables
 from tqdm import tqdm
 
-
 def assign_tseries_to_dset(dset, tseries, channel=0, batch_size=1024):
     "dset is 5D (T, C, Z, H, W), tseries is 4D (T, Z, H, W)"
     if len(tseries.shape) == 4:
@@ -173,3 +172,25 @@ def write_experiment_to_tyh5(
             )
         else:
             print('"/imaging/stim" not populated as stim data was not provided')
+
+# https://matthew-brett.github.io/teaching/mutual_information.html
+def mutual_information(A, B, bins=20):
+    """ Mutual information for joint histogram.
+    """
+    hgram, x_edges, y_edges = np.histogram2d(A.ravel(), B.ravel(), bins=bins)
+    # Convert bins counts to probability values
+    pxy = hgram / float(np.sum(hgram))
+    px = np.sum(pxy, axis=1) # marginal for x over y
+    py = np.sum(pxy, axis=0) # marginal for y over x
+    px_py = px[:, None] * py[None, :] # Broadcast to multiply marginals
+    # Now we can do the calculation using the pxy, px_py 2D arrays
+    nzs = pxy > 0 # Only non-zero pxy values contribute to the sum
+    return np.sum(pxy[nzs] * np.log(pxy[nzs] / px_py[nzs]))
+
+def transparent_cmap(cmap, N=255, max_alpha=0.8):
+    "Copy colormap and set alpha values"
+
+    mycmap = cmap
+    mycmap._init()
+    mycmap._lut[:,-1] = np.linspace(0, max_alpha, N+4)
+    return mycmap

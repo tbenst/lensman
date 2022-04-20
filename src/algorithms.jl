@@ -1,6 +1,3 @@
-using LinearAlgebra, StatsBase, ProgressMeter, JuMP
-import Base.Threads.@threads
-
 """Sparse (min L1) solution to Y=AX for unknown A.
     
 Pass ie `optimizer=Gurobi.Optimizer`
@@ -385,4 +382,136 @@ end
 function medianfilt(x, window=3)
     filtered = rollmedian(x, window)
     vcat([x[1]], filtered, [x[end]])
+end
+
+"""Use ANTs to perform registration, either affine or with SyN.
+
+See https://academic.oup.com/view-large/120212390 for reference on using with
+zebrafish atlas registration. That paper uses the following:
+
+ants_register(fixed, moving; interpolation = "WelchWindowedSinc",
+    histmatch = 0, sampling_frac = 0.25, maxiter = 200, threshold=1e-8,
+    use_syn = false, synThreshold = 1e-7, synMaxIter = 200, dont_run = true)
+
+Tyler previously used affine + sampling_frac=1.0 for faster online registration.
+
+SyN took 9487s for a MultiMAP 
+
+Writes intermediate data to tmp directory. To register/morph Zbrain onto our Zseries,
+set fixed = zseries, moving = zbrain.
+"""
+function ants_register(fixed, moving; interpolation = "BSpline",
+        histmatch = 1, maxiter = 200, threshold = "1e-6",
+        initial_moving_type = 1, sampling_frac = 1.0,
+        use_syn = false, synThreshold = 1e-7, synMaxIter = 200,
+        ants_path = "/opt/ANTs/install/bin/antsRegistration",
+        save_dir = ANTsRegistration.userpath(),
+        run = false)
+    if use_syn
+        mstr = "_SyN"
+    else
+        mstr = "_affine"
+    end
+    outprefix = Dates.format(DateTime(now()), DateFormat("YmmddTHHMMSSs"))
+    fixedname = joinpath(save_dir, "$(outprefix)_fixed.nrrd")
+    save(fixedname, fixed)
+    movingname = joinpath(save_dir, "$(outprefix)_moving.nrrd")
+    save(movingname, moving)
+    outname = joinpath(save_dir, outprefix*mstr)
+    # from ANTs zfish atlas paper
+    if use_syn
+        # syn_cmd = "-t SyN\[0.05,6,0.5\] -m CC\[$fixedname, $movingname,1,2\] -c \[$synMaxIter\x$synMaxIter\x$synMaxIter\x0,$synThreshold,10\] --shrink-factors 12x8x4x2 --smoothing-sigmas 4x3x2x1vox"
+        syn_cmd = `-t SyN\[0.05,6,0.5\] -m CC\[$fixedname, $movingname,1,2\] -c \[$synMaxIter\x$synMaxIter\x$synMaxIter\x$(synMaxIter)x10,$synThreshold,10\] --shrink-factors 12x8x4x2x1 --smoothing-sigmas 4x3x2x1x0vox`
+    else
+        syn_cmd = ``
+    end
+    affine_cmd = `$(ants_path) -d 3 --float -o \[$outname\_, $outname\_Warped.nii.gz, $outname\_WarpedInv.nii.gz\] --interpolation $interpolation --use-histogram-matching $histmatch -r \[$fixedname, $movingname,$initial_moving_type\] -t rigid\[0.1\] -m MI\[$fixedname, $movingname,1,32, Regular,    $sampling_frac\] -c \[$maxiter\x$maxiter\x$maxiter\x0,$threshold,10\] --shrink-factors 12x8x4x2 --smoothing-sigmas 4x3x2x1vox -t Affine\[0.1\] -m MI\[$fixedname, $movingname,1,32, Regular,$sampling_frac\] -c \[$maxiter\x$maxiter\x$maxiter\x0,$threshold,10\] --shrink-factors 12x8x4x2 --smoothing-sigmas 4x3x2x1vox`
+    cmd = `$(affine_cmd) $(syn_cmd)`
+
+    if ~run
+        return cmd
+    end
+
+    println("calling ANTs...")
+    @time println(read(cmd, String))
+
+    affine_transform_path = glob_one_file(outprefix*"*GenericAffine.mat", save_dir)
+    sio = pyimport("scipy.io")
+    affine_transform = sio.loadmat(affine_transform_path)
+    warpedname = joinpath(outname*"_Warped.nii.gz")
+
+    # if this fails, tmpfs may be out of space
+    # try `rm -rf /run/user/1000/tyler/ANTs/`
+    registered = niread(warpedname);
+    println("finished registering!")
+    registered
+end
+
+
+"Does not work reliably from tseries to zseries."
+function find_imaging_planes_mi(zseries, avg_imaging; bins=20)
+    nZ = size(zseries, 3)
+    nI = size(avg_imaging,3)
+    mi = zeros(nZ,nI)
+    # can't use threads due to PyCall;
+    # TODO: reimplement mutual_information using pure julia..?
+    @showprogress for z in 1:nZ
+        for i in 1:nI
+            zplane = convert(Array{Float64},collect(zseries[:,:,z]))
+            zplane = imresize(zplane, size(avg_imaging)[1:2])
+            img = avg_imaging[:,:,i]
+            # img = adjust_histogram(avg_imaging[:,:,i], GammaCorrection(0.3))
+            mi[z,i] = mutual_information(zplane, img; bins=bins)
+        end
+    end
+    matching_zplanes = Tuple.(argmax(mi,dims=1)[1,:])
+    map(x->x[1], matching_zplanes)
+end
+
+function find_imaging_planes_ssim(zseries, avg_imaging)
+    nZ = size(zseries, 3)
+    nI = size(avg_imaging,3)
+    mi = zeros(nZ,nI)
+    @threads for z in 1:nZ
+        for i in 1:nI
+            zplane = convert(Array{Float64},collect(zseries[:,:,z]))
+            zplane = imresize(zplane, size(avg_imaging)[1:2])
+            img = avg_imaging[:,:,i]
+            mi[z,i] = assess_msssim(zplane, img)
+        end
+    end
+    matching_zplanes = Tuple.(argmax(mi,dims=1)[1,:])
+    map(x->x[1], matching_zplanes)
+end
+
+"Given a threshould, find the lowest stim number where all df_f are above"
+function stim_roi_threshold(df, key, thresh, nStimuli; id_key=:cell_id,
+        fraction_above=0.75)
+    cell_id = df[1,id_key]
+    for s in 1:nStimuli
+        idxs = df.stim .>= s
+        if (sum(df[idxs,key] .> thresh)/length(df[idxs,key])) > fraction_above
+            return s
+        end
+    end
+    # hack so background is black with 16 stimulation conditions
+    # we will mask out
+    return -1
+end
+
+# TODO: this has disadvantage of not accounting so much for bleaching over time
+# we should consider either a) de-trending in denoising or b) taking geometric mean
+# of df/f values
+function influence_map(trial_average, window; ϵ=0.1)
+    f = mean(trial_average[:,:,:,:,end-window+1:end],dims=5)[:,:,:,:,1]
+    f0 = mean(trial_average[:,:,:,:,1:window],dims=5)[:,:,:,:,1]
+    df = f - f0
+    df_f = df./(f0 .+ ϵ)
+end
+
+function influence_map(trial_average, pre_idx, post_idx; ϵ=0.1)
+    f = mean(trial_average[:,:,:,:,post_idx],dims=5)[:,:,:,:,1]
+    f0 = mean(trial_average[:,:,:,:,pre_idx],dims=5)[:,:,:,:,1]
+    df = f - f0
+    df_f = df./(f0 .+ ϵ)
 end

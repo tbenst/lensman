@@ -125,3 +125,35 @@ rsync -avP sher:'/oak/stanford/groups/deissero/users/tyler/b115/2021-01-12_chrmi
 ## Sherlock julia versions
 /home/groups/deissero/tyler/opt/julia/latest/bin/julia
 /share/software/user/open/julia/1.5.1/bin/julia
+
+## random links
+re registerQD: https://discourse.julialang.org/t/how-can-i-register-align-shifted-image-stacks/29244/35
+
+# TODOs
+
+## checkpointing with Dagger.jl or Actors.jl
+can we accelerate / break up scripts into routines..? would be nice
+if scripts were shorter & faster to jump back into, both in terms
+of reading code as well as aesthetics
+
+perhaps using a URI for each experiment / fish, we can implement a
+dictionary/macro that is actually a DAG, and either loads cached results
+or runs a computation for each key..? This way, interface can simple be:
+@loadvars exp_URI (avgStim, etlVal, H, W, Z, nStimuli)
+where exp_URI is eg date_folder/fishX/TSeries*
+
+This is a form of row polymorphism..? Similar to lens..?
+And would extend some flexible struct with new methods so
+that new keys / capabilities are added...
+
+## dagger limits
+cannot iterate or index thunk
+No good:
+@par y = f()[end]
+@par (x, y) = f()
+
+## remove node & redo
+@pun region_mask_path = r
+rm(region_mask_path)
+undo(r.nodes[:region_masks_h5])
+@pun region_mask_path = r

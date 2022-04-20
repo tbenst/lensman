@@ -1,5 +1,5 @@
 ## compare 
-# ENV["DISPLAY"] = "localhost:13.0"
+ENV["DISPLAY"] = "localhost:14.0"
 using Sockets, Observables, Statistics, Images, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
     CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
@@ -86,7 +86,13 @@ end
 # tseriesDir = "$tseriesRootDir/2021-06-01_wt-chrmine_h2b6s/fish4/TSeries-lrhab-control-118trial-061"
 # tseriesDir = "$tseriesRootDir/2021-06-01_rsChRmine_h2b6s/fish3/TSeries-lrhab-118trial-060"
 # tseriesDir = "$tseriesRootDir/2021-06-29_hsChRmine_6f_6dpf/fish2/TSeries-round3-lrhab-118trial-068"
+<<<<<<< HEAD:notebooks/2021-06-22_standard_stim_characterization.jl
 tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
+=======
+# tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062"
+# tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069"
+tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-titration-192trial-070"
+>>>>>>> fafef11989e1ef657682aa9bb3a556bb34366d8d:notebooks/archive/2021-06-22_standard_stim_characterization.jl
 
 # tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
 # tseriesDir = "$tseriesRootDir/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-titration-192trial-062"
@@ -107,12 +113,6 @@ tseriesDir = "$tseriesRootDir/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrha
 # possibly compare to...
 # 2021-01-19_chrmine_kv2.1_6f_7dpf/fish1_chrmine/ (4power)
 # 2021-02-15_wt_chrmine_gc6f/fish1/TSeries-1024cell-4freq-skip-first-066 (4freq; too large for memory on lensman)
-
-
-# analysis_name = "lstm_denoise_only"
-# analysis_name = "lstm_divide512"
-analysis_name = "lstm_divide8192"
-# analysis_name = "kalman"
 
 tyh5Path = tseriesDir * ".ty.h5"
 
@@ -146,9 +146,6 @@ tylerSLMDir = joinpath(fishDir, "slm")
 # tyh5Path = joinpath(fishDir,"TSeries-lrhab-titration-1232021-06-21_6pm" * ".ty.h5")
 tyh5Path = tseriesDir*".ty.h5"
 ##
-
-# TODO: lazy read hdf5 wrapper...?
-
 struct LazyTy5
     dset::HDF5.Dataset
 end
@@ -187,9 +184,11 @@ end
 
 
 ##
-# tyh5Path = tyh5Path * "skipme"
+tyh5Path = tyh5Path * "skipme"
 if isfile(tyh5Path)
     @info "using ty.h5 file"
+    analysis_name = "lstm"
+
     # tseries = read_tyh5(tyh5Path)
     h5 = h5open(tyh5Path,"r")
     # dset = "/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm"
@@ -200,6 +199,7 @@ if isfile(tyh5Path)
     plotDir = joinpath(fishDir, "plots-denoised")
     avgStimStr = "_avgStim_lstm.h5"
 else
+    analysis_name = "raw"
     tseries = loadTseries(tseriesDir);
     plotDir = joinpath(fishDir, "plots")
     avgStimStr = "_avgStim.h5"
@@ -253,8 +253,8 @@ end
 # TODO: can we auto-select this somehow for scripting...?
 @warn "commented assertion check for slmTxtFile"
 @assert length(slmTxtFile) == 1 slmTxtFile # if not, need to be careful to choose
-# slmTxtFile = slmTxtFile[1]
-slmTxtFile = slmTxtFile[end]
+slmTxtFile = slmTxtFile[1]
+# slmTxtFile = slmTxtFile[end]
 
 ##
 stimGroupDF = CSV.File(open(read, slmTxtFile), header=["filepath", "powerFraction"]) |> DataFrame
@@ -339,7 +339,7 @@ post = Int(ceil(nseconds*volRate))+1
 # avg_stim_h5_path = joinpath(fishDir,expName*"$(analysis_name)_avgStim.h5")
 avg_stim_h5_path = joinpath(fishDir,expName*"$(analysis_name)"*avgStimStr)
 have_avg_stim_h5 = isfile(avg_stim_h5_path)
-have_avg_stim_h5 = false # temp force refresh
+# have_avg_stim_h5 = false # temp force refresh
 if have_avg_stim_h5
     avgStim = h5read(avg_stim_h5_path, "/block1");
 else

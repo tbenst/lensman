@@ -1,26 +1,20 @@
-
+ENV["DISPLAY"] = "localhost:11"
+# mostly same as 2021-03-04 notebook, but updated for latest
+# DataFrames
+##
+using AlgebraOfGraphics, CairoMakie
+import AbstractPlotting
+using Makie.GeometryBasics
+# import Cairo, Fontconfig
 using Sockets, Observables, Statistics, Images, Lensman,
     Distributions, Unitful, HDF5, Distributed, SharedArrays, Glob,
-    CSV, DataFrames, Plots, Dates, ImageDraw, MAT, StatsBase,
-    Compose, ImageMagick, Random, PyCall, Arrow, ProgressMeter,
-    RollingFunctions
-import Gadfly
+    CSV, DataFrames, Dates, ImageDraw, MAT, StatsBase,
+    ImageMagick, Random, PyCall, Arrow, ProgressMeter,
+    RollingFunctions, Fontconfig
+# import Gadfly
 using Unitful: μm, m, s
+aog = AlgebraOfGraphics
 # PNG
-import Cairo,
-Fontconfig
-
-chrmine_paper = Gadfly.Theme(
-    line_width=1mm,
-    minor_label_font="Arial",
-    major_label_font="Arial",
-    key_title_font="Arial",
-    key_label_font="Arial",
-    major_label_font_size=10pt,
-    minor_label_font_size=10pt,
-    key_title_font_size=10pt,
-    key_label_font_size=10pt
-)
 
 ## compare ChRmine: WT, RS & H33R
 
@@ -34,17 +28,24 @@ tseriesRootDir = "/mnt/deissero/users/tyler/b115"
 
 
 # round 1
-h33r_path = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051")
+# h33r_path = joinpath(tseriesRootDir, "2021-02-16_6f_h33r_f0_6dpf/fish2/TSeries-256cell-8concurrent-4freq-051")
 # rs_path = joinpath(tseriesRootDir, "2021-01-26_rsChRmine_6f_7dpf/fish1/TSeries-31concurrent-168trial-3rep-4power-043")
-rs_path = joinpath(tseriesRootDir, "2021-01-26_rsChRmine_6f_7dpf/fish2/TSeries-1024cell-32concurrent-048")
+# rs_path = joinpath(tseriesRootDir, "2021-01-26_rsChRmine_6f_7dpf/fish2/TSeries-1024cell-32concurrent-048")
 # wt_path = "$tseriesRootDir/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-10zplane-077"
-wt_path = "$tseriesRootDir/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-076"
+# wt_path = "$tseriesRootDir/2021-02-02_wt_chrmine_GC6f/fish3/TSeries-1024cell-32concurrent-5power-076"
 
 # round 2
-# h33r_path = "$tseriesRootDir/2021-03-16_h33r-chrmine_h2b6s/fish4/TSeries_64cell_8concurrent_2power_8rep-607"
-# rs_path = "$tseriesRootDir/2021-03-16_rschrmine_h2b6s/fish3/TSeries_64cell_8concurrent_2power_8rep-407"
-# gcamp_path = "$tseriesRootDir/2021-03-16_h2b6s/fish1/TSeries_64cell_8concurrent_2power_8rep-207"
-# wt_path = "$tseriesRootDir/2021-03-16_wt-chrmine_h2b6s/fish2/TSeries_64cell_8concurrent_2power_8rep-221"
+h33r_path = "$tseriesRootDir/2021-03-16_h33r-chrmine_h2b6s/fish4/TSeries_64cell_8concurrent_2power_8rep-607"
+rs_path = "$tseriesRootDir/2021-03-16_rschrmine_h2b6s/fish3/TSeries_64cell_8concurrent_2power_8rep-407"
+gcamp_path = "$tseriesRootDir/2021-03-16_h2b6s/fish1/TSeries_64cell_8concurrent_2power_8rep-207"
+wt_path = "$tseriesRootDir/2021-03-16_wt-chrmine_h2b6s/fish2/TSeries_64cell_8concurrent_2power_8rep-221"
+# check pulse rate
+resources = Resources();
+rwt = Recordings[
+    "2021-03-16_wt-chrmine_h2b6s/fish2/TSeries_64cell_8concurrent_2power_8rep-221"
+](;resources...,tseries_read_strategy=:lazy_tiff);
+@show rwt[:nstim_pulses] # 10
+#
 
 function readExp(tseries_dir, genotype, cellIDnonce)
     cells = tseries_dir*"_cellsDF.arrow"
@@ -76,14 +77,15 @@ rs_cells, rs = readExp(rs_path, "rsChRmine", 2e4)
 # fluor = vcat(h33r, rs, wt, gcamp);
 fluor = vcat(h33r, rs, wt);
 # plotDir = "$tseriesRootDir/../plots/2021-03-16"
-plotDir = "/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure/v3"
+# plotDir = "/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure/v3"
+plot_dir = "/home/tyler/Dropbox/Science/manuscripts/2021_chrmine-structure/2021-08-27_panels"
 
 ##
 
-# hack to resample data for same sampling rate...
-nTimes = map(x-> length(unique(x.time)), groupby(fluor, :genotype))
-maxTime = map(x-> maximum(x.time), groupby(fluor, :genotype))
-minTime = map(x-> minimum(x.time), groupby(fluor, :genotype))
+# downsample data for same sampling rate & smoothing
+nTimes = combine(x-> length(unique(x.time)), groupby(fluor, :genotype)).x1
+maxTime = combine(x-> maximum(x.time), groupby(fluor, :genotype)).x1
+minTime = combine(x-> minimum(x.time), groupby(fluor, :genotype)).x1
 frameRates = round.(nTimes ./ (maxTime - minTime), digits=0)
 @show frameRates
 # resample = Int.(frameRates ./ 3)
@@ -93,8 +95,8 @@ frameRates = round.(nTimes ./ (maxTime - minTime), digits=0)
 # @warn "resampling hardcode stuff"
 # round 2
 # resample = [1, 1, 1, 1]
-resample = [1, 2,2,2]
-# resample = [3, 6,6,6]
+# resample = [1, 2,2,2]
+resample = [3, 6,6,6]
 # resample = [15, 30,30,30]
 
 genotype_order = map(x->x[1],keys(groupby(fluor, :genotype)))
@@ -160,49 +162,8 @@ for df in groupby(meanTimeDf, [:laserPower, :stimFreq, :cellID, :genotype])
         genotype=genotype, df_f=mean(df.df_f_mean[idxs])))
 end
 
-Gadfly.plot(df_fs, x=:df_f, ygroup=:genotype,
-    Gadfly.Geom.subplot_grid(Gadfly.Geom.histogram()))
-
-##
-nplots = 45
-# nplots = 36
-genotypes = sort(unique(fluorDF.genotype))
-@show genotypes
-plots = Gadfly.Plot[]
-# for gen in genotypes[[1]]
-
-# genotype = "ChRmine"
-genotype = "rsChRmine"
-# genotype = "fChRmine"
-# genotype = "control"
-for gen in[genotype]
-    cellIDs = unique(fluorDF[fluorDF.genotype .== gen,:cellID])
-    nCells = length(cellIDs)
-    # idxs = cellIDs[randperm(nCells)[1:nplots]]
-    thresh = 0.7
-    # thresh = 0.1
-    idxs = df_fs[(df_fs.df_f .>= thresh) .& (df_fs.genotype .== gen), :cellID]
-    # idxs = idxs[randperm(length(idxs))[1:nplots]]
-    idxs = idxs[1:nplots]
-    # idxs = idxs[end-nplots:end]
-    # @show length(idxs), nCells
-    for cellID in idxs
-        idxs = meanTimeDf.cellID .== cellID
-        # @show sum(idxs)
-        push!(plots, Gadfly.plot(meanTimeDf[idxs,:], x=:time, y=:df_f_mean, color=:laserPower,
-            Gadfly.Geom.line, Gadfly.Guide.title("cellID $cellID")))
-    end
-end
-
-# p_nConcurrent = gridstack(reshape(plots[nplots*2+1:nplots*3], 8,5))
-p = gridstack(reshape(plots[1:nplots], 9,5))
-# p = gridstack(reshape(plots[1:nplots], 9,4))
-plotPath = joinpath(plotDir, "$genotype-examples.png")
-img = SVG(plotPath, 32inch, 16inch)
-# img = SVG(plotPath, 32inch*4/5, 16inch)
-Gadfly.draw(img, p)
-@show plotPath
-p
+# Gadfly.plot(df_fs, x=:df_f, ygroup=:genotype,
+#     Gadfly.Geom.subplot_grid(Gadfly.Geom.histogram()))
 
 ## GCaMP6f
 
@@ -213,18 +174,18 @@ h33r_good_idxs = UInt32[10078, 10087, 10184, 10089, 10216, 10077, 10083, 10124, 
 # wt_good_idxs = UInt32[318, 618, 396, 621, 408, 834, 854, 170, 415, 310, 1018, 853]
 # wt_good_idxs = UInt32[169, 854, 1024, 307, 834, 1005, 310, 1015, 1016, 318, 853, 439] # 51
 # one plane wt
-wt_good_idxs = UInt32[25, 6, 83, 503, 535, 565, 520, 523, 525, 91, 96, 655]
+# wt_good_idxs = UInt32[25, 6, 83, 503, 535, 565, 520, 523, 525, 91, 96, 655]
 # rs_good_idxs = UInt32[20361, 20341, 20629, 20249, 20641, 20479, 20905, 20960, 20821, 20322, 20373, 20130] #20174
-rs_good_idxs = UInt32[20004, 20087, 20008, 20061, 20025, 20130, 20028, 20149, 20201, 20085, 20135, 20733]
+# rs_good_idxs = UInt32[20004, 20087, 20008, 20061, 20025, 20130, 20028, 20149, 20201, 20085, 20135, 20733]
 
 
 # round 2
 # h33r_good_idxs = UInt32[10058, 10005, 10049, 10021, 10047]
 # h33r_good_idxs = UInt32[10018, 10044, 10032, 10045, 10046, 10003, 10004, 10060, 10033, 10029, 10012,]
 control_good_idxs = UInt32[]
-# wt_good_idxs = UInt32[42, 14, 9, 47, 49, 12, 32, 43, 13, 61, 41, 57 ]
+wt_good_idxs = UInt32[42, 14, 9, 47, 49, 12, 32, 43, 13, 61, 41, 57 ]
 # 20022, 20055 are weak
-# rs_good_idxs = UInt32[20009, 20010, 20019, 20004, 20032, 20024, 20064, 20020, 20014, 20017, 20022, 20055]
+rs_good_idxs = UInt32[20009, 20010, 20019, 20004, 20032, 20024, 20064, 20020, 20014, 20017, 20022, 20055]
 # 0.5: 20014, 20046, 20017, 20018; 0.3: 20026, 20057; 20020 weird plateau..
 # rs_good_idxs = UInt32[20009, 20010, 20024, 20014, 20056, 20064, 20018, 20019, 20046, 20017, 20026, 20057]
 
@@ -242,42 +203,21 @@ control_good_idxs = UInt32[]
 
 idxs = vcat(h33r_good_idxs, control_good_idxs, wt_good_idxs, rs_good_idxs)
 ##
-toUse = map(x->x in idxs, meanTimeDf.cellID)
-line = Gadfly.plot(meanTimeDf[toUse, :], x=:time,
-    xgroup=:genotype,
-    y="df_f_mean",
-    ymin="df_f_minimum",
-    ymax="df_f_maximum",
-    Gadfly.Geom.subplot_grid(Gadfly.Geom.line, Gadfly.Geom.ribbon))
-    # Gadfly.Geom.subplot_grid(Gadfly.Geom.line))
-##
-line = Gadfly.plot(meanTimeDf[toUse, :], x=:time,
-    xgroup=:genotype,
-    ygroup=:laserPower,
-    y="df_f_mean",
-    color=:laserPower,
-    Gadfly.Geom.subplot_grid(Gadfly.Geom.line))
-
-plotPath = joinpath(plotDir, "all-chrmine-by-laser.svg")
-img = SVG(plotPath, 6inch, 4inch)
-Gadfly.draw(img, line)
-
-
-##
 keys(groupby(fluor, [:genotype, :laserPower]))
 keys(groupby(meanTimeDf, [:genotype, :laserPower]))
 ##
 
 # idxs = map(i->i in h33r_good_idxs, meanTimeDf.cellID)
-powerPerGenotype = Dict("ChRmine" => 9.1, "fChRmine" => 16.0,
-    "rsChRmine" => 6.5)
+# powerPerGenotype = Dict("ChRmine" => 9.1, "fChRmine" => 16.0,
+#     "rsChRmine" => 6.5)
 # powerPerGenotype = Dict("ChRmine" => 14.8, "fChRmine" => 16.0,
 #     "rsChRmine" => 14.8)
-# powerPerGenotype = Dict("ChRmine" => 14.8, "fChRmine" => 14.8,
-#     "rsChRmine" => 14.8)
+powerPerGenotype = Dict("ChRmine" => 14.8, "fChRmine" => 14.8,
+    "rsChRmine" => 14.8)
     # "rsChRmine" => 6.5)
 meantraceDF = DataFrame(time=Float64[], mean=Float64[], min=Float64[], max=Float64[], genotype=String[])
-for (gen,idxsToUse) in zip(["ChRmine", "fChRmine", "rsChRmine"], [wt_good_idxs, h33r_good_idxs, rs_good_idxs])
+for (gen,idxsToUse) in zip(["ChRmine", "rsChRmine"], [wt_good_idxs, rs_good_idxs])
+    @show gen
     idxs = map(i->i in idxsToUse, meanTimeDf.cellID)
     idxs = map(i->i in idxsToUse, meanTimeDf.cellID) .&
         (meanTimeDf.laserPower .≈ powerPerGenotype[gen])
@@ -286,8 +226,10 @@ for (gen,idxsToUse) in zip(["ChRmine", "fChRmine", "rsChRmine"], [wt_good_idxs, 
     ts = (time .< 15) .& (time .>= -5)
     time = time[ts]
     theMean = theMean[ts,2]
-    theMax = combine(groupby(meanTimeDf[idxs,:], :time), :df_f_mean => (p->percentile(p,95)))[ts,2]
-    theMin = combine(groupby(meanTimeDf[idxs,:], :time), :df_f_mean => (p->percentile(p,5)))[ts,2]
+    # theMax = combine(groupby(meanTimeDf[idxs,:], :time), :df_f_mean => (p->percentile(p,95)))[ts,2]
+    # theMin = combine(groupby(meanTimeDf[idxs,:], :time), :df_f_mean => (p->percentile(p,5)))[ts,2]
+    theMax = combine(groupby(meanTimeDf[idxs,:], :time), :df_f_mean => (p->Lensman.plus_sem(p)))[ts,2]
+    theMin = combine(groupby(meanTimeDf[idxs,:], :time), :df_f_mean => (p->Lensman.minus_sem(p)))[ts,2]
     meantraceDF = vcat(meantraceDF, DataFrame(mean=theMean, max=theMax, min=theMin,
         time=time, genotype=fill(gen, size(theMean)...)))
 end
@@ -295,28 +237,41 @@ end
 
 # p = Gadfly.plot(meanTimeDf[idxs,:], x=:time, y=:df_f_mean,
 #     color=:cellID, Gadfly.Geom.line, Gadfly.Guide.title("fChRmine"))
-p = Gadfly.plot(meantraceDF, x=:time, y=:mean, ymin=:min, ymax=:max,
-    ygroup=:genotype,
-    Gadfly.Geom.subplot_grid(Gadfly.Geom.line, Gadfly.Geom.ribbon,
-        Gadfly.Coord.Cartesian(xmin=-5, xmax=15, ymin=-0.2, ymax=1.6),
-            Gadfly.Guide.annotation(
-        compose(context(), Gadfly.Shape.rectangle(0., -0.2, 1.0, 2.2),
-        fill(RGBA(RGB(1N0f8, 0N0f8, 0N0f8), 0.5)))),
-    ),
-    # Gadfly.Geom.subplot_grid(),
-    chrmine_paper,
-    Gadfly.Guide.title("ChRmine (12 cells; 95% CI)"),
-    Gadfly.Guide.xlabel("time (s)"), Gadfly.Guide.ylabel("Δf/f"))
+meantraceDFnof = filter(x->x.genotype != "fChRmine", meantraceDF)
+meantraceDFnof = sort(meantraceDFnof, [:time])
+##
+# data(meantraceDFnof) * mapping(:time,:mean,col=:genotype) * visual(Lines) |> aog.draw
+fontsize_theme = Theme(fontsize = 7 * 300/72, font="Arial")
+set_theme!(fontsize_theme)
 
-plotPath = joinpath(plotDir, "all-chrmine_traces_narrow.svg")
-# img = SVG(plotPath, 12cm, 12cm)
-img = SVG(plotPath, 12cm, 12cm)
-plotPath = joinpath(plotDir, "all-chrmine_traces_narrow.png")
-Gadfly.draw(img, p)
-img = PNG(plotPath, 12cm, 12cm)
-Gadfly.draw(img, p)
-@show plotPath
-p
+if "time" in names(meantraceDFnof)
+    rename!(meantraceDFnof, :time => "time (s)")
+end
+meantraceDFnof[meantraceDFnof.genotype .== "ChRmine",:genotype] .= "ChRmine (n=12 cells)"
+meantraceDFnof[meantraceDFnof.genotype .== "rsChRmine",:genotype] .= "rsChRmine (n=12 cells)"
+d = data(meantraceDFnof)
+# p1 = d * mapping(:time,:min,:max,col=:genotype) * visual(Band,alpha=0.3)
+W = 183u"mm" - 110u"mm"
+H = 50u"mm"
+dpi = 300
+mm2px = mm->Int(round(uconvert(u"inch", mm) * dpi / 1u"inch" * 0.9))
+W = mm2px(W)
+H = mm2px(H)
+f = Figure(resoultion=(W,H))
+p1 = d * mapping("time (s)",:min,:max,col=:genotype) * visual(Band, color="lightblue")
+p2 = d * mapping("time (s)",:mean,col=:genotype) * visual(Lines,color="darkblue",linewidth=4)
+fig = aog.draw(p1 + p2; axis=(xgridvisible=false, ygridvisible=false,ylabel="Δf/f"))
+axs = fig.figure.content[1:2]
+map(axs) do ax
+    poly!(ax,
+    [GeometryBasics.Rect(0,1.8,1,0.1)],
+    color = "red",
+    colormap = :heat)
+end
 
-# TODO: make pretty by resampling time so even; make lines thicker, -10 to 15splo
-
+@show ppath = joinpath(plot_dir,"single-cell-stim")
+pt_per_unit = 72/300
+save(ppath*".svg", fig, pt_per_unit=pt_per_unit)
+save(ppath*".png", fig, pt_per_unit=pt_per_unit)
+save(ppath*".pdf", fig, pt_per_unit=pt_per_unit)
+fig

@@ -51,7 +51,7 @@ H, W, Z
 # zseries = centered(zseries) # need centered for qd registration
 zseries = AxisArray(zseries, (:y, :x, :z), microscope_units)
 # adj_zseries = adjust_histogram(imadjustintensity(zseries), Equalization())
-adj_zseries = imadjustintensity(adjust_gamma(zseries,0.5));
+adj_zseries = imadjustintensity(adjust_gamma(zseries, 0.5));
 adj_zseries = AxisArray(adj_zseries, (:y, :x, :z), microscope_units);
 @assert microscope_units[1] > 0.1μm
 microscope_units
@@ -60,20 +60,23 @@ microscope_units
 ## Read Zbrain cytosolic gcamp
 #####
 @warn "update for H2B vs cytosolic!!"
-gcamp_zbrain = AxisArray(permutedims(
-        # h5read("$zbrain_dir/AnatomyLabelDatabase.hdf5", "Elavl3-GCaMP5G_6dpf_MeanImageOf7Fish"),
-        h5read("$zbrain_dir/AnatomyLabelDatabase.hdf5", "Elavl3-H2BRFP_6dpf_MeanImageOf10Fish"),
-        (2,1,3)),
-    (:y, :x, :z), zbrain_units)
-gcamp_zbrain = AxisArray(permutedims(
+if occursin("6f", fishDir)
+    gcamp_zbrain = AxisArray(
         load("$zbrain_dir/Ref20131120pt14pl2.nrrd"),
-        (1,2,3)),
-    (:x, :y, :z), zbrain_units);
+        (:x, :y, :z), zbrain_units)
+else
+    gcamp_zbrain = AxisArray(permutedims(
+            # h5read("$zbrain_dir/AnatomyLabelDatabase.hdf5", "Elavl3-GCaMP5G_6dpf_MeanImageOf7Fish"),
+            h5read("$zbrain_dir/AnatomyLabelDatabase.hdf5", "Elavl3-H2BRFP_6dpf_MeanImageOf10Fish"),
+            (2, 1, 3)),
+        (:y, :x, :z), zbrain_units)
+end
 
-gcamp_zbrain = reverse(gcamp_zbrain,dims=2); # face right
-gcamp_zbrain = reverse(gcamp_zbrain,dims=3); # top to bottom
+gcamp_zbrain = reverse(gcamp_zbrain, dims = 2); # face right
+gcamp_zbrain = reverse(gcamp_zbrain, dims = 3); # top to bottom
 
-ps = pixelspacing(gcamp_zbrain); SD = ps./maximum(ps)
+ps = pixelspacing(gcamp_zbrain);
+SD = ps ./ maximum(ps);
 # adj_gcamp_zbrain = adjust_histogram(imadjustintensity(gcamp_zbrain), Equalization())
 # adj_gcamp_zbrain = adjust_gamma(imadjustintensity(gcamp_zbrain), 0.2)
 ##
@@ -110,7 +113,7 @@ movingname = joinpath(fishDir, "zbrain_atlas.nrrd")
 save(movingname, moving)
 outprefix = Dates.format(DateTime(now()), DateFormat("YmmddTHHMMSSsZ"))
 if register_method == "SyN"
-    outname = joinpath(fishDir, outprefix*"_SyN")
+    outname = joinpath(fishDir, outprefix * "_SyN")
 else
     outname = joinpath(fishDir, outprefix)
 end
@@ -145,14 +148,14 @@ println("calling ANTs...")
 @time println(read(cmd, String))
 ##
 # affine_transform_path = glob(outprefix*"_SyN"*"*GenericAffine.mat", fishDir)[1]
-affine_transform_path = glob(outprefix*"*0GenericAffine.mat", fishDir)[1]
+affine_transform_path = glob(outprefix * "*0GenericAffine.mat", fishDir)[1]
 affine_transform = sio.loadmat(affine_transform_path)
-if register_method=="SyN"
-    syn_transform_path = glob(outprefix*"*1Warp.nii.gz", fishDir)[1]
+if register_method == "SyN"
+    syn_transform_path = glob(outprefix * "*1Warp.nii.gz", fishDir)[1]
     syn_transform = niread(syn_transform_path)
 end
 # warpedname = joinpath(outname*".nrrd")
-warpedname = joinpath(outname*"_Warped.nii.gz")
+warpedname = joinpath(outname * "_Warped.nii.gz")
 
 # if this fails, tmpfs may be out of space
 # try `rm -rf /run/user/1000/tyler/ANTs/`
@@ -162,34 +165,34 @@ println("finished registering!")
 
 ## visualize results as sanity check
 im = RGB.(adj_zbrain_registered)
-channelview(im)[2:3,:,:,:] .= 0
-channelview(im)[2,:,:,:] .= adj_zseries
+channelview(im)[2:3, :, :, :] .= 0
+channelview(im)[2, :, :, :] .= adj_zseries
 imshow(im)
 
 ## Read mask & transform to Zseries
 # TODO: define our own hemisphere masks (split zbrain down the middle..?)
 masks = matread("$zbrain_dir/MaskDatabase.mat")
 raphe_mask = getMaskNameIncludes(masks, "Raphe");
-raphe_mask = reverse(raphe_mask,dims=2); # face right
-raphe_mask = reverse(raphe_mask,dims=3); # top to bottom
+raphe_mask = reverse(raphe_mask, dims = 2); # face right
+raphe_mask = reverse(raphe_mask, dims = 3); # top to bottom
 # make raphe binary again (weird annoying error but can run in shell...?)
 raphe_mask = antsApplyTransforms2(fixedname, raphe_mask, affine_transform_path) .> 0;
 
 hab_mask = getMaskNameIncludes(masks, "Habenula");
-hab_mask = reverse(hab_mask,dims=2); # face right
-hab_mask = reverse(hab_mask,dims=3); # top to bottom
+hab_mask = reverse(hab_mask, dims = 2); # face right
+hab_mask = reverse(hab_mask, dims = 3); # top to bottom
 
 hab_mask = antsApplyTransforms2(fixedname, hab_mask, affine_transform_path) .> 0;
 
 ## neuron locations by plane, takes ~30 seconds
 neuronCenterMask = zeros(Bool, size(zseries)...)
 for z in 1:size(neuronCenterMask, 3)
-    neuronCenterMask[:,:,z] = findNeurons(zseries[:,:,z])
+    neuronCenterMask[:, :, z] = findNeurons(zseries[:, :, z])
 end
 
-raphe_nNeurons_by_plane = mapslices(sum, raphe_mask .& neuronCenterMask, dims=[1,2])
+raphe_nNeurons_by_plane = mapslices(sum, raphe_mask .& neuronCenterMask, dims = [1, 2])
 max_raphe_nNeurons_in_plane = maximum(raphe_nNeurons_by_plane)
-hab_nNeurons_by_plane = mapslices(sum, hab_mask .& neuronCenterMask, dims=[1,2])
+hab_nNeurons_by_plane = mapslices(sum, hab_mask .& neuronCenterMask, dims = [1, 2])
 max_hab_nNeurons_in_plane = maximum(hab_nNeurons_by_plane)
 # auto determine plane
 planeHab = Tuple(argmax(hab_nNeurons_by_plane))[3]
@@ -200,14 +203,14 @@ planeRaphe = Tuple(argmax(raphe_nNeurons_by_plane))[3]
 # planeRaphe = 
 ##
 
-fracPlaneZero = planeRaphe - (planeRaphe - planeHab)*.7
+fracPlaneZero = planeRaphe - (planeRaphe - planeHab) * 0.7
 planeZero = Int(round(fracPlaneZero))
 # -40 to 60 is acceptable range...
 # +1 to move down one for spectral offset
-numZplanes = size(zseries,3)
+numZplanes = size(zseries, 3)
 zseries_step_size = 2
 zEtlZero = (fracPlaneZero + 1) * zseries_step_size
-zHab = (planeHab + 1)*zseries_step_size
+zHab = (planeHab + 1) * zseries_step_size
 zRaphe = (planeRaphe + 1) * zseries_step_size
 etlHab = zHab - zEtlZero # negative is up 
 seanHab = etlHab + zOffset # (for sean's code)
@@ -216,7 +219,7 @@ seanRaphe = etlRaphe + zOffset
 
 @info "assuming each plane is 2μm apart"
 numImagingPlanes = 10
-step = (etlRaphe - etlHab)/(numImagingPlanes-1)
+step = (etlRaphe - etlHab) / (numImagingPlanes - 1)
 
 step_size = step * zseries_step_size
 
@@ -233,36 +236,36 @@ step_size = step * zseries_step_size
 #   (1) left hab (best hab plane) 
 #   (2) right hab (best hab plane) 
 #   (3) raphe (best raphe plane) 
-plane_neurons = neuronCenterMask[:,:,planeHab]
+plane_neurons = neuronCenterMask[:, :, planeHab]
 right_mask = zeros(Bool, size(plane_neurons)...)
-dividing_line = Int(round(mean(mask2ind(raphe_mask)[:,1])))
+dividing_line = Int(round(mean(mask2ind(raphe_mask)[:, 1])))
 @info "dividing_line set to $dividing_line, check if reasonable?"
-right_mask[1:dividing_line,:] .= 1
+right_mask[1:dividing_line, :] .= 1
 left_mask = zeros(Bool, size(plane_neurons)...)
-left_mask[dividing_line+1:end,:] .= 1
-hab_neurons = (plane_neurons .& hab_mask[:,:,planeHab])
+left_mask[dividing_line+1:end, :] .= 1
+hab_neurons = (plane_neurons .& hab_mask[:, :, planeHab])
 right_hab_neurons = hab_neurons .& right_mask
 left_hab_neurons = hab_neurons .& left_mask
 @show sum(right_hab_neurons)
 @show sum(left_hab_neurons)
 
-plane_neurons = neuronCenterMask[:,:,planeRaphe]
-raphe_neurons = plane_neurons .& raphe_mask[:,:,planeRaphe]
+plane_neurons = neuronCenterMask[:, :, planeRaphe]
+raphe_neurons = plane_neurons .& raphe_mask[:, :, planeRaphe]
 @show sum(raphe_neurons)
 
 # sample consistent number of neurons
-nNeuronsForStim = 50
+nNeuronsForStim = 32
 right_hab_neuron_locs = findall(right_hab_neurons)
-nRHabNeurons = minimum([nNeuronsForStim, size(right_hab_neuron_locs,1)])
-right_hab_neuron_locs = sample(right_hab_neuron_locs, nRHabNeurons, replace=false)
+nRHabNeurons = minimum([nNeuronsForStim, size(right_hab_neuron_locs, 1)])
+right_hab_neuron_locs = sample(right_hab_neuron_locs, nRHabNeurons, replace = false)
 
 left_hab_neuron_locs = findall(left_hab_neurons)
-nLHabNeurons = minimum([nNeuronsForStim, size(left_hab_neuron_locs,1)])
-left_hab_neuron_locs = sample(left_hab_neuron_locs, nLHabNeurons, replace=false)
+nLHabNeurons = minimum([nNeuronsForStim, size(left_hab_neuron_locs, 1)])
+left_hab_neuron_locs = sample(left_hab_neuron_locs, nLHabNeurons, replace = false)
 
 raphe_neuron_locs = findall(raphe_neurons)
-nRapheNeurons = minimum([nNeuronsForStim, size(raphe_neuron_locs,1)])
-raphe_neuron_locs = sample(raphe_neuron_locs, nRapheNeurons, replace=false)
+nRapheNeurons = minimum([nNeuronsForStim, size(raphe_neuron_locs, 1)])
+raphe_neuron_locs = sample(raphe_neuron_locs, nRapheNeurons, replace = false)
 
 @warn "hardcode control region"
 botLeftX = 200
@@ -281,45 +284,45 @@ control_neuron_locs
 # - create the file that Sean's randomized trials button makes (this way we control)
 habZoffset = seanHab * 10^-6
 right_hab_targets = vcat(Float64.(hcat(collect.(Tuple.(right_hab_neuron_locs))...)),
-ones(Float64,1,nRHabNeurons)*habZoffset)'
+    ones(Float64, 1, nRHabNeurons) * habZoffset)'
 # must be in 512x512 image space!! -> cropping makes life hard :/
-right_hab_targets[:,[1,2]] ./= 2
-right_hab_targets = right_hab_targets[:,[2,1,3]]
+right_hab_targets[:, [1, 2]] ./= 2
+right_hab_targets = right_hab_targets[:, [2, 1, 3]]
 # @info "hack solution for the flip problem..."
 # right_hab_targets[:,1] .= 512 .- right_hab_targets[:,1]
 # right_hab_targets[:,2] .= 512 .- right_hab_targets[:,2]
 
 left_hab_targets = vcat(Float64.(hcat(collect.(Tuple.(left_hab_neuron_locs))...)),
-ones(Float64,1,nLHabNeurons)*habZoffset)'
-left_hab_targets[:,[1,2]] ./= 2
-left_hab_targets = left_hab_targets[:,[2,1,3]]
+    ones(Float64, 1, nLHabNeurons) * habZoffset)'
+left_hab_targets[:, [1, 2]] ./= 2
+left_hab_targets = left_hab_targets[:, [2, 1, 3]]
 # left_hab_targets[:,1] .= 512 .- left_hab_targets[:,1]
 # left_hab_targets[:,2] .= 512 .- left_hab_targets[:,2]
 
 rapheZoffset = seanRaphe * 10^-6
 raphe_targets = vcat(Float64.(hcat(collect.(Tuple.(raphe_neuron_locs))...)),
-ones(Float64,1,nRapheNeurons)*rapheZoffset)'
-raphe_targets[:,[1,2]] ./= 2
-raphe_targets = raphe_targets[:,[2,1,3]]
+    ones(Float64, 1, nRapheNeurons) * rapheZoffset)'
+raphe_targets[:, [1, 2]] ./= 2
+raphe_targets = raphe_targets[:, [2, 1, 3]]
 # raphe_targets[:,1] .= 512 .- raphe_targets[:,1]
 # raphe_targets[:,2] .= 512 .- raphe_targets[:,2];
 
 control_targets = vcat(Float64.(hcat(collect.(Tuple.(control_neuron_locs))...)),
-ones(Float64,1,nLHabNeurons)*habZoffset)'
-control_targets[:,[1,2]] ./= 2
-control_targets = control_targets[:,[2,1,3]]
+    ones(Float64, 1, nLHabNeurons) * habZoffset)'
+control_targets[:, [1, 2]] ./= 2
+control_targets = control_targets[:, [2, 1, 3]]
 
 
 # Visualize stim targets
 im = RGB.(adj_zseries)
-stim_points = zeros(Bool,size(adj_zseries))
-stim_points[right_hab_neuron_locs,planeHab] .= true
-stim_points[left_hab_neuron_locs,planeHab] .= true
-stim_points[raphe_neuron_locs,planeRaphe] .= true
+stim_points = zeros(Bool, size(adj_zseries))
+stim_points[right_hab_neuron_locs, planeHab] .= true
+stim_points[left_hab_neuron_locs, planeHab] .= true
+stim_points[raphe_neuron_locs, planeRaphe] .= true
 stim_points = dilate(dilate(stim_points))
-channelview(im)[[1,3],:,:,:] .= 0
-channelview(im)[1,:,:,:] .= float(stim_points)
-channelview(im)[3,:,:,:] .= 0.5 * (hab_mask .| raphe_mask)
+channelview(im)[[1, 3], :, :, :] .= 0
+channelview(im)[1, :, :, :] .= float(stim_points)
+channelview(im)[3, :, :, :] .= 0.5 * (hab_mask .| raphe_mask)
 # imshow(im)
 @show planeHab, planeRaphe
 # we move down one plane (2um) to account for spectral shift
@@ -328,9 +331,9 @@ println("Move ETL to hab plane @ $(etlHab)μm) & set as first")
 println("Set step size to $(step)μm")
 println("Set end at Raphe plane @ $(etlRaphe)μm")
 #
-step5 = Int(round(Int,step/2))
+step5 = Int(round(Int, step / 2))
 implanes = [planeHab, planeZero, planeRaphe]
-imshow(im[:,:,implanes])
+imshow(im[:, :, implanes])
 
 # zeroplane: Z=118
 # ETL needs to go down 46 to reach raphe plane, not step5*2 = 32
@@ -347,65 +350,60 @@ imshow(im[:,:,implanes])
 # 62: 122
 # 78: 154
 ##
-magicX, magicY = markpoints_magic_numbers("B115")
+# updated 2022-02-02 for new function call; not tested
+(magicX, _), (magicY, _) = markpoints_magic_numbers("B115")
 write_markpoints(left_hab_neuron_locs, "$(outname)_left_hab.gpl",
-    W=W, magicX=magicX, magicY=magicY, spiral_size=0.09)
+    W = W, magicX = magicX, magicY = magicY, spiral_size = 0.09)
 write_markpoints(right_hab_neuron_locs, "$(outname)_right_hab.gpl",
-    W=W, magicX=magicX, magicY=magicY, spiral_size=0.09)
+    W = W, magicX = magicX, magicY = magicY, spiral_size = 0.09)
 write_markpoints(raphe_neuron_locs, "$(outname)_raphe.gpl",
-    W=W, magicX=magicX, magicY=magicY, spiral_size=0.09)
+    W = W, magicX = magicX, magicY = magicY, spiral_size = 0.09)
 write_markpoints(control_neuron_locs, "$(outname)_control.gpl",
-    W=W, magicX=magicX, magicY=magicY, spiral_size=0.09)
+    W = W, magicX = magicX, magicY = magicY, spiral_size = 0.09)
 
 ##
-picked_left_hab_neuron_locs = read_gpl(joinpath(fishDir, "handpicked_left_hab.gpl"),
-    width=1024, height=1024)
-picked_right_hab_neuron_locs = read_gpl(joinpath(fishDir, "handpicked_right_hab.gpl"),
-    width=1024, height=1024)
-picked_raphe_neuron_locs = read_gpl(joinpath(fishDir, "handpicked_raphe.gpl"),
-    width=1024, height=1024)
+neuron_locs = read_gpl(joinpath(fishDir, "96points_lrhab_control.gpl"),
+    width = 1024, height = 1024)
+
+@warn "HARDCODE for 2021-05-05 experiment where ignore this pipeline"
+habZoffset = 0 # HARDCODE
+picked_right_hab_neuron_locs = neuron_locs[1:32]
+picked_left_hab_neuron_locs = neuron_locs[33:64]
+picked_control_neuron_locs = neuron_locs[65:96]
 
 right_hab_targets = vcat(Float64.(hcat(collect.(Tuple.(picked_right_hab_neuron_locs))...)),
-ones(Float64,1,nRHabNeurons)*habZoffset)'
+    ones(Float64, 1, nRHabNeurons) * habZoffset)'
 # must be in 512x512 image space!! -> cropping makes life hard :/
-right_hab_targets[:,[1,2]] ./= 2
-right_hab_targets = right_hab_targets[:,[2,1,3]]
-# @info "hack solution for the flip problem..."
-# right_hab_targets[:,1] .= 512 .- right_hab_targets[:,1]
-# right_hab_targets[:,2] .= 512 .- right_hab_targets[:,2]
+right_hab_targets[:, [1, 2]] ./= 2
+right_hab_targets = right_hab_targets[:, [2, 1, 3]]
 
 left_hab_targets = vcat(Float64.(hcat(collect.(Tuple.(picked_left_hab_neuron_locs))...)),
-ones(Float64,1,nLHabNeurons)*habZoffset)'
-left_hab_targets[:,[1,2]] ./= 2
-left_hab_targets = left_hab_targets[:,[2,1,3]]
-# left_hab_targets[:,1] .= 512 .- left_hab_targets[:,1]
-# left_hab_targets[:,2] .= 512 .- left_hab_targets[:,2]
+    ones(Float64, 1, nLHabNeurons) * habZoffset)'
+left_hab_targets[:, [1, 2]] ./= 2
+left_hab_targets = left_hab_targets[:, [2, 1, 3]]
 
-rapheZoffset = seanRaphe * 10^-6
-raphe_targets = vcat(Float64.(hcat(collect.(Tuple.(picked_raphe_neuron_locs))...)),
-ones(Float64,1,nRapheNeurons)*rapheZoffset)'
-raphe_targets[:,[1,2]] ./= 2
-raphe_targets = raphe_targets[:,[2,1,3]]
-
+control_targets = vcat(Float64.(hcat(collect.(Tuple.(picked_control_neuron_locs))...)),
+    ones(Float64, 1, nLHabNeurons) * habZoffset)'
+control_targets[:, [1, 2]] ./= 2
+control_targets = control_targets[:, [2, 1, 3]]
 
 # Visualize stim targets
 im = RGB.(adj_zseries)
-stim_points = zeros(Bool,size(adj_zseries))
-stim_points[picked_right_hab_neuron_locs,planeHab] .= true
-stim_points[picked_left_hab_neuron_locs,planeHab] .= true
-stim_points[control_neuron_locs,planeHab] .= true
-stim_points[picked_raphe_neuron_locs,planeRaphe] .= true
+stim_points = zeros(Bool, size(adj_zseries))
+stim_points[picked_right_hab_neuron_locs, planeHab] .= true
+stim_points[picked_left_hab_neuron_locs, planeHab] .= true
+stim_points[picked_control_neuron_locs, planeHab] .= true
 stim_points = dilate(dilate(stim_points))
-channelview(im)[[1,3],:,:,:] .= 0
-channelview(im)[1,:,:,:] .= float(stim_points)
-channelview(im)[3,:,:,:] .= 0.5 * (hab_mask .| raphe_mask)
+channelview(im)[[1, 3], :, :, :] .= 0
+channelview(im)[1, :, :, :] .= float(stim_points)
+channelview(im)[3, :, :, :] .= 0.5 * (hab_mask .| raphe_mask)
 
 
-imshow(im[:,:,implanes])
+imshow(im[:, :, implanes])
 ## SAVE
 
-slmOutName = "$(outname)_lrhab_raphe_control"
-if isfile(slmOutName*".txt")
+slmOutName = "$(outname)_lrhab_control"
+if isfile(slmOutName * ".txt")
     error("file already exists! refusing to clobber")
 end
 
@@ -418,32 +416,32 @@ elseif fishDir[1:13] == "/scratch/b115"
 else
     error("need to manually specify remote path.")
 end
-    
-create_slm_stim([left_hab_targets, right_hab_targets, raphe_targets,
-    control_targets],    slmOutName,
+
+create_slm_stim([left_hab_targets, right_hab_targets,
+        control_targets], slmOutName,
     localToRemote = localToRemote,
-    powers=[1], slmNum=slmNum)
+    powers = [1], slmNum = slmNum)
 
 ## trialOrder
-nStims = 4
-nReps = 8 # transition reps
+nStims = 3
+nReps = 15 # transition reps
 nTrials = nStims^2 * nReps + 1
 
-transitionsLeft = ones(4,4) * nReps
+transitionsLeft = ones(nStims, nStims) * nReps
 trialOrder = Int64[]
 
 push!(trialOrder, rand(1:nStims))
 for i in 2:nTrials
     prevStim = trialOrder[i-1]
-    candidateTransitionsLeft = findall(transitionsLeft[prevStim,:] .> 0)
+    candidateTransitionsLeft = findall(transitionsLeft[prevStim, :] .> 0)
     nextStim = rand(candidateTransitionsLeft)
     push!(trialOrder, nextStim)
-    transitionsLeft[nextStim,prevStim] -= 1
+    transitionsLeft[nextStim, prevStim] -= 1
 end
 @assert length(trialOrder) == nTrials
 ##
 trialOrderDF = DataFrame(copy(hcat(collect(1:nTrials), trialOrder)'))
 
-CSV.write(outname*"_trialOrder.txt", trialOrderDF, header=false, delim="\t")
+CSV.write(outname * "_trialOrder.txt", trialOrderDF, header = false, delim = "\t")
 println("wrote $(outname*"_trialOrder.txt")")
 println("be sure to modify mSLM/SetupFiles/Experiments/<TODAY>/trialOrder.txt")
