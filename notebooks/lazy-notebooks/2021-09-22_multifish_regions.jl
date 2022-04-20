@@ -200,6 +200,12 @@ for (p,r) in zip(arrow_paths, recording_names)
     rdf[:,:uri] .= replace(r, "2021-06-01_rsChRmine_h2b6s/fish3" => "2021-06-02_rsChRmine-h2b6s/fish2")
     original_df = vcat(original_df,rdf)
 end
+
+## quick debug wrong df issue for titration
+filter(r->(r.region == rap_names[2]) &&
+    (r.trial==2) && (r.uri == "2021-06-02_rsChRmine-h2b6s/fish2/regions_df.arrow"),
+    original_df)
+
 ##
 if sum(original_df.region .== "Diencephalon - Dorsal Habenula") == 0
     print
@@ -254,6 +260,17 @@ df.fullname = fullnames
 
 df
 # okay (dorsal hab still here)
+## check if 
+rap_idx = findall(occursin.("Raphe", zbrain_mask_names))
+rap_names = zbrain_mask_names[rap_idx]
+@show rap_names
+
+filter(r->r.fullname == rap_names[2] &&
+    (r.trial==2) && (r.uri == second_order_uri),
+    df)
+filter(r->(r.region == rap_names[2]) &&
+    (r.trial==2) && (r.uri == "2021-06-02_rsChRmine-h2b6s/fish2/regions_df.arrow"),
+    original_df)
 ##
 df[df.subregion .== "Tectum Stratum Periventriculare",:subregion] .= "Optic Tectum"
 # julia> names(df)
@@ -468,7 +485,7 @@ p2 = Data(pdf) * visual(CrossBar, width=0.5) *
     mapping(:subregion, "Δf/f", "minus_sem", "plus_sem", color="stim target", dodge="stim target")
 grid = aog.draw!(fig[1:3,2:20], p2, axis=(xticklabelrotation = pi / 6,))
 legend!(fig[4,1:20], grid, orientation = :horizontal)
-ylims!(-0.15,2.0)
+ylims!(-0.15,0.65)
 ppath = joinpath(plot_dir,
     "select-region_second_order_region_df_f_$(replace(second_order_uri,"""/"""=>"""_"""))")
 @show ppath*".pdf"
@@ -596,6 +613,7 @@ levels!(pdf.subregion, REGION_LIST)
 # pdf.period .= replace.(Array(pdf.period), "mid" => "7-11")
 # pdf.period .= replace.(Array(pdf.period), "late" => "12-16")
 rename!(pdf, "period" => "# bilateral\ncell stim")
+# period = "# bilateral\ncell stim"
 period = "# bilateral\ncell stim"
 p2 = Data(pdf) * visual(CrossBar, width=0.5) *
     mapping(:subregion, "Δf/f", "minus_sem", "plus_sem", color=period, dodge=period)
@@ -680,7 +698,10 @@ collect(zip(region_names[raphe_idxs], corrected_pvals[raphe_idxs]))
 ## second-order paired Mann–Whitney U test
 ###############################
 second_order_region_names = unique(second_order_plot_df[!,:fullname])
-second_order_pvals = map(second_order_region_names) do region
+second_order_region_names_that_have_pval = String[]
+second_order_pvals = []
+# second_order_pvals = map(second_order_region_names) do region
+for region in second_order_region_names
     groups = [Float64.(filter(r->(string(r["stim target"]) == s) &&
         (r.fullname == region), second_order_plot_df)[:,"Δf/f"])
         for s in levels(second_order_plot_df[!,"stim target"])]
@@ -689,10 +710,16 @@ second_order_pvals = map(second_order_region_names) do region
     end
     # KW = KruskalWallisTest(groups...)
     # pvalue(KW)
-    MWs = [MannWhitneyUTest(groups[s1],groups[s2]) for (s1,s2) in Iterators.product(1:length(groups),1:length(groups))]
-    pvals = map(pvalue, MWs)
+    try
+        MWs = [MannWhitneyUTest(groups[s1],groups[s2]) for (s1,s2) in Iterators.product(1:length(groups),1:length(groups))]
+        push!(second_order_region_names_that_have_pval,region)
+        pvals = map(pvalue, MWs)
+        push!(second_order_pvals, pvals)
+    catch
+        println("Could not calculate p-val for $region")
+    end
 end
-idx = findfirst(second_order_region_names .== "Rhombencephalon - Gad1b Cluster 2")
+idx = findfirst(second_order_region_names_that_have_pval .== "Rhombencephalon - Gad1b Cluster 2")
 correct_mat = second_order_pvals[idx]
 second_order_pvals_reshape = permutedims(cat(second_order_pvals...,dims=3),(3,1,2))
 second_order_pvals_reshape[idx,:,:]
@@ -714,132 +741,24 @@ second_order_significant1 = corrected_second_order_pvals .< 0.01
 
 
 # println("=====Significant at p=0.05: $(sum(second_order_significant5))/$(length(corrected_second_order_pvals))=====")
-# for n in sort(setdiff(second_order_region_names[second_order_significant5], second_order_region_names[second_order_significant1])); println(n); end
+# for n in sort(setdiff(second_order_region_names_that_have_pval[second_order_significant5], second_order_region_names_that_have_pval[second_order_significant1])); println(n); end
 # println("=====Significant at p=0.01: $(sum(second_order_significant1))/$(length(corrected_second_order_pvals))=====")
-# for n in sort(second_order_region_names[second_order_significant1]); println(n); end
+# for n in sort(second_order_region_names_that_have_pval[second_order_significant1]); println(n); end
 
 ##
 
 for region in REGION_LIST
     println("======$region======")
     reg = replace(region, "Hindbrain "=>"")
-    # idx = findfirst(map(r->occursin(reg,r), second_order_region_names))
+    # reg = replace(region, "Hindbrain "=>"Rhombencephalon - ")
+    # idx = findfirst(map(r->occursin(reg,r), second_order_region_names_that_have_pval))
     
     # idx = findfirst(map(r -> isnothing(match(r".* Gad1b Cluster 2$", r)),
-    #     second_order_region_names))
+    #     second_order_region_names_that_have_pval))
     # idx = findfirst(map(r -> ~isnothing(match(".* $(region)" * r"$" , r)),
-    idx = findfirst(map(r -> ~isnothing(match(Regex(".* $(region)\$") , r)),
-        second_order_region_names))
+    idx = findfirst(map(r -> ~isnothing(match(Regex(".* $(reg)\$") , r)),
+        second_order_region_names_that_have_pval))
 
     @show idx
     println(corrected_second_order_pvals[idx,:,:])
 end
-
-## for 2021-06-08 titration fish
-=====Significant at p=0.05: 60/159=====
-Diencephalon -
-Diencephalon - Anterior pretectum cluster of vmat2 Neurons
-Diencephalon - Dorsal Habenula
-Diencephalon - Dorsal Thalamus
-Diencephalon - Habenula
-Diencephalon - Olig2 Band
-Diencephalon - Olig2 Band 2
-Diencephalon - Pineal
-Diencephalon - Pineal Vmat2 cluster 
-Diencephalon - Pretectal Gad1b Cluster
-Diencephalon - Pretectal dopaminergic cluster
-Diencephalon - Pretectum
-Diencephalon - Ventral Habenula
-Diencephalon - Ventral Thalamus
-Ganglia - Eyes
-Ganglia - Lateral Line Neuromast SO3
-Mesencephalon -
-Mesencephalon - Medial Tectal Band
-Mesencephalon - Oculomotor Nucleus nIII
-Mesencephalon - Otpb Cluster
-Mesencephalon - Oxtl Cluster Sparse
-Mesencephalon - Ptf1a Cluster
-Mesencephalon - Retinal Arborization Field 7 (AF7)
-Mesencephalon - Retinal Arborization Field 9 (AF9)
-Mesencephalon - Sparse 6.7FRhcrtR cluster
-Mesencephalon - Tecum Neuropil
-Mesencephalon - Tegmentum
-Mesencephalon - Torus Longitudinalis
-Mesencephalon - Vglut2 cluster 1
-Rhombencephalon - Anterior Cluster of nV Trigeminal Motorneurons
-Rhombencephalon - Caudal Ventral Cluster Labelled by Spinal Backfills
-Rhombencephalon - Cerebellum
-Rhombencephalon - Cerebellum Gad1b Enriched Areas
-Rhombencephalon - Corpus Cerebelli
-Rhombencephalon - Gad1b Cluster 1
-Rhombencephalon - Gad1b Cluster 16
-Rhombencephalon - Gad1b Cluster 17
-Rhombencephalon - Gad1b Cluster 2
-Rhombencephalon - Gad1b Cluster 5
-Rhombencephalon - Glyt2 Cluster 5
-Rhombencephalon - Isl1 Cluster 1
-Rhombencephalon - Isl1 Cluster 2
-Rhombencephalon - Lobus caudalis cerebelli
-Rhombencephalon - Neuropil Region 6
-Rhombencephalon - Olig2 enriched areas in cerebellum
-Rhombencephalon - Otpb Cluster 4
-Rhombencephalon - Raphe - Inferior
-Rhombencephalon - Raphe - Superior
-Rhombencephalon - Rhombomere 1
-Rhombencephalon - VII' Facial Motor and octavolateralis efferent neurons
-Rhombencephalon - Vglut2 cluster 1
-Rhombencephalon - Vglut2 cluster 3
-Rhombencephalon - Vmat2 Cluster 3
-Telencephalon -
-Telencephalon - Pallium
-Telencephalon - Subpallial Gad1b cluster
-Telencephalon - Subpallial dopaminergic cluster
-Telencephalon - Subpallium
-Telencephalon - Vglut2 rind
-Telencephalon - Vmat2 cluster
-=====Significant at p=0.01: 45/159=====
-Diencephalon -
-Diencephalon - Anterior pretectum cluster of vmat2 Neurons
-Diencephalon - Dorsal Habenula
-Diencephalon - Dorsal Thalamus
-Diencephalon - Habenula
-Diencephalon - Olig2 Band
-Diencephalon - Olig2 Band 2
-Diencephalon - Pineal
-Diencephalon - Pineal Vmat2 cluster 
-Diencephalon - Pretectal Gad1b Cluster
-Diencephalon - Pretectal dopaminergic cluster
-Diencephalon - Pretectum
-Diencephalon - Ventral Habenula
-Diencephalon - Ventral Thalamus
-Mesencephalon -
-Mesencephalon - Medial Tectal Band
-Mesencephalon - Oxtl Cluster Sparse
-Mesencephalon - Ptf1a Cluster
-Mesencephalon - Retinal Arborization Field 9 (AF9)
-Mesencephalon - Tecum Neuropil
-Mesencephalon - Tegmentum
-Mesencephalon - Torus Longitudinalis
-Mesencephalon - Vglut2 cluster 1
-Rhombencephalon - Anterior Cluster of nV Trigeminal Motorneurons
-Rhombencephalon - Caudal Ventral Cluster Labelled by Spinal Backfills
-Rhombencephalon - Cerebellum Gad1b Enriched Areas
-Rhombencephalon - Gad1b Cluster 1
-Rhombencephalon - Gad1b Cluster 17
-Rhombencephalon - Gad1b Cluster 5
-Rhombencephalon - Isl1 Cluster 1
-Rhombencephalon - Isl1 Cluster 2
-Rhombencephalon - Lobus caudalis cerebelli
-Rhombencephalon - Neuropil Region 6
-Rhombencephalon - Olig2 enriched areas in cerebellum
-Rhombencephalon - Otpb Cluster 4
-Rhombencephalon - Raphe - Superior
-Rhombencephalon - VII' Facial Motor and octavolateralis efferent neurons
-Rhombencephalon - Vglut2 cluster 1
-Rhombencephalon - Vglut2 cluster 3
-Telencephalon -
-Telencephalon - Pallium
-Telencephalon - Subpallial Gad1b cluster
-Telencephalon - Subpallium
-Telencephalon - Vglut2 rind
-Telencephalon - Vmat2 cluster

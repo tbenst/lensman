@@ -13,10 +13,13 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     :tseries_root_dirs => [
         "/oak/stanford/groups/deissero/users/tyler/b115",
         "/scratch/b115",
+        "/scratch/b118",
         "/scratch2",
         "/data/dlab/b115",
+        "/data/dlab/b118",
         "/data/b115",
-        "/mnt/deissero/users/tyler/b115"
+        "/mnt/deissero/users/tyler/b115",
+        "/mnt/deissero/users/tyler/b118"
     ],
     :slm_root_dirs => [
         "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
@@ -24,7 +27,8 @@ DEFAULT_RECORDING_SETTINGS = Dict(
         "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/",
         "/mnt/deissero/users/tyler/b115/SLM_files/",
         "/mnt/b115_mSLM/mSLM_B115/SetupFiles/Experiment/",
-        "/data/b115/SLM_files"
+        "/data/b115/SLM_files",
+        "/data/dlab/b118/SLM_files"
     ],
     :rel_analysis_dir => "raw",
     :tseries_dset => nothing, # if nothing, use raw tiffs
@@ -176,4 +180,13 @@ Recordings = RecordingsWrapper(
         zseries_name="ZSeries-structural-056",
         notes="copied from 2021-06-01/fish3, where we accidentally saved."
     ),
+    modifiable_recording(
+        "2022-03-11_rschrmine_h2b6s_9dpf/fish1/TSeries-raphe-thalamus-118trial-002";
+        zseries_name="ZSeries-structural-056"
+    ),
+    modifiable_recording(
+        "2022-03-31_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial_no-autocorrect-350p-005";
+        zseries_name="ZSeries-860nm_galvo-012"
+    ),
+
 )

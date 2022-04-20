@@ -347,7 +347,8 @@ imshow(im[:,:,implanes])
 # 62: 122
 # 78: 154
 ##
-magicX, magicY = markpoints_magic_numbers("B115")
+# updated 2022-02-02 for new function call; not tested
+(magicX, _), (magicY, _) = markpoints_magic_numbers("B115")
 write_markpoints(left_hab_neuron_locs, "$(outname)_left_hab.gpl",
     W=W, magicX=magicX, magicY=magicY, spiral_size=0.09)
 write_markpoints(right_hab_neuron_locs, "$(outname)_right_hab.gpl",

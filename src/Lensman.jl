@@ -7,7 +7,7 @@ using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     LinearAlgebra, LibExpat, LightXML, RollingFunctions, HypothesisTests,
     EllipsisNotation, HDF5, Distributed, Thunks, NPZ, SparseArrays,
     H5Sparse, Folds, Arrow, ProgressMeter, JuMP, ReusePatterns, StatsBase,
-    CategoricalArrays, ImageSegmentation
+    CategoricalArrays, ImageSegmentation, OrderedCollections
 import Base.Threads: @threads, @spawn, @sync
 using Distributed
 import Unitful: μm, ms
@@ -155,6 +155,6 @@ export read_microns_per_pixel,
     read_registered_mask,
     influence_map,
     LazyTy5,
-    noop, LazyTiff,
+    noop, LazyTiff, calc_imaging_roi, getImagingROI,
     opening_median, opening_nonbool, rgb2tuple
 end

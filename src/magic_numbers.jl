@@ -2,15 +2,15 @@ using Dates
 using Unitful: μm, m, s, mW
 
 function getzoffset(exp_date, slmNum)
-    if slmNum==1
-        if exp_date < Date(2021,1,11)
+    if slmNum == 1
+        if exp_date < Date(2021, 1, 11)
             offset = float(uconvert(m, 45μm)) / m # prior to 2021 / starting on ...12/15...? should check...
-        elseif exp_date < Date(2021,2,2)
+        elseif exp_date < Date(2021, 2, 2)
             offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
-        else 
+        else
             offset = float(uconvert(m, 45μm)) / m
         end
-    elseif slmNum==2
+    elseif slmNum == 2
         offset = float(uconvert(m, 0μm)) / m
     end
     zOffset = offset * 1e6
@@ -19,11 +19,11 @@ end
 
 "TODO: could potentially read this from sean's files...?"
 function spiral_size(exp_date, microscope_lateral_unit)
-    if exp_date < Date(2020,12,4)
+    if exp_date < Date(2020, 12, 4)
         @warn "Need to double check spiral size for old experiments"
-        15μm * (14.4/25) / microscope_lateral_unit
-    elseif exp_date < Date(2021,3,9)
-        7μm * (14.4/25) / microscope_lateral_unit
+        15μm * (14.4 / 25) / microscope_lateral_unit
+    elseif exp_date < Date(2021, 3, 9)
+        7μm * (14.4 / 25) / microscope_lateral_unit
     else
         7μm / microscope_lateral_unit
     end
@@ -59,18 +59,37 @@ function slmpower(exp_date)
     slm1Power, slm2Power
 end
 
+"""Return min and max voltage for X, Y galvos.
+
+These numbers are used in markpoints xml files. Can identify by taking a
+max resolution image, e.g. 1024x1024, and looking at i.e.
+
+```
+    <PVStateValue key="maxVoltage">
+      <IndexedValue index="XAxis" value="4.33123017" />
+      <IndexedValue index="YAxis" value="4.554884304" />
+    </PVStateValue>
+```
+"""
 function markpoints_magic_numbers(room::String)
-    @assert in(room, ["B113", "B115"])
-    if room=="B115"
-        x = -4.17
-        y = -4.62
-        x = 4.17
-        y = 4.62
-    elseif room=="B113"
-        x = 7.6
-        y = 8.3
+    @assert in(room, ["B113", "B115", "B118"])
+    if room == "B115"
+        minX = -4.17
+        minY = -4.62
+        maxX = 4.17
+        maxY = 4.62
+    elseif room == "B118"
+        minX = -4.01217945
+        minY = -4.720407024
+        maxX = 4.33123017
+        maxY = 4.554884304
+    elseif room == "B113"
+        minX = -7.6
+        maxX = 7.6
+        minY = -8.3
+        maxY = 8.3
     else
         error("bad room string")
     end
-    x,y
+    (minX, maxX), (minY, maxY)
 end

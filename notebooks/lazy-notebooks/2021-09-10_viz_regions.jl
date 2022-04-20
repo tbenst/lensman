@@ -41,7 +41,8 @@ resources = Resources();
 ##
 # first fish used in initial submission
 # recording_name = "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
-recording_name = "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+# recording_name = "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+recording_name = "2022-03-11_rschrmine_h2b6s_9dpf/fish1/TSeries-raphe-thalamus-118trial-002"
 tyh5_path = joinpath("/data/dlab/b115", recording_name * "_kalman.h5")
 options = Dict(
 )

@@ -1,6 +1,6 @@
 # copied / adopted from 2021-08-15_why-rs-better-allan.jl on Osprey
 # we do manual alignment for 2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072
-ENV["DISPLAY"] = "localhost:12.0"
+ENV["DISPLAY"] = "localhost:11.0"
 ##
 using AlgebraOfGraphics, CairoMakie
 using Lensman, Images, Glob, NPZ, DataFrames, ImageSegmentation, 
@@ -15,7 +15,8 @@ L = Lensman
 aog = AlgebraOfGraphics
 Data = aog.data
 set_aog_theme!() # src
-init_workers(36)
+# memory usage is too high for 2021-06-08, lessen to 18..?
+init_workers(18)
 ##
 resources = Resources();
 @pun (zbrain_dir, zbrain_masks) = resources;
@@ -23,8 +24,8 @@ resources = Resources();
 ##
 # DONE
 # recording_name = "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072" # wrong date / name, oops
-recording_name = "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
-# recording_name = "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+# recording_name = "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+recording_name = "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
 # recording_name = "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-118trial-122"
 # recording_name = "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
 # recording_name = "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062"
@@ -54,6 +55,8 @@ mean_tseries = mean(tseries[:,:,:,1:10:1000], dims=4)[:,:,:,1];
 Gray.(imadjustintensity(mean_tseries[:,:,10]))
 ## assess drift
 zplane_offset = Dict{Int,NamedTuple}()
+# use these for "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072"
+# also applies for "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123" !?!
 zplane_offset[1] = (y_offset=-15,x_offset=0,z_offset=0)
 zplane_offset[2] = (y_offset=-12,x_offset=0,z_offset=0)
 zplane_offset[3] = (y_offset=-9,x_offset=0,z_offset=0)
@@ -64,8 +67,13 @@ zplane_offset[7] = (y_offset=15,x_offset=4,z_offset=1)
 zplane_offset[8] = (y_offset=20,x_offset=8,z_offset=1)
 zplane_offset[9] = (y_offset=26,x_offset=8,z_offset=1)
 zplane_offset[10] = (y_offset=30,x_offset=8,z_offset=1)
+
+# for z in 1:10
+#     zplane_offset[z] = (y_offset=0,x_offset=0,z_offset=0)
+# end
+
 # cycle through all 10 planes..
-z = 10 
+z = 10
 
 shifted_zseries = circshift(zseries, zplane_offset[z])
 img = RGB.(adjust_histogram(
@@ -193,6 +201,7 @@ hab_names = region_names[hab_idx]
 @assert length(hab_idx) == 10
 Gray.((reduce((a,b)->a .| b, per_stim_region_masks[:,1])))[:,:,1]
 og_raphe = aligned_masks[rap_idx[3]] .| aligned_masks[rap_idx[4]];
+og_hab = aligned_masks[hab_idx[end-3]] .| aligned_masks[hab_idx[end-2]];
 og_gad = aligned_masks[gad_idx[1]] .| aligned_masks[gad_idx[2]];
 ##
 raphe_stim_exclude = L.exclude_from_masks([og_raphe], stim_exclude_masks[:,:,:,2])[1];
@@ -200,8 +209,16 @@ Gray.(stim_exclude_masks[:,:,10,2])
 
 Gray.(og_raphe[:,:,10])
 Gray.(raphe_stim_exclude[:,:,10])
+## 
+# TODO: for "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+# hab alignment may be somewhat bad....? too far rostral?
+hab_stim_exclude = L.exclude_from_masks([og_hab], stim_exclude_masks[:,:,:,8])[1];
+Gray.(stim_exclude_masks[:,:,10,8])
 
-## raphe atlas alignment looks suspicious...
+Gray.(og_hab[:,:,3])
+Gray.(hab_stim_exclude[:,:,3])
+
+## raphe atlas alignment looks suspicious... => not after manual correction
 img = RGB.(zeros(UInt8,size(og_raphe[:,:,10])...));
 channelview(img)[[1],:,:] .= reshape(og_raphe[:,:,10],1,512,512)
 # channelview(img)[[2,3],:,:] .= reshape(raphe_stim_exclude[:,:,10],1,512,512)
@@ -248,7 +265,7 @@ regions_df = L.per_trial_regions_df_exclude_targets(
     stim_start_idx, stim_end_idx,
     # ss, se,
     trial_order, per_stim_region_masks, region_names)  # , stim_names=nothing)
-##
+
 # Path to write out to (in the case that tyh5_path is defined, otherwise reading from tiff's)
 out_dir = joinpath(fish_dir, basename(recording[:tyh5_path]))
 out_dir = replace(out_dir, ".h5" => "")
