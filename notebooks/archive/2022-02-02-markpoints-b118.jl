@@ -15,7 +15,9 @@ tseriesroot = "/mnt/b118_data/tyler"
 # fishDir = "$tseriesroot/2022-03-11_rschrmine_h2b6s_9dpf/fish1"
 # fishDir = "$tseriesroot/2022-03-11_rschrmine_h2b6s_9dpf/fish2"
 # fishDir = "$tseriesroot/2022-03-31_rschrmine_h2b6s_6dpf/fish1"
-fishDir = "$tseriesroot/2022-03-31_rschrmine_h2b6s_6dpf/fish2"
+# fishDir = "$tseriesroot/2022-03-31_rschrmine_h2b6s_6dpf/fish2"
+fishDir = "$tseriesroot/2022-05-04_rschrmine_h2b6s_6dpf/fish1"
+fishDir = "$tseriesroot/2022-05-04_rschrmine_h2b6s_6dpf/fish2"
 
 useRed = false
 
@@ -42,7 +44,8 @@ if useRed
 end
 
 # offset = float(uconvert(m, -30μm)) / m
-offset = float(uconvert(m, 0μm)) / m
+offset = float(uconvert(m, 20μm)) / m
+# offset = float(uconvert(m, 0μm)) / m
 # offset = float(uconvert(m, 27μm)) / m
 @warn "using offset of $offset"
 slmNum = 1
@@ -69,7 +72,7 @@ gpl_path = glob("*.gpl", fishDir)[1]
 # gpl_path = glob("*.gpl", fishDir)[3]
 @show gpl_path
 
-group_locs = read_markpoint_groups(gpl_path, width = W, height = H, zoom = 1)
+group_locs = read_markpoint_groups(gpl_path, width=W, height=H, zoom=1)
 # neuron_locs = read_gpl(gpl_path, width=W, height=H, zoom=1)
 
 ##
@@ -103,7 +106,7 @@ adj_locs[:, 2] .-= Int(round(xoffset))
 # TODO: visualization does not work for ROI imaging?? points at wrong
 imshow(addTargetsToImage(copy(rgb840),
     adj_locs,
-    targetSize = targetSizePx))
+    targetSize=targetSizePx))
 ##
 
 target_groups = [vcat(cartIdxFunc.(locs, fill(offset, length(locs)))...)
@@ -135,8 +138,8 @@ end
 create_slm_stim(target_groups, outname,
     # 9 is path "/scratch/" includes trailing
     # localToRemote = matpath -> "T:" * replace(matpath[9:end], "/" => "\\"),
-    localToRemote = matpath -> "M:" * replace(matpath[15:end], "/" => "\\"),
-    powers = powers, frequencies = frequencies, slmNum = slmNum)
+    localToRemote=matpath -> "M:" * replace(matpath[15:end], "/" => "\\"),
+    powers=powers, frequencies=frequencies, slmNum=slmNum)
 
 powerPerCell = 32
 println("Powers for power per cell of $powerPerCell: $(powerPerCell ./ 1000 .* 280mW)")

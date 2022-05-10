@@ -73,23 +73,28 @@ max resolution image, e.g. 1024x1024, and looking at i.e.
 """
 function markpoints_magic_numbers(room::String)
     @assert in(room, ["B113", "B115", "B118"])
-    if room == "B115"
-        minX = -4.17
-        minY = -4.62
-        maxX = 4.17
-        maxY = 4.62
-    elseif room == "B118"
-        minX = -4.01217945
-        minY = -4.720407024
-        maxX = 4.33123017
-        maxY = 4.554884304
-    elseif room == "B113"
-        minX = -7.6
-        maxX = 7.6
-        minY = -8.3
-        maxY = 8.3
-    else
-        error("bad room string")
-    end
+if room == "B115"
+    minX = -4.17
+    minY = -4.62
+    maxX = 4.17
+    maxY = 4.62
+elseif room == "B118"
+    # minX = -4.01217945
+    # minY = -4.720407024
+    # maxX = 4.33123017
+    # maxY = 4.554884304
+    # post 2022-05-04
+    minX = -4.17170481
+    minY = -4.17170481
+    maxX = 4.17170481
+    maxY = 4.17170481
+elseif room == "B113"
+    minX = -7.6
+    maxX = 7.6
+    minY = -8.3
+    maxY = 8.3
+else
+    error("bad room string")
+end
     (minX, maxX), (minY, maxY)
 end
