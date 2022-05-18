@@ -9,7 +9,7 @@ using AxisArrays, ANTsRegistration, NIfTI, ImageMagick, Images,
     H5Sparse, Folds, Arrow, ProgressMeter, JuMP, ReusePatterns, StatsBase
 import Base.Threads: @threads, @spawn, @sync
 using Distributed
-import Unitful: μm
+import Unitful:μm
 import Base.Threads.@threads
 sio = pyimport("scipy.io")
 # using Dagger
@@ -39,6 +39,8 @@ export read_microns_per_pixel,
     read_mask,
     zbrain_units,
     antsApplyTransforms,
+    apply_cmtk_transform,
+    save_region_masks_cmtk,
     getMaskNameIncludes,
     read_zseries,
     create_nuclei_mask,

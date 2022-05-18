@@ -7,8 +7,8 @@ for Y shared: localToRemote = matpath -> "Y:\\" * replace(matpath[14:end], "/" =
 """
 # ::Array{Float64,2}
 function create_targets_mat(targets, outname::String; slmNum=1, frequency=5,
-        localToRemote = matpath -> "O:\\" * replace(matpath[14:end], "/" => "\\"),
-        targets_center = nothing)
+        localToRemote=matpath -> "O:\\" * replace(matpath[14:end], "/" => "\\"),
+        targets_center=nothing)
 
     @assert frequency % 5 == 0 # sean SLM operates on 200ms clock
     @assert frequency <= 250 # max new stim every 4ms (on one SLM)
@@ -54,7 +54,7 @@ function create_targets_mat(targets, outname::String; slmNum=1, frequency=5,
         numGroups = 98 # maximum for Sean's code
     end
 
-    out_mat["targetsGroup"] = Array{Any}(nothing,1,numGroups)
+    out_mat["targetsGroup"] = Array{Any}(nothing, 1, numGroups)
     
     for i in 2:2:numGroups
         # SLM2
@@ -66,16 +66,16 @@ function create_targets_mat(targets, outname::String; slmNum=1, frequency=5,
     end
     
 
-    numStims = Integer(frequency/5)
+    numStims = Integer(frequency / 5)
     isi = 49 / numStims # max of 99; we ignore slot 99...
-    stimIndices = Integer.(2 .* floor.(collect(0:numStims-1) * isi)) .+ slmNum
+    stimIndices = Integer.(2 .* floor.(collect(0:numStims - 1) * isi)) .+ slmNum
 
     for i in stimIndices
         out_mat["targetsGroup"][i] = copy(targets)
     end
 
     if ~isnothing(targets_center)
-        out_mat["targetsCenter"] = Array{Any}(nothing,1,numGroups)
+        out_mat["targetsCenter"] = Array{Any}(nothing, 1, numGroups)
         for i in 1:numGroups
             out_mat["targetsCenter"][i] = targets_center
         end
@@ -141,7 +141,7 @@ Perform cartesian product of powers and frequencies.
 TODO: this assumes a 5Hz clock for sean's code...but sometimes this is set
 to eg 10Hz instead..."""
 function create_slm_stim(target_groups, outname::String; slmNum=1,
-        localToRemote = matpath -> "O:\\" * replace(matpath[14:end], "/" => "\\"),
+        localToRemote=matpath -> "O:\\" * replace(matpath[14:end], "/" => "\\"),
         powers=[1], frequencies=[5], targets_center_list=nothing)
     @assert length(powers) == length(frequencies)
     if isnothing(targets_center_list)
@@ -151,14 +151,14 @@ function create_slm_stim(target_groups, outname::String; slmNum=1,
     # create mat files; save windows path
     groupPowers = []
     targetsMats = []
-    for (freq,power) in zip(frequencies, powers)
+    for (freq, power) in zip(frequencies, powers)
         @showprogress for (i, (targets, tc)) in enumerate(zip(target_groups, targets_center_list))
             name = "$(outname)_group_$(i)_freq_$(freq)"
             targetsMatPath = create_targets_mat(targets, name,
                 slmNum=slmNum, localToRemote=localToRemote,
                 frequency=freq, targets_center=tc)
             push!(targetsMats, targetsMatPath)
-            push!(groupPowers,power)
+            push!(groupPowers, power)
         end
     end
     trials_txt = create_trials_txt(targetsMats, groupPowers, outname)
@@ -273,7 +273,7 @@ function getTimeFromFilename(fn)
     dt = parse.(Int, (gs["year"], gs["month"], gs["day"],
                      gs["hour"], gs["min"], gs["sec"]))
     DateTime(dt...)
-end
+    end
 
 "Recursively print keys."
 function printMatKeys(mat; level=0, max_level=10)
@@ -283,7 +283,7 @@ function printMatKeys(mat; level=0, max_level=10)
     for key in keys(mat)
         if typeof(key) == String
             println("  "^level * "$key")
-            printMatKeys(mat[key], level=level+1, max_level=max_level)
+            printMatKeys(mat[key], level=level + 1, max_level=max_level)
         end
     end
 end
@@ -326,7 +326,7 @@ function createMarkPointElement(xSeriesRoot, point::Int; numSpirals=10,
     set_attribute(gpe, "SpiralRevolutions", "$numSpirals")
     set_attribute(gpe, "AllPointsAtOnce", "False")
     set_attribute(gpe, "Points", "Point $point")
-    set_attribute(gpe, "Indices", "$point" )
+    set_attribute(gpe, "Indices", "$point")
 end
 
 function regex_glob(pattern, directory)
@@ -351,33 +351,33 @@ function read_gpl(gpl_path::String; args...)
         xp_parse(gpl_xml)
     end
     read_gpl(gpl_xml; args...)
-end
+    end
 
 function read_gpl(gpl_xml::ETree; zoom=1., width=1024, height=1024,
                   maxX=4.17170481, maxY=4.636140912,room="B115")
     pvgp = gpl_xml[xpath"/PVGalvoPointList/PVGalvoPoint"]
-    x = parse.(Float64, map(x->x.attr["X"], pvgp))
-    y = parse.(Float64, map(x->x.attr["Y"], pvgp))
-    idxs = parse.(Float64, map(x->x.attr["Index"], pvgp))
+    x = parse.(Float64, map(x -> x.attr["X"], pvgp))
+    y = parse.(Float64, map(x -> x.attr["Y"], pvgp))
+    idxs = parse.(Float64, map(x -> x.attr["Index"], pvgp))
     maxX /= zoom
     maxY /= zoom
     x .+= maxX
-    x ./= 2*maxX
+    x ./= 2 * maxX
     x .*= width
     y .+= maxY
-    y ./= 2*maxY
+    y ./= 2 * maxY
     y .*= height
     x = Int.(round.(x, digits=0))
     y = Int.(round.(y, digits=0))
-    if room=="B115"
+    if room == "B115"
         # need to reverse for B115...
         x .= width .- x
         y .= height .- y # for b115 only...?
     end
-    cartIdxs = map(CartesianIndex ∘ Tuple, zip(y,x))
+    cartIdxs = map(CartesianIndex ∘ Tuple, zip(y, x))
     # updated 2021-06-16 to return dict instead of array
     # no longer assumes a particular ordering of points
-    Dict(Int(idx) => cartIdx for (idx,cartIdx) in zip(idxs, cartIdxs))
+    Dict(Int(idx) => cartIdx for (idx, cartIdx) in zip(idxs, cartIdxs))
 end
 
 function read_markpoint_groups(gpl_path::String; args...)
@@ -391,12 +391,12 @@ end
 function read_markpoint_groups(gpl_xml::ETree; args...)
     points = read_gpl(gpl_xml; args...)
     groups = gpl_xml[xpath"/PVGalvoPointList/PVGalvoPointGroup"]
-    aa_of_string = split.(map(x->x.attr["Indices"], groups), ",")
-    names = map(x->x.attr["Name"], groups)
-    idxs = map(y->parse.(Float64, y), aa_of_string)
+    aa_of_string = split.(map(x -> x.attr["Indices"], groups), ",")
+    names = map(x -> x.attr["Name"], groups)
+    idxs = map(y -> parse.(Float64, y), aa_of_string)
     @show names, idxs
-    idxs_per_group = Dict(name => Int.(is) for (name,is) in zip(names,idxs))
-    Dict(name => map(i->points[i],gi) for (name,gi) in idxs_per_group)
+    idxs_per_group = Dict(name => Int.(is) for (name, is) in zip(names, idxs))
+    Dict(name => map(i -> points[i], gi) for (name, gi) in idxs_per_group)
 end
 
 """"Read Prairie View markpoints xml Series.
@@ -407,15 +407,15 @@ function read_markpoints_series(xml_path; width=1024, height=1024)
         xp_parse(xml_file)
     end
     pvgp = xml_file[xpath"/PVMarkPointSeriesElements/PVMarkPointElement/PVGalvoPointElement/Point"]
-    x = parse.(Float64, map(x->x.attr["X"], pvgp))
-    y = parse.(Float64, map(x->x.attr["Y"], pvgp))
-    x = Int.(round.(x*width, digits=0))
-    y = Int.(round.(y*height, digits=0))
-    map(CartesianIndex ∘ Tuple, zip(y,x))
+    x = parse.(Float64, map(x -> x.attr["X"], pvgp))
+    y = parse.(Float64, map(x -> x.attr["Y"], pvgp))
+    x = Int.(round.(x * width, digits=0))
+    y = Int.(round.(y * height, digits=0))
+    map(CartesianIndex ∘ Tuple, zip(y, x))
 end
 
-getMatStimFreq(mat) = sum((~).(sum.(mat["cfg"]["exp"]["targets"]) .≈ 0.0))*5
-getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0,0) ? 2 : 1
+getMatStimFreq(mat) = sum((~).(sum.(mat["cfg"]["exp"]["targets"]) .≈ 0.0)) * 5
+getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0, 0) ? 2 : 1
 
 
 
@@ -430,18 +430,18 @@ function write_markpoints(neuron_locs::Vector{CartesianIndex{2}}, filepath;
     xmlGpl = XMLDocument()
     # create & attach a root node
     xGplRoot = create_root(xmlGpl, "PVGalvoPointList")
-    for (i,ci) in enumerate(neuron_locs)
+    for (i, ci) in enumerate(neuron_locs)
         # x,y = Tuple(ci)
-        y,x = Tuple(ci)
+        y, x = Tuple(ci)
         # empirically, X ∈ [-7.6, 7.6], Y ∈ [8.3, -8.3]
         # where "(1,1)" is (-7.6,8.3)
         # and "(512,512)" is (7.6,-8.3)
         # and "(1,74)" meaning row 1 col 74 is (-5.37,8.3) 
         # and "(256,256)" is (0,0)
         # these magic numbers may differ by Bruker scope
-        x = (x-W/2)/(W/2) # map to (-1,1)
+        x = (x - W / 2) / (W / 2) # map to (-1,1)
         x *= magicX
-        y = (y-W/2)/(W/2)
+        y = (y - W / 2) / (W / 2)
         y *= magicY
         
         gplList = new_child(xGplRoot, "PVGalvoPoint")
@@ -449,7 +449,7 @@ function write_markpoints(neuron_locs::Vector{CartesianIndex{2}}, filepath;
         set_attribute(gplList, "X", "$x")
         set_attribute(gplList, "Y", "$y")
         set_attribute(gplList, "Name", "Point $i")
-        set_attribute(gplList, "Index", "$(i-1)")
+        set_attribute(gplList, "Index", "$(i - 1)")
         set_attribute(gplList, "ActivityType", "MarkPoints")
         set_attribute(gplList, "UncagingLaser", "Uncaging")
         set_attribute(gplList, "UncagingLaserPower", "0.76")
@@ -465,8 +465,8 @@ end
 
 function write_trial_order(trial_order, outname)
     trialOrderDF = DataFrame(copy(hcat(collect(1:length(trial_order)), trial_order)'))
-    CSV.write(outname*"_trialOrder.txt", trialOrderDF, header=false, delim="\t")
-    println("wrote $(outname*"_trialOrder.txt")")
+    CSV.write(outname * "_trialOrder.txt", trialOrderDF, header=false, delim="\t")
+    println("wrote $(outname * "_trialOrder.txt")")
     println("be sure to modify mSLM/SetupFiles/Experiments/<TODAY>/trialOrder.txt")
 end
 
@@ -483,14 +483,14 @@ end
 function read_tyh5(tyh5_path,
         dset="/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm")
     @info "assume WHZCT, convert to HWZT"
-    h5 = h5open(tyh5_path,"r")
+    h5 = h5open(tyh5_path, "r")
     # dset = h5["/imaging/per_pixel_lstm_denoised"]
     # dset = h5["/imaging/per_pixel_lstm_denoised_maybe_longer_time"]
     dset = h5[dset]
     println(ndims(dset))
     if ndims(dset) == 5
-        @assert size(dset)[4]==1
-        W,H,Z,C,T = size(dset)
+        @assert size(dset)[4] == 1
+        W, H, Z, C, T = size(dset)
         dtype = eltype(dset)
         # if dtype == Float32
         #     # convert to UInt16, asume max value of 1...
@@ -501,10 +501,10 @@ function read_tyh5(tyh5_path,
         f_convert = x -> x
         tseries = zeros(UInt16, H, W, Z, T)
         # chunk by z for memory efficiency..
-        @showprogress for z=1:Z
+        @showprogress for z = 1:Z
             # drop singleton channel
             dat = f_convert(dset[:,:,z,1,:])
-            dat = permutedims(dat, (2,1,3))
+            dat = permutedims(dat, (2, 1, 3))
             tseries[:,:,z,:] = dat
         end
     else
@@ -514,7 +514,7 @@ function read_tyh5(tyh5_path,
         # @show size(tseries)
         # @assert size(tseries,2)==1
         # tseries = tseries[:,1,:,:,:]
-        tseries = permutedims(tseries, (2,1,3,4))
+        tseries = permutedims(tseries, (2, 1, 3, 4))
         tseriesDir = joinpath(fishDir, expName)
 
         # tseries = h5read(tyh5Path, "/imaging/raw")
@@ -553,7 +553,7 @@ function read_oir_units(oir_file)
     (x_um, y_um, z_um)
 end
 
-"Glob one and only one file."
+    "Glob one and only one file."
 function glob_one_file(pattern, dir; nofail=false)
     files = glob(pattern, dir)
     if nofail
@@ -563,12 +563,12 @@ function glob_one_file(pattern, dir; nofail=false)
             return nothing
         end
     else
-        @assert length(files)==1 "Expecting exactly one file for $dir/$pattern: $files"
+        @assert length(files) == 1 "Expecting exactly one file for $dir/$pattern: $files"
         return files[1]
     end
 
 end
-
+        
 function read_xml(xml_file)
     open(xml_file, "r") do io
         xml = read(io, String)
@@ -576,9 +576,9 @@ function read_xml(xml_file)
     end
 end
 
-function load_zseries(zseries_dir; ch_str = "Ch3")
+function load_zseries(zseries_dir; ch_str="Ch3")
     tiff_files = joinpath.(zseries_dir,
-        filter(x->(x[end-6:end]=="ome.tif") & occursin(ch_str, x),
+        filter(x -> (x[end - 6:end] == "ome.tif") & occursin(ch_str, x),
         readdir(zseries_dir)))
     tif0 = ImageMagick.load(tiff_files[1])
     zseriesH, zseriesW = size(tif0)
@@ -588,19 +588,19 @@ function load_zseries(zseries_dir; ch_str = "Ch3")
 
 
     zseries = zeros(Normed{UInt16,16}, zseriesH, zseriesW, size(tiff_files, 1))
-    @threads for z in 1:size(tiff_files,1)
+    @threads for z in 1:size(tiff_files, 1)
         zseries[:,:,z] = ImageMagick.load(tiff_files[z])
     end
     AxisArray(zseries, (:y, :x, :z), zseries_microscope_units)
 end
 
 "Read sean's mat file stim frequency"
-getMatStimFreq(mat) = sum((~).(sum.(mat["cfg"]["exp"]["targets"]) .≈ 0.0))*5
-getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0,0) ? 1 : 2
+getMatStimFreq(mat) = sum((~).(sum.(mat["cfg"]["exp"]["targets"]) .≈ 0.0)) * 5
+getSLMnum(mat) = size(mat["cfg"]["exp"]["targets"][1]) == (0, 0) ? 1 : 2
 
 function read_suite2p(suite2p_dir)
     iscell = npzread(joinpath(suite2p_dir, "combined", "iscell.npy"));
-    nCells = size(iscell,1)
+    nCells = size(iscell, 1)
     cells_mask = DataFrame()
     combined_stat = PyObject[]
     plane_dirs = glob("plane*", suite2p_dir)
@@ -609,7 +609,7 @@ function read_suite2p(suite2p_dir)
     for z in 1:tseriesZ
         # have to process suite2p plane by plane due to
         # https://github.com/MouseLand/suite2p/issues/655
-        stat = np.load(joinpath(suite2p_dir, "plane$(z-1)", "stat.npy"), allow_pickle=true);
+        stat = np.load(joinpath(suite2p_dir, "plane$(z - 1)", "stat.npy"), allow_pickle=true);
         
         # iterate neurons in plane
         cell_idx_offset = length(combined_stat)
@@ -620,13 +620,13 @@ function read_suite2p(suite2p_dir)
             xpix = stat[k].get("xpix")
             npix = length(xpix)
             cells_mask = vcat(cells_mask, DataFrame(xpix=xpix, ypix=stat[k].get("ypix"),
-                              neuron_id=repeat([k+cell_idx_offset], npix)))
+                              neuron_id=repeat([k + cell_idx_offset], npix)))
         end
         
         combined_stat = vcat(combined_stat, stat)
     end
     # nNeurons x 2
-    cell_centers = aa2a(map(x->np.array(get(x,"med")), combined_stat));
+    cell_centers = aa2a(map(x -> np.array(get(x, "med")), combined_stat));
     stat = Dict()
     @assign stat = (nCells, cell_centers, cells_mask, iscell)
     stat
@@ -639,18 +639,18 @@ function read_nwb_rois(nwb_path)
     voxel_mask_index = read(ophys["/processing/ophys/ImageSegmentation/PlaneSegmentation/voxel_mask_index"])
     cell_traces = read(ophys["/processing/ophys/Fluorescence/Fluorescence/data"])
     cell_masks = DataFrame()
-    for (i,e) in enumerate(voxel_mask_index)
+    for (i, e) in enumerate(voxel_mask_index)
         # https://hdmf.readthedocs.io/en/stable/hdmf.common.table.html#hdmf.common.table.VectorData
         if i == 1
             s = 1
         else
-            s = voxel_mask_index[i-1] + 1
+            s = voxel_mask_index[i - 1] + 1
         end
         df = DataFrame(voxel_mask[s:e])
-        df.cell_id = repeat([i], size(df,1))
+        df.cell_id = repeat([i], size(df, 1))
         cell_masks = vcat(cell_masks, df)
     end
-    nCells = size(is_cell,1)
+    nCells = size(is_cell, 1)
     ret = Dict()
     @assign ret = (cell_traces, cell_masks, is_cell, nCells)
     ret
@@ -666,11 +666,11 @@ function get_df_f_per_voxel_per_trial_from_h5(tyh5_path, tseries_dset,
     @sync @distributed for i in 1:nTrials
         proc_tseries = LazyTy5(tyh5_path, tseries_dset)
         s, e = stimStartIdx[i], stimEndIdx[i]
-        f0 = mean(proc_tseries[:,:,:,s-window_len:s-1],dims=4)
-        f = mean(proc_tseries[:,:,:,e+1:e+window_len],dims=4)
+        f0 = mean(proc_tseries[:,:,:,s - window_len:s - 1], dims=4)
+        f = mean(proc_tseries[:,:,:,e + 1:e + window_len], dims=4)
         df_f_per_voxel_per_trial[i,:,:,:] = @. (f - f0) / (f0 + 5)
     end
-    convert(Array,df_f_per_voxel_per_trial)
+    convert(Array, df_f_per_voxel_per_trial)
 end
 
 "Calculate average response for each unique stimuli"
@@ -752,12 +752,12 @@ function read_zbrain_line(anatomy_label_h5_path, fishline, zbrain_units=zbrain_u
     volume = AxisArray(permutedims(
     h5read(anatomy_label_h5_path,
         fishline),
-        (2,1,3)), (:y, :x, :z), zbrain_units)
+        (2, 1, 3)), (:y, :x, :z), zbrain_units)
     if rostral == :right
-        volume = reverse(volume,dims=2);
+        volume = reverse(volume, dims=2);
     end
     if dorsal == :up
-        volume = reverse(volume,dims=3);
+        volume = reverse(volume, dims=3);
     end
     volume
 end
@@ -803,7 +803,7 @@ Using two channels to sync, write sparse datasets to HDF5.
 
 Needed as HDF5 chokes with multithreading.
 """
-function write_n_sparse_datasets(h5path, n, dset_size, channel,blocker)
+function write_n_sparse_datasets(h5path, n, dset_size, channel, blocker)
     h5 = h5open(h5path, "w")
     h5["size"] = dset_size
     p = Progress(n; desc="Write masks:")
@@ -855,14 +855,14 @@ Approximately, we cap memory usage at nprocs * 1024 * 1024 * 151 * sizeof(Float6
 or say 21GB for 18 processes.
 """
 function save_region_masks(region_mask_path, zseries, zbrain_masks, ants_transforms;
-    nprocs = 10, rostral=:right, dorsal=:up
+    nprocs=10, rostral=:right, dorsal=:up
 )
     H, W, Z = size(zseries)
     mask_names = zbrain_masks["MaskDatabaseNames"]
     # nMasks = 10
     nMasks = length(mask_names)
-    to_write = RemoteChannel(()->Channel(Inf))
-    blocker = RemoteChannel(()->Channel(nprocs))
+    to_write = RemoteChannel(() -> Channel(Inf))
+    blocker = RemoteChannel(() -> Channel(nprocs))
     @distributed for i in 1:nMasks
         @async begin
             put!(blocker, i)
@@ -894,13 +894,66 @@ function _region_mask(i, zseries, zbrain_masks, ants_transforms, rostral, dorsal
         ants_transforms...) .> 0
     # TODO: or we could save as a .mat file for more standard format..?
     # https://github.com/JuliaIO/MAT.jl/blob/3ed629c05f7261e86c0dde0869d265e99a265efb/src/MAT_HDF5.jl
-    mask = sparse(reshape(mask,length(mask),1))
+    mask = sparse(reshape(mask, length(mask), 1))
     name => mask
 end
 
+
+function save_region_masks_cmtk(region_mask_path, zseries_path, zbrain_masks, cmtk_transform_path;
+    nprocs=10, rostral=:right, dorsal=:up
+)
+    zseries = load(zseries_path)
+    H, W, Z = size(zseries)
+    mask_names = zbrain_masks["MaskDatabaseNames"]
+    # nMasks = 2
+    nMasks = length(mask_names)
+
+    h5 = h5open(region_mask_path, "w")
+    h5["size"] = [H, W, Z]
+
+    n = nMasks
+    for i in 1:nMasks
+        name, data = _region_mask_cmtk(i, zseries_path, zbrain_masks, cmtk_transform_path, rostral, dorsal)
+        if length(data.nzval) == 0
+            # all zero
+            h5[name] = 0
+        else
+            H5SparseMatrixCSC(h5, name, data)
+            end
+        
+        println("=========================================================")
+        println("Have written $i masks so far")
+        println("=========================================================")
+
+    end
+
+    return h5
+end
+
+
+function _region_mask_cmtk(i, zseries_path, zbrain_masks, cmtk_transform_path, rostral, dorsal)
+    # get rid of `/` so not interpreted as a h5 path
+    name = replace(zbrain_masks["MaskDatabaseNames"][i], "/" => "_")
+
+    mask = read_mask(zbrain_masks, i; rostral=rostral, dorsal=dorsal)
+    mask = AxisArray(Float32.(mask), AxisArrays.axes(mask))
+
+    # (first writing zseries to nrrd anyways so just pass path in)
+    mask = apply_cmtk_transform(zseries_path, mask, cmtk_transform_path)
+    mask = mask.data .> 0  # This thing visualizes correctly, so should be good
+
+    # TODO: or we could save as a .mat file for more standard format..?
+    # https://github.com/JuliaIO/MAT.jl/blob/3ed629c05f7261e86c0dde0869d265e99a265efb/src/MAT_HDF5.jl
+    mask = sparse(reshape(mask, length(mask), 1))
+    (name, mask)
+end
+
+
 function read_registered_mask(region_masks_h5, name)
     @show name
+    println("NAME: $name")
     shape = region_masks_h5["size"][:]
+    println("SHAPE: $shape")
     reshape(
         Array(sparse(H5SparseMatrixCSC(region_masks_h5, name))),
         # TODO benchmark
