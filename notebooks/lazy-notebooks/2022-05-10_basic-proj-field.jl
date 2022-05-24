@@ -3,8 +3,10 @@
 # ENV["DISPLAY"] = "localhost:12.0"
 # ENV["DISPLAY"] = "/private/tmp/com.apple.launchd.5OQi0gJ6DL/org.xquartz:0"
 ##
+# TODO: fix bad circle location by translating 512x512 sean-space to imaging-space
+# => need 
+##
 # built from 2021-09-15_titration.jl. terrible hack for missing SLM trigger data in B118 prior to April 20, 2022
-# using ImageView
 using Lensman, Images, Glob, NPZ, PyCall, DataFrames, ImageSegmentation,
     Random, Gadfly, Statistics, PyCall, ProgressMeter, HDF5, Distributed,
     Unitful, StatsBase
@@ -41,13 +43,14 @@ init_workers(16) # reduce memory usage
 resources = Resources();
 ##
 r = Recordings[
-    # "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
-    # "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
-    # "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
-    # "2022-03-11_rschrmine_h2b6s_9dpf/fish1/TSeries-raphe-thalamus-118trial-002"
-    # "2022-03-31_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial_no-autocorrect-350p-005"
-    # "2022-03-31_rschrmine_h2b6s_6dpf/fish2/TSeries-raphe-thalamus-118trial-008"
-    "2022-05-04_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial-005"
+# "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
+# "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
+# "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+# "2022-03-11_rschrmine_h2b6s_9dpf/fish1/TSeries-raphe-thalamus-118trial-002"
+# "2022-03-31_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial_no-autocorrect-350p-005"
+# "2022-03-31_rschrmine_h2b6s_6dpf/fish2/TSeries-raphe-thalamus-118trial-008"
+    "2022-05-04_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial-005" # only 3613 frames...??
+    # "2022-05-04_rschrmine_h2b6s_6dpf/fish2/TSeries-raphe-thalamus-118trial-006" # looks good!! 4886 frames
 ](;
     resources...
     # LSTM tyh5 looks best
@@ -59,6 +62,8 @@ r = Recordings[
 ##
 @pun tseries = r;
 ##
+@pun stim_start_idx = r;
+##
 -
 # snippet to recover from missing or bad VoltageRecording
 green_bot = mean(tseries, dims=(1, 2, 3))[1, 1, 1, :];
@@ -66,8 +71,8 @@ green_bot = mean(tseries, dims=(1, 2, 3))[1, 1, 1, :];
 ##
 Plots.plot(green_bot)
 ##
-# thresh = 6 * std(green_bot)
-thresh = 7 * std(green_bot)
+thresh = 6 * std(green_bot)
+# thresh = 7 * std(green_bot)
 putative_stim_starts = findall(green_bot .> thresh)
 # not neighboring frames
 valid_idx = vcat([1], diff(putative_stim_starts) .> 10) .== 1
@@ -123,7 +128,7 @@ if length(trial_order) != length(stim_start_idx)
 end
 stim_start_idx
 
-@assert abs(maximum(diff(stim_start_idx)) - minimum(diff(stim_start_idx))) < 3
+@assert abs(maximum(diff(stim_start_idx)) - minimum(diff(stim_start_idx))) <= 3
 
 # old code, used for "2022-03-31_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial_no-autocorrect-350p-005"
 # if length(stim_start_idx) == 116 && trial_order[1] == 3 && trial_order[end] == 3
@@ -135,40 +140,51 @@ stim_start_idx
 
 ##
 # debug voltage recording
-# @pun (voltageFile, tseriesZ) = r
-# stimStartFrameIdx, stimEndFrameIdx, frameStartIdx, nstim_pulses, ttlStarts =
-#     getStimTimesFromVoltages(voltageFile, tseriesZ;
-#         stim_key="uncagingX") # 
-# # stim_key="ell14_trigger") # 1
-# # stim_key="AO0") # 0
-# # stim_key="opto_gate") # 1
-# # stim_key="OptogeneticPockels") # 78
-# nstim_pulses
+@pun (voltageFile, tseriesZ) = r
+stimStartFrameIdx, stimEndFrameIdx, frameStartIdx, nstim_pulses, ttlStarts =
+    getStimTimesFromVoltages(voltageFile, tseriesZ;
+        stim_key="uncagingX") # 
+# stim_key="ell14_trigger") # 1
+# stim_key="AO0") # 0
+# stim_key="opto_gate") # 1
+# stim_key="OptogeneticPockels") # 78
+nstim_pulses
 # ##
-# import CSV
-# voltages = CSV.File(open(read, voltageFile)) |> DataFrame
-# rename!(voltages, [c => stripLeadingSpace(c) for c in names(voltages)])
+import CSV
+voltages = CSV.File(open(read, voltageFile)) |> DataFrame
+rename!(voltages, [c => stripLeadingSpace(c) for c in names(voltages)])
 # ##
-# Plots.plot(voltages[10000:12000,
-#     # "frame starts"]) # looks good
-#     # "opto_gate"])
-#     # "uncagingX"])
-#     # "uncagingY"])
-#     # "ell14_trigger"])
-#     # "AO0"])
-#     # "OptogeneticPockels"])
-#     "FieldStimulator"])
+Plots.plot(
+    voltages[10000:12000,
+        # voltages[1:100000,
+        # "frame starts"]) # looks good
+        # "opto_gate"])
+        # "uncagingX"])
+        # "uncagingY"])
+        # "ell14_trigger"])
+        # "AO0"])
+        # "OptogeneticPockels"])
+        "FieldStimulator"])
 ##
-@pun (tseriesH, tseriesW, tseriesZ, trial_order, vol_rate) = r
+@pun (tseriesH, tseriesW, tseriesZ, trial_order, vol_rate, nTrials) = r
 ##
-stim_end_idx = stim_start_idx .+ Int(ceil(vol_rate * 1))
+stim_end_idx = stim_start_idx .+ Int(ceil(vol_rate * 1)) .+ 1
 pre = 10
 post = 10
 window_len = 10
-trial_average = L.calc_trial_average(tseries, stim_start_idx,
-    stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
+@warn "hack for bad voltagerecording..."
+third = Int(floor(nTrials / 3))
+# early_trial_average = L.calc_trial_average(tseries, stim_start_idx[1:third] .- 2,
+#     stim_end_idx[1:third], tseriesH, tseriesW, tseriesZ, trial_order[1:third];
+#     pre=pre, post=post);
+late_trial_average = L.calc_trial_average(tseries, stim_start_idx[end-third:end] .- 2,
+    stim_end_idx[end-third:end], tseriesH, tseriesW, tseriesZ, trial_order[end-third:end];
     pre=pre, post=post);
-
+# trial_average = L.calc_trial_average(tseries, stim_start_idx .- 2,
+#     stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
+#     pre=pre, post=post);
+# trial_average = early_trial_average;
+trial_average = late_trial_average;
 ##
 # size(trial_average)
 imshow(trial_average)
@@ -232,13 +248,42 @@ sum(imap, dims=[1, 2, 3])[1, 1, 1, :]
 ##
 # imshow(imap)
 ##
+# map circles for targets...
+((xmin_volt, xmax_volt), (ymin_volt, ymax_volt)) = markpoints_magic_numbers("B118")
 
+##
+# getImagingROI(tseries_xml)
+(xmin_roi_volt, xmax_roi_volt, ymin_roi_volt, ymax_roi_volt) = getGalvoVolts(tseries_xml)
+
+"Take pixel at (x,y) and return approx galvo voltage."
+function px_to_volts(x, y, xmin, xmax, ymin, ymax, H=512, W=512)
+    xrange = xmax - xmin
+    xvolt = (x / W) * xrange + xmin
+    yrange = ymax - ymin
+    yvolt = (y / H) * yrange + ymin
+    xvolt, yvolt
+end
+
+function volts_to_px(x_volts, y_volts,
+    xroi_min, xroi_max, yroi_min, yroi_max, H=1024, W=1024)
+    x = (x_volts - xroi_min) / (xroi_max - xroi_min) * W
+    @show (y_volts - yroi_min), (yroi_max - yroi_min), H
+    y = (y_volts - yroi_min) / (yroi_max - yroi_min) * H
+    @show y
+    x, y
+end
+@warn "why is yroi_min = 4.204 ??? which is larger than magic number for 1024x1024"
+# map px from 1024x1024 space to tseries imaging space
+xvolt, yvolt = px_to_volts(256, 256, xmin_volt, xmax_volt, ymin_volt, ymax_volt)
+volts_to_px(xvolt, yvolt, xmin_roi_volt, xmax_roi_volt, ymin_roi_volt, ymax_roi_volt, tseriesH, tseriesW)
+##
 s = stim_start_idx[1]
 # imshow(shift_every_other_row(tseries[:,:,:,s-10:s+15],-3))
 ##
-@pun (zOffset, target_groups, etl_vals, tseries_xml) = r;
-
-getExpData(tseries_xml)
+@pun (zOffset, target_groups, etl_vals, tseries_xml, group_stim_freq) = r;
+zOffset = 0
+# getExpData(tseries_xml)
+etl_vals = getPlaneETLvals(tseries_xml)
 ##
 tseries_is1024 = (tseriesW == 1024)
 twp1 = mapTargetGroupsToPlane(target_groups, etl_vals,
@@ -247,12 +292,15 @@ targets_with_plane_index = map(x -> Int.(round.(x, digits=0)), twp1)
 # TODO: this is returning an array for stimFreq...
 cells = makeCellsDF(targets_with_plane_index, stim_start_idx, stim_end_idx,
     trial_order, group_stim_freq)
+
 ##
-@pun (exp_date, lateral_unit, nStimuli, etl_vals, recording_folder, fish_name, plot_dir) = r
-@pun cells = r
-etl_vals = collect(-40:10:50)
+@pun (exp_date, lateral_unit, nStimuli, recording_folder, fish_name, plot_dir) = r
+# @pun cells = r
 targetSizePx = spiral_size(exp_date, lateral_unit)
 with_circles = true
+# with_circles = false
+# analysis_name = "early"
+analysis_name = "late"
 # analysis_name = "lstm"
 figB = 1.6
 # 2 for extra stim mask
@@ -264,7 +312,7 @@ window = 6
 # cmax = 5
 # cmin = -0.5
 
-cmax = 1.0
+cmax = 2.0
 cmin = -0.2
 
 ϵ = 0.0
@@ -281,6 +329,7 @@ global fig = plt.figure()
 for stimNum in 1:nStimuli
     # for stimNum in 16:nStimuli
     df_f = imap[:, :, :, stimNum]
+    df_f = L.unsalt_n_pepper(df_f)
     # cmax = percentile(df_f[:],99.9)
     # cmin = percentile(df_f[:],0.1)
     if tseriesZ % 2 == 1
@@ -312,7 +361,10 @@ for stimNum in 1:nStimuli
         if with_circles
             for (x, y, targetZ) in eachrow(unique(cells[cells.stimNum.==stimNum, [:x, :y, :z]]))
                 if z == targetZ
-                    circle = matplotlib.patches.Circle((x, y), targetSizePx, color="k",
+                    # map x,y to proper ROI
+                    xvolt, yvolt = px_to_volts(x, y, xmin_volt, xmax_volt, ymin_volt, ymax_volt)
+                    newx, newy = volts_to_px(xvolt, yvolt, xmin_roi_volt, xmax_roi_volt, ymin_roi_volt, ymax_roi_volt, tseriesH, tseriesW)
+                    circle = matplotlib.patches.Circle((newx, newy), targetSizePx, color="k",
                         fill=false, lw=0.4, alpha=0.3)
                     ax.add_patch(circle)
                 end

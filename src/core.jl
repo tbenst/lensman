@@ -403,7 +403,8 @@ function getExpData(tseries_xml::LibExpat.ETree)
     etlVals = nothing
     try
         etlVals = getPlaneETLvals(tseries_xml)
-    catch
+    catch e
+        @error e
         # TODO: should print exception
         etlVals = nothing
     end
@@ -916,8 +917,14 @@ function findIdxOfClosestElem(elem, array)
     end
 
 function getPlaneETLvals(tseries_xml)
-    etlVals = sort(unique(round.(parse.(Float64,
-        tseries_xml[xpath"//PVStateValue//SubindexedValue[@description='ETL']/@value"]), digits=1)))
+    # b115
+    etlVals = sort(unique(Int.(round.(parse.(Float64,
+        tseries_xml[xpath"//PVStateValue//SubindexedValue[@description='ETL']/@value"]), digits=0))))
+    if length(etlVals) == 0
+        # b118
+        etlVals = sort(unique(Int.(round.(parse.(Float64,
+            tseries_xml[xpath"//PVStateValue//SubindexedValue[@description='Optotune ETL 10-30']/@value"]), digits=0))))
+    end
     if (sum(etlVals .=== 0.0)==1) & (sum(etlVals .=== -0.0)==1)
         return etlVals[(~).(etlVals .=== -0.0)]
     else
@@ -936,8 +943,9 @@ function mapTargetGroupsToPlane(target_groups, etlVals; is1024=true, zOffset=0.)
     # TODO: bizarre bug in Thunks...?
     # totally unknown why this reify call is needed
     # this is a total hack
-    @show typeof(etlVals)
-    z_offset = reify(zOffset)
+    # @show typeof(etlVals)
+    # z_offset = reify(zOffset)
+    z_offset = zOffset
     # maybe deepcopy is breaking...?
     newTargetGroups = deepcopy(target_groups)
     for g in 1:size(target_groups, 1)

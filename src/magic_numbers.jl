@@ -7,8 +7,10 @@ function getzoffset(exp_date, slmNum)
             offset = float(uconvert(m, 45μm)) / m # prior to 2021 / starting on ...12/15...? should check...
         elseif exp_date < Date(2021, 2, 2)
             offset = float(uconvert(m, 48μm)) / m # since 2020-01-11
+        elseif exp_date < Date(2022, 1, 1) # B115
         else
-            offset = float(uconvert(m, 45μm)) / m
+            # B118
+            offset = float(uconvert(m, 0μm)) / m
         end
     elseif slmNum == 2
         offset = float(uconvert(m, 0μm)) / m

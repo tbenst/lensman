@@ -12,6 +12,7 @@ end
 DEFAULT_RECORDING_SETTINGS = Dict(
     :tseries_root_dirs => [
         "/oak/stanford/groups/deissero/users/tyler/b115",
+        "/oak/stanford/projects/babelfish/b118/",
         "/scratch/b115",
         "/scratch/b118",
         "/scratch2",
@@ -23,6 +24,8 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     ],
     :slm_root_dirs => [
         "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
+        "/oak/stanford/groups/deissero/users/tyler/b118/SLM_files",
+        "/oak/stanford/projects/babelfish/b118/SLM_files",
         "/mnt/deissero/users/tyler/b115/SLM_files",
         "/mnt/b115_mSLM/mSLM/SetupFiles/Experiment/",
         "/mnt/deissero/users/tyler/b115/SLM_files/",
@@ -60,7 +63,8 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     :channel_str => "Ch3",
     :tseries_suffix => "raw", # or "lstm" or "kalman"
     :trial_average_path => nothing,
-    :trial_average_dset => nothing
+    :trial_average_dset => nothing,
+    :csv_stim_key  => "respir" # for SLM trigger on VoltageRecording; "respir" for B115. 
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment",
