@@ -331,6 +331,19 @@ function getImagingROI(prairieViewXML, room = "B118")
         room = room)
 end
 
+function getGalvoVolts(prairieViewXML, room = "B118")
+    xmin_volt = parse(Float64,
+        prairieViewXML[xpath"/PVScan/PVStateShard[1]/PVStateValue[@key='minVoltage']/IndexedValue[@index='XAxis']/@value"][1])
+    ymin_volt = parse(Float64,
+        prairieViewXML[xpath"/PVScan/PVStateShard[1]/PVStateValue[@key='minVoltage']/IndexedValue[@index='YAxis']/@value"][1])
+    xmax_volt = parse(Float64,
+        prairieViewXML[xpath"/PVScan/PVStateShard[1]/PVStateValue[@key='maxVoltage']/IndexedValue[@index='XAxis']/@value"][1])
+    ymax_volt = parse(Float64,
+        prairieViewXML[xpath"/PVScan/PVStateShard[1]/PVStateValue[@key='maxVoltage']/IndexedValue[@index='YAxis']/@value"][1])
+    (xmin_volt, xmax_volt, ymin_volt, ymax_volt,
+        room = room)
+end
+
 "Add to xml doc for Bruker sequential stim"
 function createMarkPointElement(xSeriesRoot, point::Int; numSpirals = 10,
     initialDelay = 0.15, interPointDelay = 98)
@@ -721,7 +734,7 @@ function calc_trial_average(tseries::LazyHDF5, stimStartIdx,
     nStimuli = maximum(trialOrder)
     nTrials = size(trialOrder, 1)
     nTrialsPerStimulus = [sum(trialOrder .== i) for i in 1:nStimuli]
-    @assert nTrials == size(stimStartIdx, 1) # check TTL start-times match
+    @assert nTrials == size(stimStartIdx, 1) # check TTL start-times match. can remove trialOrder to match stimStartIdx as needed
 
     ## avg stim effec
     # TODO: should this be maximum instead to reduce chance of stim frame leaking in..?
@@ -757,7 +770,7 @@ function calc_trial_average(tseries::Union{Array{<:Real},LazyTiff}, stimStartIdx
     nStimuli = maximum(trialOrder)
     nTrials = size(trialOrder, 1)
     nTrialsPerStimulus = [sum(trialOrder .== i) for i in 1:nStimuli]
-    @assert nTrials == size(stimStartIdx, 1) # check TTL start-times match
+    @assert nTrials == size(stimStartIdx, 1) # check TTL start-times match. can remove trialOrder to match stimStartIdx as needed
 
     ## avg stim effec
     # TODO: should this be maximum instead to reduce chance of stim frame leaking in..?

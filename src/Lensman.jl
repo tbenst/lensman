@@ -155,6 +155,7 @@ export read_microns_per_pixel,
     read_registered_mask,
     influence_map,
     LazyTy5,
+    getGalvoVolts,
     noop, LazyTiff, calc_imaging_roi, getImagingROI,
-    opening_median, opening_nonbool, rgb2tuple
+    opening_median, opening_nonbool, rgb2tuple, getPlaneETLvals
 end
