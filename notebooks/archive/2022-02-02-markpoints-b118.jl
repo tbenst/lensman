@@ -16,8 +16,8 @@ tseriesroot = "/mnt/b118_data/tyler"
 # fishDir = "$tseriesroot/2022-03-11_rschrmine_h2b6s_9dpf/fish2"
 # fishDir = "$tseriesroot/2022-03-31_rschrmine_h2b6s_6dpf/fish1"
 # fishDir = "$tseriesroot/2022-03-31_rschrmine_h2b6s_6dpf/fish2"
-fishDir = "$tseriesroot/2022-05-04_rschrmine_h2b6s_6dpf/fish1"
-fishDir = "$tseriesroot/2022-05-04_rschrmine_h2b6s_6dpf/fish2"
+# fishDir = "$tseriesroot/2022-05-04_rschrmine_h2b6s_6dpf/fish1"
+fishDir = "$tseriesroot/2022-05-19_rschrmine_h2b6s_6dpf/fish1"
 
 useRed = false
 
@@ -116,9 +116,11 @@ target_groups = [vcat(cartIdxFunc.(locs, fill(offset, length(locs)))...)
 N = sum(length.(values(group_locs)))
 num_groups = length(target_groups)
 ## Save files for SLM stim
-powers = [1]
+# powers = [1]
+powers = [1, 0.8, 0.6, 0.4, 0.2]
 nPowers = length(powers)
 frequencies = repeat([5], nPowers)
+num_conditions = num_groups * nPowers
 name_str = join(keys(group_locs), "_")
 # name = "$(num_groups)groups_$(N)cells_$name_str"
 # name = "round3_$(num_groups)groups_$(N)cells_$(name_str)"
@@ -148,10 +150,11 @@ println("Powers for power per cell of $powerPerCell: $(powerPerCell ./ 1000 .* 2
 ## trialOrder
 # shuffle each block so we never have a stimuli more than once per block
 # trialOrder = vcat([randperm(length(target_groups)) for _ in 1:20]...)
-ntransitions = 13
+# ntransitions = 13 # 118 trial; 3 groups
+ntransitions = 1
 nattempts = 1000
-trialOrder, successful = balanced_transition_order(num_groups, ntransitions, nattempts)
-count_per_group = [sum(trialOrder .== n) for n = 1:num_groups]
+trialOrder, successful = balanced_transition_order(num_conditions, ntransitions, nattempts)
+count_per_group = [sum(trialOrder .== n) for n = 1:num_conditions]
 @assert all(abs.(count_per_group .- mean(count_per_group)) .<= 1)
 if ~isfile(outname * "_trialOrder.txt")
     write_trial_order(trialOrder, outname)

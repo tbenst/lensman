@@ -1,5 +1,5 @@
 ##
-ENV["DISPLAY"] = "localhost:12.0"
+# ENV["DISPLAY"] = "localhost:12.0"
 # ENV["DISPLAY"] = "/private/tmp/com.apple.launchd.5OQi0gJ6DL/org.xquartz:0"
 ##
 # built from 2021-09-15_titration.jl. terrible hack for missing SLM trigger data
@@ -40,11 +40,12 @@ init_workers(8) # reduce memory usage
 resources = Resources();
 ##
 r = Recordings[
-# "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
-# "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
-# "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
-# "2022-03-11_rschrmine_h2b6s_9dpf/fish1/TSeries-raphe-thalamus-118trial-002"
-    "2022-03-31_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial_no-autocorrect-350p-005"
+    # "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
+    # "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
+    # "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+    # "2022-03-11_rschrmine_h2b6s_9dpf/fish1/TSeries-raphe-thalamus-118trial-002"
+    # "2022-03-31_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial_no-autocorrect-350p-005"
+    "2022-05-19_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-5power-226trial-003"
 ](;
     resources...
     # LSTM tyh5 looks best
@@ -55,6 +56,8 @@ r = Recordings[
 
 ##
 @pun tseries = r;
+##
+@pun (stim_start_idx, tseries) = r;
 ##
 
 # snippet to recover from missing or bad VoltageRecording

@@ -188,5 +188,10 @@ Recordings = RecordingsWrapper(
         "2022-03-31_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial_no-autocorrect-350p-005";
         zseries_name="ZSeries-860nm_galvo-012"
     ),
+    modifiable_recording(
+        "2022-05-19_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-5power-226trial-003";
+        tseries_read_strategy=:lazy_tiff,
+        zseries_name="ZSeries-structural-860nm-resonant-009"
+    ),
 
 )
