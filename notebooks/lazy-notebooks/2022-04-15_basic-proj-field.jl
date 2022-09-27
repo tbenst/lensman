@@ -1,8 +1,5 @@
 ##
-<<<<<<< HEAD
-=======
 2
->>>>>>> 4ffa3b6fe8f5a65767f105b15e33b2f170b74535
 # ENV["DISPLAY"] = "localhost:12.0"
 # ENV["DISPLAY"] = "/private/tmp/com.apple.launchd.5OQi0gJ6DL/org.xquartz:0"
 ##
@@ -40,30 +37,30 @@ L = Lensman
 matplotlib.rcParams["font.sans-serif"] = ["Arial", "sans-serif"]
 
 init_workers(16) # reduce memory usage
+# init_workers(36) # reduce memory usage
 # init_workers(8) # reduce memory usage
 resources = Resources();
 ##
 r = Recordings[
-    # "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
-    # "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
-    # "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
-    # "2022-03-11_rschrmine_h2b6s_9dpf/fish1/TSeries-raphe-thalamus-118trial-002"
-    # "2022-03-31_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial_no-autocorrect-350p-005"
+# "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061"
+# "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072"
+# "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123"
+# "2022-03-11_rschrmine_h2b6s_9dpf/fish1/TSeries-raphe-thalamus-118trial-002"
+# "2022-03-31_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial_no-autocorrect-350p-005"
 # "2022-03-31_rschrmine_h2b6s_6dpf/fish2/TSeries-raphe-thalamus-118trial-008"
-# "2022-05-04_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial-005"
-    "2022-05-19_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-5power-226trial-003"
+# "2022-05-19_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-5power-226trial-004"
+"2022-05-04_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial-005" # recording is short!!
 ](;
-    resources...
+    resources...,
     # LSTM tyh5 looks best
     # tseries_read_strategy = :lazy_hwzt,
     # tyh5_path="/data/dlab/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123_kalman.h5",
     # tseries_dset=nothing
+    tseries_read_strategy=:lazy_tiff
 );
 
 ##
-@pun tseries = r;
-##
-@pun (stim_start_idx, tseries) = r;
+@pun (tseries, stim_start_idx, tseries) = r;
 ##
 
 # snippet to recover from missing or bad VoltageRecording
@@ -141,28 +138,29 @@ stim_start_idx
 
 ##
 # debug voltage recording
-# @pun (voltageFile, tseriesZ) = r
-# stimStartFrameIdx, stimEndFrameIdx, frameStartIdx, nstim_pulses, ttlStarts =
-#     getStimTimesFromVoltages(voltageFile, tseriesZ;
-#         stim_key="uncagingX") # 
-# # stim_key="ell14_trigger") # 1
-# # stim_key="AO0") # 0
-# # stim_key="opto_gate") # 1
-# # stim_key="OptogeneticPockels") # 78
-# nstim_pulses
-# ##
-# import CSV
-# voltages = CSV.File(open(read, voltageFile)) |> DataFrame
-# rename!(voltages, [c => stripLeadingSpace(c) for c in names(voltages)])
-# ##
-# Plots.plot(voltages[10000:12000,
-#     # "frame starts"]) # looks good
-#     # "opto_gate"])
-#     # "uncagingX"])
-#     # "uncagingY"])
-#     # "ell14_trigger"])
-#     # "AO0"])
-#     # "OptogeneticPockels"])
+@pun (voltageFile, tseriesZ) = r
+stimStartFrameIdx, stimEndFrameIdx, frameStartIdx, nstim_pulses, ttlStarts =
+    getStimTimesFromVoltages(voltageFile, tseriesZ;
+        # stim_key="uncagingX") # 
+        # stim_key="ell14_trigger") # 1
+        # stim_key="AO0") # 0
+        stim_key="opto_gate") # 1
+        # stim_key="OptogeneticPockels") # 78
+nstim_pulses
+##
+@pun (voltageFile,) = r
+import CSV
+voltages = CSV.File(open(read, voltageFile)) |> DataFrame
+rename!(voltages, [c => stripLeadingSpace(c) for c in names(voltages)])
+##
+Plots.plot(voltages[90000:10:150000,
+    # "frame starts"]) # looks good
+    "opto_gate"])
+    # "uncagingX"])
+    # "uncagingY"])
+    # "ell14_trigger"])
+    # "AO0"])
+    # "OptogeneticPockels"])
 #     "FieldStimulator"])
 ##
 @pun (tseriesH, tseriesW, tseriesZ, trial_order, vol_rate) = r

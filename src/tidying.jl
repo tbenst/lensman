@@ -295,6 +295,23 @@ function add_period_to_df(df)
     df
 end
 
+function add_timeperiod_to_df(df, early_fraction=0.5, late_fraction=0.5)
+    df[!, :timeperiod] = ["" for _ in 1:size(df, 1)]
+    ntrial = maximum(region_df.trial)
+    early_trial_ceil = Int(floor(ntrial * early_fraction))
+    late_trial_floor = ntrial - Int(ceil(ntrial * (1 - late_fraction)))
+    early_idxs = df[!, :trial] .<= early_trial_ceil
+    df[early_idxs, :timeperiod] .= "early"
+    late_idxs = df[!, :trial] .> late_trial_floor
+    df[late_idxs, :timeperiod] .= "late"
+    neither_idxs = ((~).(early_idxs)) .& ((~).(late_idxs))
+    df[neither_idxs, :timeperiod] .= "neither"
+    catarr = CategoricalArray(df[!, :timeperiod], ordered=true)
+    levels!(catarr, ["neither", "early", "late"])
+    df[!, :timeperiod] = catarr
+    df
+end
+
 function add_major_regions_to_df(df)
     df[!,"major region"] = ["" for _ in 1:size(df,1)];
     rhom_regions = unique(filter(r->occursin("Rhombencephalon", r), df.region))

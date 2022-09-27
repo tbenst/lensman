@@ -154,7 +154,7 @@ export read_microns_per_pixel,
     Resources,
     read_registered_mask,
     influence_map,
-    LazyTy5,
+    LazyTy5, add_timeperiod_to_df
     getGalvoVolts,
     noop, LazyTiff, calc_imaging_roi, getImagingROI,
     opening_median, opening_nonbool, rgb2tuple, getPlaneETLvals

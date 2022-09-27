@@ -1,6 +1,6 @@
 ##
 2
-# ENV["DISPLAY"] = "localhost:12.0"
+# ENV["DISPLAY"] = "localhost:11.0"
 # ENV["DISPLAY"] = "/private/tmp/com.apple.launchd.5OQi0gJ6DL/org.xquartz:0"
 ##
 # TODO: fix bad circle location by translating 512x512 sean-space to imaging-space
@@ -10,6 +10,7 @@
 using Lensman, Images, Glob, NPZ, PyCall, DataFrames, ImageSegmentation,
     Random, Gadfly, Statistics, PyCall, ProgressMeter, HDF5, Distributed,
     Unitful, StatsBase
+using ImageView
 import PyPlot
 import Plots
 import Lensman: @pun, @assign
@@ -52,7 +53,10 @@ r = Recordings[
 # "2022-05-04_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial-005" # only 3613 frames...??
 # "2022-05-04_rschrmine_h2b6s_6dpf/fish2/TSeries-raphe-thalamus-118trial-006" # looks good!! 4886 frames
 # "2022-05-04_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial-005"
-    "2022-05-19_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-5power-226trial-004"
+# "2022-05-19_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-5power-226trial-004"
+# "2022-06-07_wtchrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-control-118trial-no-autocorrect-004"
+# "2022-06-07_wtchrmine_h2b6s_6dpf/fish2/TSeries-raphe-thalamus-control-118trial-005"
+    "2022-09-14_rschrmine_h2b6s_6dpf/fish3/TSeries_stim-thal_10z_1-aperature_4MHz-070" # no SLM trigger since using laser stim
 ](;
     resources...,
     # LSTM tyh5 looks best
@@ -64,133 +68,32 @@ r = Recordings[
 
 ##
 @pun (tseries, stim_start_idx, tseries) = r;
-##
-@pun stim_start_idx = r;
-##
--
-# snippet to recover from missing or bad VoltageRecording
-green_bot = mean(tseries, dims=(1, 2, 3))[1, 1, 1, :];
-# red_bot = loadBOT(tseries_dir, "Ch2");
-##
-Plots.plot(green_bot)
-##
-thresh = 6 * std(green_bot)
-# thresh = 7 * std(green_bot)
-putative_stim_starts = findall(green_bot .> thresh)
-# not neighboring frames
-valid_idx = vcat([1], diff(putative_stim_starts) .> 10) .== 1
-putative_stim_starts = putative_stim_starts[valid_idx]
-n_frames_between_stim = mode(diff(putative_stim_starts))
-putative_stim_starts # no stim artifact for our control.... oops
-
-##
-# impute missing stimuli...
-@pun trial_order = r
-stim_start_idx = [putative_stim_starts[1]]
-for i in 2:length(putative_stim_starts)
-    isi = putative_stim_starts[i] - putative_stim_starts[i-1]
-    prev = putative_stim_starts[i-1]
-    # fill in missing stimuli
-    while isi > 1.8 * n_frames_between_stim
-        next = prev + n_frames_between_stim
-        push!(stim_start_idx, next)
-        isi -= n_frames_between_stim
-        prev = next
-    end
-    push!(stim_start_idx, putative_stim_starts[i])
-end
-
-
-if length(trial_order) != length(stim_start_idx)
-    # missing first control stims & last control stims...
-
-    # beginning control stims...
-    num_to_add = findfirst(trial_order .!= 3) - 1
-    beg_start_idxs = []
-    start_idx = stim_start_idx[1] - n_frames_between_stim
-    while num_to_add > 0
-        @info "beg" num_to_add, start_idx
-        if start_idx > 0.7 * n_frames_between_stim
-            pushfirst!(beg_start_idxs, start_idx)
-        else
-            @warn "start inference fails sanity check, ignoring" num_to_add, start_idx
-        end
-        start_idx -= n_frames_between_stim
-        num_to_add -= 1
-    end
-
-    num_to_add = length(trial_order) - findlast(trial_order .!= 3)
-    end_start_idxs = []
-    start_idx = stim_start_idx[end] + n_frames_between_stim
-    while num_to_add > 0
-        push!(end_start_idxs, start_idx)
-        start_idx += n_frames_between_stim
-        num_to_add -= 1
-    end
-    stim_start_idx = vcat(beg_start_idxs, stim_start_idx, end_start_idxs)
-end
-stim_start_idx
 
 @assert abs(maximum(diff(stim_start_idx)) - minimum(diff(stim_start_idx))) <= 3
 
-# old code, used for "2022-03-31_rschrmine_h2b6s_6dpf/fish1/TSeries-raphe-thalamus-118trial_no-autocorrect-350p-005"
-# if length(stim_start_idx) == 116 && trial_order[1] == 3 && trial_order[end] == 3
-#     # missing first
-#     pushfirst!(stim_start_idx, putative_stim_starts[1] - n_frames_between_stim)
-#     # missing last
-#     push!(stim_start_idx, putative_stim_starts[end] + n_frames_between_stim)
-# end
-
-##
-# debug voltage recording
-@pun (voltageFile, tseriesZ) = r
-stimStartFrameIdx, stimEndFrameIdx, frameStartIdx, nstim_pulses, ttlStarts =
-    getStimTimesFromVoltages(voltageFile, tseriesZ;
-        stim_key="uncagingX") # 
-# stim_key="ell14_trigger") # 1
-# stim_key="AO0") # 0
-# stim_key="opto_gate") # 1
-# stim_key="OptogeneticPockels") # 78
-nstim_pulses
-# ##
-import CSV
-voltages = CSV.File(open(read, voltageFile)) |> DataFrame
-rename!(voltages, [c => stripLeadingSpace(c) for c in names(voltages)])
-# ##
-Plots.plot(
-    voltages[10000:12000,
-        # voltages[1:100000,
-        # "frame starts"]) # looks good
-        # "opto_gate"])
-        # "uncagingX"])
-        # "uncagingY"])
-        # "ell14_trigger"])
-        # "AO0"])
-        # "OptogeneticPockels"])
-        "FieldStimulator"])
 ##
 @pun (tseriesH, tseriesW, tseriesZ, trial_order, vol_rate, nTrials) = r
-##
 stim_end_idx = stim_start_idx .+ Int(ceil(vol_rate * 1)) .+ 1
 pre = 10
 post = 10
 window_len = 10
-@warn "hack for bad voltagerecording..."
 third = Int(floor(nTrials / 3))
+@warn "skipping some trials due to ???"
+@info "trial order" length(stim_start_idx) length(trial_order)
 # early_trial_average = L.calc_trial_average(tseries, stim_start_idx[1:third] .- 2,
 #     stim_end_idx[1:third], tseriesH, tseriesW, tseriesZ, trial_order[1:third];
 #     pre=pre, post=post);
-late_trial_average = L.calc_trial_average(tseries, stim_start_idx[end-third:end] .- 2,
-    stim_end_idx[end-third:end], tseriesH, tseriesW, tseriesZ, trial_order[end-third:end];
-    pre=pre, post=post);
-# trial_average = L.calc_trial_average(tseries, stim_start_idx .- 2,
-#     stim_end_idx, tseriesH, tseriesW, tseriesZ, trial_order;
+# late_trial_average = L.calc_trial_average(tseries, stim_start_idx[end-third:end] .- 2,
+#     stim_end_idx[end-third:end], tseriesH, tseriesW, tseriesZ, trial_order[end-third:end];
 #     pre=pre, post=post);
+trial_average = L.calc_trial_average(tseries, stim_start_idx,
+    stim_end_idx .+ 1, tseriesH, tseriesW, tseriesZ, trial_order[1:length(stim_start_idx)];
+    pre=pre, post=post);
 # trial_average = early_trial_average;
-trial_average = late_trial_average;
+# trial_average = late_trial_average;
 ##
 # size(trial_average)
-imshow(trial_average)
+imshow(trial_average[:,:,:,1,:])
 ##
 @pun (vol_rate, window_len, recording_folder, fish_name,
     exp_name, tseriesZ, tseriesW, cells, exp_date, plot_dir, nStimuli,
@@ -203,7 +106,7 @@ imshow(trial_average)
 @assert nstim_pulses == 10
 # rm(avgstim_path)
 ##
-@pun (tseries_read_strategy, exp_name, fish_dir) = r
+@pun (tseries_read_strategy, exp_name, fish_dir, tseries_xml) = r
 if occursin("tyh5", string(tseries_read_strategy))
     avgstim_path = joinpath(fish_dir, exp_name * "_lstm_avgStim.h5")
 elseif occursin("tiff", string(tseries_read_strategy))
@@ -233,6 +136,7 @@ catch
     println("couldn't read $avgstim_path")
     # global trial_average = r[:trial_average]
     trial_average
+    println("saving to $(avgstim_path)")
     if tseries_read_strategy == :lazy_tyh5
         h5write(avgstim_path, "/lstm", trial_average)
     elseif (tseries_read_strategy == :lazy_tiff || tseries_read_strategy == :tiff)
@@ -246,7 +150,8 @@ end
 
 size(trial_average)
 ##
-imap = influence_map(trial_average, window_len);
+@warn "imap remove 1 as hack to remove artifact..?"
+imap = influence_map(trial_average, window_len-1);
 sum(imap, dims=[1, 2, 3])[1, 1, 1, :]
 ##
 # imshow(imap)
@@ -270,9 +175,9 @@ end
 function volts_to_px(x_volts, y_volts,
     xroi_min, xroi_max, yroi_min, yroi_max, H=1024, W=1024)
     x = (x_volts - xroi_min) / (xroi_max - xroi_min) * W
-    @show (y_volts - yroi_min), (yroi_max - yroi_min), H
+    # @show (y_volts - yroi_min), (yroi_max - yroi_min), H
     y = (y_volts - yroi_min) / (yroi_max - yroi_min) * H
-    @show y
+    # @show y
     x, y
 end
 @warn "why is yroi_min = 4.204 ??? which is larger than magic number for 1024x1024"
@@ -293,8 +198,9 @@ twp1 = mapTargetGroupsToPlane(target_groups, etl_vals,
     is1024=tseries_is1024, zOffset=zOffset)
 targets_with_plane_index = map(x -> Int.(round.(x, digits=0)), twp1)
 # TODO: this is returning an array for stimFreq...
+@warn "remove trials..."
 cells = makeCellsDF(targets_with_plane_index, stim_start_idx, stim_end_idx,
-    trial_order, group_stim_freq)
+    trial_order[1:length(stim_start_idx)], group_stim_freq)
 
 ##
 @pun (exp_date, lateral_unit, nStimuli, recording_folder, fish_name, plot_dir) = r

@@ -19,7 +19,8 @@ tseriesroot = "/mnt/b118_data/tyler"
 # fishDir = "$tseriesroot/2022-05-04_rschrmine_h2b6s_6dpf/fish1"
 # fishDir = "$tseriesroot/2022-05-19_rschrmine_h2b6s_6dpf/fish1"
 # fishDir = "$tseriesroot/2022-06-07_wtchrmine_h2b6s_6dpf/fish1"
-fishDir = "$tseriesroot/2022-06-07_wtchrmine_h2b6s_6dpf/fish2"
+# fishDir = "$tseriesroot/2022-06-07_wtchrmine_h2b6s_6dpf/fish2"
+fishDir = "$tseriesroot/2022-08-17_chrmine_h2b6s_6dpf/fish1"
 
 useRed = false
 
@@ -67,7 +68,7 @@ H, W = 1024, 1024
 @warn "FIXME: H,W needs to be the `base` sampling, e.g. 1024x1024, even if imaging ROI e.g. 1024x723"
 # println("Make sure to run `sudo chmod -R g+rw $fishDir`")
 ## read gpl targets
-@assert length(glob("*.gpl", fishDir)) == 1 (@show glob("*.gpl", fishDir))
+# @assert length(glob("*.gpl", fishDir)) == 1 (@show glob("*.gpl", fishDir))
 # gpl_path = glob("*.gpl", fishDir)[2]
 gpl_path = glob("*.gpl", fishDir)[1]
 # gpl_path = glob("*.gpl", fishDir)[5]
@@ -92,16 +93,13 @@ end
 @warn "wrong target size / not yet calibrated..?"
 
 xml = parseXML(xmlfile)
-xoffset, yoffset, estW, estH = getImagingROI(xml)
+xoffset, yoffset, estW, estH = Lensman.getImagingROI(xml)
 @assert estH ≈ H
 @assert estW ≈ W
 
 ##
 targetSizePx = 7μm * (14.4 / 25) / microscope_units[1]
-adj_locs = vcat(
-    cartIdx2Array(first(values(group_locs))),
-    cartIdx2Array(collect(values(group_locs))[2])
-)
+adj_locs = cartIdx2Array(first(values(group_locs)))
 adj_locs[:, 1] .-= Int(round(yoffset))
 adj_locs[:, 2] .-= Int(round(xoffset))
 
@@ -109,61 +107,65 @@ adj_locs[:, 2] .-= Int(round(xoffset))
 imshow(addTargetsToImage(copy(rgb840),
     adj_locs,
     targetSize=targetSizePx))
+
+nCells = 64
+base = 2
+nReps = 8
+stimGroups, groupsPerCell = stonerStimGroups(nCells, base)
+sameGroups = stimGroups
+permGroups = stimGroups
+stonerGroups = stimGroups
+permutation = 1:nCells
+for i in 0:nReps-1
+    if i % 2 == 0
+        # draw new permutation
+        permutation = randperm(nCells)
+    end
+    if i % 2 == 1
+        # choose new permutation that balances the previous
+        stoner_perm = stonerPerm(nCells)
+    else
+        stoner_perm = collect(1:nCells)
+    end
+    stimGroupsPerm = map(g -> perm(permutation, g), stimGroups)
+    stimGroupsPerm = map(g -> perm(stoner_perm, g), stimGroupsPerm)
+    stonerGroups = vcat(stonerGroups, stimGroupsPerm)
+end
+
+stonerGroupsPerCell = calcGroupsPerCell(stonerGroups, nCells, base)
+
+
+stonerGroups
+
+stonerGroupsOpt, stonerGroupsPerCellOpt = randomSwaps(stonerGroups, stonerGroupsPerCell, calc_concurrency_score,
+    nCells, base, 10000)
+
+count_concurrency(stonerGroupsOpt)
+## GENERATE COMBO Experiment
+all_cells = vcat(group_locs["habenula"], group_locs["misc"])
+
 ##
+k = Int(nCells / base)
+target_groups = []
+@warn "1024"
+for group in eachrow(stonerGroups)
+    groupStimLocs = all_cells[group]
+    push!(target_groups, vcat(cartIdx2SeanTarget.(groupStimLocs, fill(offset, k))...))
+end
 
-target_groups = [vcat(cartIdxFunc.(locs, fill(offset, length(locs)))...)
-                 for locs in values(group_locs)]
-@show size.(target_groups)
-
-N = sum(length.(values(group_locs)))
-num_groups = length(target_groups)
 ## Save files for SLM stim
 powers = [1]
-# powers = [1, 0.8, 0.6, 0.4, 0.2]
 nPowers = length(powers)
 frequencies = repeat([5], nPowers)
-num_conditions = num_groups * nPowers
-name_str = join(keys(group_locs), "_")
-# name = "$(num_groups)groups_$(N)cells_$name_str"
-# name = "round3_$(num_groups)groups_$(N)cells_$(name_str)"
+name_str = "cstoner_n$(nCells)_b$(base)_r$(nReps)"
 expSLMdir = joinpath(fishDir, "slm")
 outname = joinpath(expSLMdir, name_str)
 if ~isdir(expSLMdir)
     mkdir(expSLMdir)
 end
-if isfile(outname * ".txt")
-    error("file already exists! refusing to clobber")
-end
 
-# create_slm_stim(target_groups, outname,
-#     localToRemote = matpath -> "Y:" * replace(matpath[15:end], "/" => "\\"),
-#     powers=collect(1:nPower)/nPower)
 
 create_slm_stim(target_groups, outname,
     # 9 is path "/scratch/" includes trailing
-    # localToRemote = matpath -> "T:" * replace(matpath[9:end], "/" => "\\"),
     localToRemote=matpath -> "M:" * replace(matpath[15:end], "/" => "\\"),
     powers=powers, frequencies=frequencies, slmNum=slmNum)
-
-# powerPerCell = 32
-powerPerCell = 20
-println("Powers for power per cell of $powerPerCell: $(powerPerCell ./ 1000 .* 417mW)")
-
-
-## trialOrder
-# shuffle each block so we never have a stimuli more than once per block
-# trialOrder = vcat([randperm(length(target_groups)) for _ in 1:20]...)
-
-ntransitions = 13 # 118 trial; 3 groups
-# ntransitions = 1
-nattempts = 1000
-trialOrder, successful = balanced_transition_order(num_conditions, ntransitions, nattempts)
-count_per_group = [sum(trialOrder .== n) for n = 1:num_conditions]
-@assert all(abs.(count_per_group .- mean(count_per_group)) .<= 1)
-if ~isfile(outname * "_trialOrder.txt")
-    write_trial_order(trialOrder, outname)
-else
-    error("file already exists! refusing to clobber")
-end
-count_per_group
-length(trialOrder)

@@ -237,6 +237,9 @@ function getStimTimesFromVoltages(voltageFile, Z::Int;
     stimEndIdx = findTTLEnds(voltages[!, stim_key])[nstim_pulses:nstim_pulses:end]
     stimStartFrameIdx = [Int.(floor.(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimStartIdx]
     stimEndFrameIdx = [Int.(ceil(searchsortedfirst(frameStartIdx, s) / Z)) for s in stimEndIdx]
+    if min(diff(stimStartFrameIdx)...) == 0
+        @error "multiple stim have same start frame"
+    end
     stimStartFrameIdx, stimEndFrameIdx, frameStartIdx, nstim_pulses, ttlStarts
 end
 

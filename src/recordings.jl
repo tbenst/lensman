@@ -64,7 +64,7 @@ DEFAULT_RECORDING_SETTINGS = Dict(
     :tseries_suffix => "raw", # or "lstm" or "kalman"
     :trial_average_path => nothing,
     :trial_average_dset => nothing,
-    :csv_stim_key  => "respir" # for SLM trigger on VoltageRecording; "respir" for B115. 
+    :csv_stim_key => "opto_gate" # for SLM trigger on VoltageRecording in B118; "respir" for B115. 
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/oak/stanford/groups/deissero/users/tyler/b115/SLM_files",
     # slm_dir => "/mnt/deissero/users/tyler/slm/mSLM/SetupFiles/Experiment",
@@ -81,16 +81,19 @@ Base.getindex(r::RecordingsWrapper, uri) = uri in keys(r.dict) ? r.dict[uri] : m
 Recordings = RecordingsWrapper(
     modifiable_recording(
         "2021-06-01_wt-chrmine_h2b6s/fish4/TSeries-lrhab-control-118trial-061";
+        csv_stim_key = "respir",
         zseries_name="ZSeries-structural-840nm-057"
     ),
     modifiable_recording(
         "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061";
+        csv_stim_key = "respir",
         tseries_dset = "/imaging/PerVoxelLST1M_actually_shared-separate_bias_hidden_init_from_pretrained-2021-06-21_6pm",
         tyh5_path="/scratch/b115/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-lrhab-118trial-061.ty.h5",
         tseries_read_strategy=:lazy_tyh5
     ),
     modifiable_recording(
         "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-118trial-122";
+        csv_stim_key = "respir",
         zseries_name="ZSeries-structural-840nm-058",
         tseries_dset = "/imaging/LSTM_per-voxel-state_divide8192-2021-07-02",
         tyh5_path="/scratch/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-118trial-122.ty.h5",
@@ -102,6 +105,7 @@ Recordings = RecordingsWrapper(
     ),
     modifiable_recording(
         "2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-123";
+        csv_stim_key = "respir",
         zseries_name="ZSeries-structural-840nm-058",
         tseries_dset = "/imaging/PerVoxelLSTM_actually_shared-separate_bias_hidden-2021-06-21_6pm",
         tyh5_path="/scratch/b115/2021-06-08_rsChRmine_h2b6s/fish2/TSeries-lrhab-titration-1232021-06-21_6pm.ty.h5",
@@ -110,6 +114,7 @@ Recordings = RecordingsWrapper(
     ),
     modifiable_recording(
         "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062";
+        csv_stim_key = "respir",
         zseries_name="ZSeries-structural-840nm-048",
         # tseries_dset = "/imaging/LSTM_per-voxel-state_divide8192-2021-07-02",
         tyh5_path="/scratch/b115/2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-titration-192trial-062lstm_divide8192_avgStim.h5",
@@ -122,6 +127,7 @@ Recordings = RecordingsWrapper(
     ),
     modifiable_recording(
         "2021-07-14_rsChRmine_h2b6s_5dpf/fish1/TSeries-lrhab-118trial-061";
+        csv_stim_key = "respir",
         zseries_name="ZSeries-structural-840nm-048",
         # tseries_dset = "/imaging/LSTM_per-voxel-state_divide2048-2021-07-02",
         # tseries_read_strategy=:lazy_tyh5,
@@ -136,6 +142,7 @@ Recordings = RecordingsWrapper(
     ),
     modifiable_recording(
         "2021-07-14_rsChRmine_h2b6s_5dpf/fish2/TSeries-lrhab-118trial-069";
+        csv_stim_key = "respir",
         zseries_name="ZSeries-structural-840nm-056",
         lazy_tiff=true,
         tyh5_path="",
@@ -150,26 +157,32 @@ Recordings = RecordingsWrapper(
     ),
     modifiable_recording(
         "2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish1_chrmine/TSeries-1024cell-32concurrent-4power-046";
+        csv_stim_key = "respir",
         tseries_dset="/imaging/raw"
     ),
     modifiable_recording(
         "2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/TSeries-1024cell-32concurrent-5ppc-048";
+        csv_stim_key = "respir",
         tseries_dset="/imaging/raw"
     ),
     modifiable_recording(
         "2021-01-12_chrmine-kv2.1_h2b6s_7dpf/fish2_chrmine/TSeries-1024cell-32concurrent-047";
+        csv_stim_key = "respir",
         tseries_dset="/imaging/raw"
     ),
     modifiable_recording(
         "2021-01-19_chrmine_kv2.1_h2b6s_7dpf/fish2_nochrmine/TSeries-1024cell-32concurrent-4power-048";
+        csv_stim_key = "respir",
     tseries_dset="/imaging/raw"
     ),
     modifiable_recording(
         "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-titration-192trial-061";
+        csv_stim_key = "respir",
         zseries_name="ZSeries-structural-056"
     ),
     modifiable_recording(
         "2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072";
+        csv_stim_key = "respir",
         tyh5_path="/data/dlab/b115/2021-06-01_rsChRmine_h2b6s/fish3/TSeries-IPNraphe-118trial-072_kalman.h5",
         dset_name="kalman",
         tseries_read_strategy = :lazy_hwzt,
@@ -178,6 +191,7 @@ Recordings = RecordingsWrapper(
     ),
     modifiable_recording(
         "2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072";
+        csv_stim_key = "respir",
         tyh5_path="/data/dlab/b115/2021-06-02_rsChRmine-h2b6s/fish2/TSeries-IPNraphe-118trial-072_kalman.h5",
         dset_name="kalman",
         tseries_read_strategy = :lazy_hwzt,

@@ -941,11 +941,12 @@ function mapTargetGroupsToPlane(target_groups, etlVals; is1024=true, zOffset=0.)
     # @show typeof(target_groups), typeof(etlVals), typeof(is1024), typeof(z_offset)
     
     # TODO: bizarre bug in Thunks...?
+    # TODO: probably due to not evaluating after a named argument f(; named=wontreify) ?
     # totally unknown why this reify call is needed
     # this is a total hack
     # @show typeof(etlVals)
-    # z_offset = reify(zOffset)
-    z_offset = zOffset
+    z_offset = reify(zOffset)
+    # z_offset = zOffset
     # maybe deepcopy is breaking...?
     newTargetGroups = deepcopy(target_groups)
     for g in 1:size(target_groups, 1)
