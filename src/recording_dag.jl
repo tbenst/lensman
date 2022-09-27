@@ -62,7 +62,7 @@ function update_recording_dag(recording::DAG)
     # TODO: write new macro that first check if left hand symbol in
     # dict, if not then assign thunk. This way can rerun this function
     # multiple times to update DAG for live coding w/o invalidating cache
-    # note: this block / laziness ruins stack traces.... would need to make changes to Lazy.jl
+    # note: this block / laziness ruins stack traces.... would need to make changes to Thunks.jl
     @reversible begin
         tseries_dir = find_folder(uri, tseries_root_dirs)
         fish_dir = get_fish_dir(tseries_dir)
@@ -81,7 +81,7 @@ function update_recording_dag(recording::DAG)
         zseries_zaxes = read_all_zaxis(zseries_xml)
         tseries_zaxis = read_first_zaxis(tseries_xml)
         result = getExpData(tseries_xml)
-        exp_date_guess = ((x) -> x[1])(result)
+        exp_date = ((x) -> x[1])(result)
         frame_rate = ((x) -> x[2])(result)
         etl_vals = ((x) -> x[3])(result)
         tseriesH, tseriesW, tseriesZ, tseriesT = size(tseries)
@@ -89,11 +89,8 @@ function update_recording_dag(recording::DAG)
         zseriesW = size(zseries, 2)
         zseriesZ = size(zseries, 3)
         vol_rate = frame_rate / tseriesZ
-        date_str = Dates.format(exp_date_guess, "dd-u-Y")
-        tmp1 = find_folder(date_str, slm_root_dirs; no_error=true)
-        date_str2 = Dates.format(exp_date_guess + Dates.Day(1), "dd-u-Y")
-        tmp = (tmp1 == false) ? find_folder(date_str2, slm_root_dirs) : tmp1
-        exp_date = tmp1 == false ? exp_date_guess + Dates.Day(1) : exp_date_guess
+        date_str = Dates.format(exp_date, "dd-u-Y")
+        tmp = find_folder(date_str, slm_root_dirs)
         used_slm_dir = (x -> joinpath(splitpath(x)[1:end-1]...))(tmp)
         res = getTrialOrder(used_slm_dir, exp_date)
         trial_order = getindex(res, 1)
@@ -317,10 +314,6 @@ function count_threads()
     length(unique(a))
 end
 
-function info_identity(x)
-    @info "info identity: $x"
-    x
-end
 
 function slow_job()
     sleep(5)
@@ -351,25 +344,17 @@ function is_node(nodes, key, continuation_thunk=ithunk())
 end
 
 "Find a folder in first root_dirs where path exists."
-function find_folder(name, root_dirs; no_error=false)
-    @info "called find_folder: $name"
+function find_folder(name, root_dirs)
     for root_dir in root_dirs
         path = joinpath(root_dir, name)
         try
             if isdir(path)
-                @info "found path for find_folder: $path"
                 return path
             end
         catch
         end
     end
-    if no_error
-        @info "no error branch of find_folder: $name"
-        return false
-    else
-        @info "error branch of find_folder: $name"
-        error("could not find folder $name")
-    end
+    error("could not find folder $name")
 end
 
 
