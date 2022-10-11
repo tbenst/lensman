@@ -296,6 +296,10 @@ function add_period_to_df(df)
 end
 
 function add_timeperiod_to_df(df, early_fraction=0.5, late_fraction=0.5)
+    add_timeperiods_to_df(df, early_fraction, late_fraction)
+end
+
+function add_timeperiods_to_df(df, early_fraction=0.5, late_fraction=0.5)
     df[!, :timeperiod] = ["" for _ in 1:size(df, 1)]
     ntrial = maximum(region_df.trial)
     early_trial_ceil = Int(floor(ntrial * early_fraction))

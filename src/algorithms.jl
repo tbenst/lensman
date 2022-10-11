@@ -10,11 +10,11 @@ function reconstructA(X,Y, optimizer)
     model = Model(optimizer)
     @variable(model, Â[1:m,1:n])
     @variable(model, l1)
-    @constraint(model, [l1; vec(Â)] in MOI.NormOneCone(m*n))
+    @constraint(model, [l1; vec(Â)] in MOI.NormOneCone(m*n+1))
     @constraint(model, con, Â*X .== Y)
     @objective(model, Min, l1)
     optimize!(model)
-    value.(Â)
+    JuMP.value.(Â)
 end
 
 num2String(n,base,nDigits) = join(reverse(digits(n-1, base=base, pad=nDigits)),"")

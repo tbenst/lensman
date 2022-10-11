@@ -787,10 +787,10 @@ function calc_trial_average(tseries::Union{Array{<:Real},LazyTiff}, stimStartIdx
         stim_idxs = findall(trialOrder .== s)
         println("Calc average for stim $s")
         Folds.mapreduce((+), stim_idxs) do i
-            start = stimStartIdx[i]
-            stop = start - pre + trialTime - 1
+            start = stimStartIdx[i] - pre
+            stop = start + trialTime - 1
             trialType = trialOrder[i]
-            arr = tseries[:, :, :, start-pre:stop]
+            arr = tseries[:, :, :, start:stop]
             convert(Array{Float32}, arr)
         end
     end
